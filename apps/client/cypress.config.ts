@@ -66,7 +66,7 @@ export default defineConfig({
       function getTestControlHeaders(additional?: Record<string, string>) {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
-          "x-internal-secret": internalSecret,
+          "x-internal-secret": internalSecret || "",
           ...(testSecret ? { "x-test-control-secret": testSecret } : {}),
           ...(stagingAuthSecret
             ? { "x-staging-secret": stagingAuthSecret }
@@ -146,6 +146,41 @@ export default defineConfig({
             );
           }
           return res.json();
+        },
+
+        async "stagingTestControl:resetIdentityBaseline"(params: {
+          role: "CLIENT" | "PROFESSIONAL";
+        }) {
+          assertControlCredentials();
+          if (!activeRunId || !activeGrantToken) {
+            throw new Error("No active staging test run initialized");
+          }
+          const res = await fetch(`${baseUrl}/api/internal/test-control`, {
+            method: "POST",
+            headers: getTestControlHeaders({
+              "x-test-control-grant": activeGrantToken,
+            }),
+            body: JSON.stringify({
+              action: "reset-identity-baseline",
+              runId: activeRunId,
+              role: params.role,
+            }),
+          });
+          if (!res.ok) {
+            throw new Error(
+              `resetIdentityBaseline failed with status ${res.status}: ${await res.text()}`,
+            );
+          }
+          const body = await res.json();
+          // Redacted projection: only opaque result fields cross the task boundary
+          return {
+            leaseId: body.leaseId,
+            slot: body.slot,
+            userId: body.userId,
+            role: body.role,
+            signInUrl: body.signInUrl,
+            state: body.projection?.onboardingState || "NOT_STARTED",
+          };
         },
 
         async "stagingTestControl:seedMpesa"(params: {

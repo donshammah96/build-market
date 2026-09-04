@@ -417,6 +417,7 @@ overrides:
   deepmerge-ts: '>=8.0.0'
   browserslist: '>=4.28.7'
   mysql2: '>=3.22.0'
+  fflate: '>=0.4.9'
 
 packageExtensionsChecksum: sha256-Tf8/ENYrocEYcyci4FMrU+Gnx/wF0Vfq6maOjSb9VkU=
 
@@ -6898,9 +6899,6 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
-
-  fflate@0.4.8:
-    resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
 
   fflate@0.8.3:
     resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
@@ -15200,8 +15198,6 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.4
 
-  fflate@0.4.8: {}
-
   fflate@0.8.3: {}
 
   figures@3.2.0:
@@ -16660,7 +16656,7 @@ snapshots:
       '@posthog/types': 1.386.4
       core-js: 3.49.0
       dompurify: 3.4.13
-      fflate: 0.4.8
+      fflate: 0.8.3
       preact: 10.29.2
       query-selector-shadow-dom: 1.0.1
       web-vitals: 5.3.0

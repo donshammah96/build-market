@@ -11,6 +11,7 @@ on:
         options:
           - all
           - onboarding
+          - verification
           - lead-routing
           - messaging
           - review-eligibility
@@ -71,7 +72,10 @@ jobs:
           else
             case "${{ github.event.inputs.scenario }}" in
               onboarding)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/01-onboarding-and-verification.cy.ts"
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/01-onboarding-and-verification.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+              verification)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/08-verification-public-trust.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               lead-routing)
                 pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts" --env STAGING_RELEASE_E2E=true

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { testControlService } from "@/app/lib/domains/testing/test-control/service";
 import { testControlRepository } from "@/app/lib/domains/testing/test-control/repository";
 import { verifyStagingGrant } from "@/app/lib/domains/testing/test-control/contracts";
+import { ok } from "@/app/lib/errors/result";
 
 vi.mock("@clerk/nextjs/server", () => ({
   clerkClient: vi.fn().mockResolvedValue({
@@ -32,7 +33,9 @@ describe("TestControlService", () => {
       expiresAt: new Date(Date.now() + 300000),
     };
 
-    vi.spyOn(testControlRepository, "createRun").mockResolvedValue(mockRun as any);
+    vi.spyOn(testControlRepository, "createRun").mockResolvedValue(
+      mockRun as any,
+    );
 
     const result = await testControlService.createRun({
       scenario: "onboarding",
@@ -62,7 +65,9 @@ describe("TestControlService", () => {
       expiresAt: new Date(Date.now() + 300000),
     };
 
-    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(mockRun as any);
+    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+      mockRun as any,
+    );
 
     const result = await testControlService.issueBrowserSessionHandoff({
       runId: "run-uuid-1",
@@ -85,7 +90,9 @@ describe("TestControlService", () => {
       expiresAt: new Date(Date.now() - 10000), // in the past
     };
 
-    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(expiredRun as any);
+    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+      expiredRun as any,
+    );
 
     const result = await testControlService.issueBrowserSessionHandoff({
       runId: "run-uuid-expired",
@@ -106,7 +113,9 @@ describe("TestControlService", () => {
       expiresAt: new Date(Date.now() + 300000),
     };
 
-    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(cleanedRun as any);
+    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+      cleanedRun as any,
+    );
     const cleanupSpy = vi.spyOn(testControlRepository, "cleanupRun");
 
     const result = await testControlService.cleanupRun("run-uuid-cleaned");
@@ -122,10 +131,15 @@ describe("TestControlService", () => {
       state: "ACTIVE",
       expiresAt: new Date(Date.now() + 300000),
     };
-    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(activeRun as any);
+    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+      activeRun as any,
+    );
     const seedScenario = vi
       .spyOn(testControlRepository, "seedScenario")
-      .mockResolvedValue({ marketplaceLeadId: "lead_1", routingEventId: "route_1" } as any);
+      .mockResolvedValue({
+        marketplaceLeadId: "lead_1",
+        routingEventId: "route_1",
+      } as any);
 
     const result = await testControlService.seedScenario({
       runId: activeRun.id,
@@ -141,6 +155,121 @@ describe("TestControlService", () => {
       runId: activeRun.id,
       scenario: "lead-routing",
       payload: {},
+    });
+  });
+
+  describe("resetIdentityBaseline", () => {
+    it("successfully resets baseline and mints a fresh sign-in ticket", async () => {
+      const activeRun = {
+        id: "run-onboarding",
+        scenario: "onboarding",
+        state: "ACTIVE",
+        expiresAt: new Date(Date.now() + 300000),
+      };
+
+      vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+        activeRun as any,
+      );
+
+      const mockLease = {
+        id: "lease-1",
+        stagingTestRunId: "run-onboarding",
+        slot: "pro-1",
+        role: "PROFESSIONAL",
+        userId: "user_pro_1",
+        clerkId: "clerk_pro_1",
+        state: "LEASED",
+        leaseExpiresAt: new Date(Date.now() + 300000),
+      };
+
+      const { identityRepository } =
+        await import("@/app/lib/domains/testing/test-control/identity-repository");
+      vi.spyOn(identityRepository, "leaseIdentity").mockResolvedValue(
+        mockLease as any,
+      );
+
+      const mockProjection = {
+        leaseId: "lease-1",
+        runId: "run-onboarding",
+        slot: "pro-1",
+        userId: "user_pro_1",
+        role: "PROFESSIONAL" as const,
+        userStatus: "ONBOARDING",
+        onboardingState: "NOT_STARTED",
+        documentsDeletedCount: 1,
+        licensesDeletedCount: 1,
+        verificationCasesDeletedCount: 0,
+        notificationsDeletedCount: 0,
+        resetAt: new Date(),
+      };
+      vi.spyOn(identityRepository, "restoreIdentityBaseline").mockResolvedValue(
+        mockProjection,
+      );
+
+      const clerkAdapter =
+        await import("@/app/lib/domains/testing/test-control/clerk-identity-adapter");
+      vi.spyOn(clerkAdapter, "restoreClerkIdentityBaseline").mockResolvedValue(
+        ok(undefined),
+      );
+
+      const result = await testControlService.resetIdentityBaseline({
+        runId: "run-onboarding",
+        role: "PROFESSIONAL",
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.leaseId).toBe("lease-1");
+        expect(result.data.slot).toBe("pro-1");
+        expect(result.data.ticket).toBe("ticket_mock_123");
+        expect(result.data.projection).toEqual(mockProjection);
+      }
+    });
+
+    it("rejects reset when scenario is not onboarding or verification", async () => {
+      const activeRun = {
+        id: "run-messaging",
+        scenario: "messaging",
+        state: "ACTIVE",
+        expiresAt: new Date(Date.now() + 300000),
+      };
+
+      vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+        activeRun as any,
+      );
+
+      const result = await testControlService.resetIdentityBaseline({
+        runId: "run-messaging",
+        role: "PROFESSIONAL",
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe("RUN_SCENARIO_MISMATCH");
+      }
+    });
+
+    it("rejects reset if the staging run is expired", async () => {
+      const expiredRun = {
+        id: "run-expired",
+        scenario: "onboarding",
+        state: "ACTIVE",
+        expiresAt: new Date(Date.now() - 10000),
+      };
+
+      vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+        expiredRun as any,
+      );
+
+      const result = await testControlService.resetIdentityBaseline({
+        runId: "run-expired",
+        role: "PROFESSIONAL",
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe("RUN_NOT_ACTIVE");
+      }
     });
   });
 });

@@ -39,9 +39,9 @@ describe("MVP capability registry", () => {
       "idea_books",
     );
     expect(capabilityForPath("/api/professionals/cpd?year=2026")).toBe("cpd");
-    expect(capabilityForPath("/api/projects/project_1/escrow/escrow_1/fund")).toBe(
-      "wallets_escrow",
-    );
+    expect(
+      capabilityForPath("/api/projects/project_1/escrow/escrow_1/fund"),
+    ).toBe("wallets_escrow");
     expect(
       capabilityForPath(
         "/api/professional-portal/projects/project_1/escrow/escrow_1/release",

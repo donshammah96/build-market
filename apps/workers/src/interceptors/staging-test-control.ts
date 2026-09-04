@@ -86,7 +86,7 @@ export async function interceptOutboundDelivery(
       // subject was present, never its contents.
       subject: params.subject ? "[REDACTED]" : undefined,
       templateId: params.templateId,
-      redactedMetadata: (redactMetadata(params.metadata || {}) as any),
+      redactedMetadata: redactMetadata(params.metadata || {}) as any,
     },
   });
 
@@ -114,8 +114,14 @@ export function checkSimulatedFailure(
   }
 
   if (testControl.failAttempts !== undefined) {
-    if (!Number.isInteger(testControl.failAttempts) || testControl.failAttempts < 1 || testControl.failAttempts > 2) {
-      throw new Error("[SimulatedFailure:INVALID_POLICY] failAttempts must be 1 or 2");
+    if (
+      !Number.isInteger(testControl.failAttempts) ||
+      testControl.failAttempts < 1 ||
+      testControl.failAttempts > 2
+    ) {
+      throw new Error(
+        "[SimulatedFailure:INVALID_POLICY] failAttempts must be 1 or 2",
+      );
     }
     if (attemptsMade >= testControl.failAttempts) return;
   }

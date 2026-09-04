@@ -2,7 +2,26 @@
 
 ## [Unreleased]
 
-### Changed â€” Staging test-control integrity
+### Added — Resettable Staging Onboarding & Verification Test Identities
+
+- **`packages/db`**:
+  - Added `StagingTestIdentityLease` model to Prisma schema with state machine (`LEASED`, `RESETTING`, `READY`, `RELEASED`, `FAILED`), 15-minute lease TTL, and cascade deletion bound to `StagingTestRun`.
+  - Added migration `20260903100000_add_staging_test_identity_leases` with partial unique index enforcing mutual exclusivity on active identity slots.
+  - Exported pure state transition helpers (`canLeaseIdentity`, `canResetIdentity`, `releaseIdentityLease`, `findAvailableSlotForRole`) and slot allowlists.
+- **`apps/client`**:
+  - Added persistence-only `identityRepository` for isolated slot leasing, database baseline restoration, and lease release.
+  - Added `restoreClerkIdentityBaseline` adapter enforcing staging identity pool containment (`e2e_pro_<1..3>`, `e2e_client_<1..3>`), setting publicMetadata strictly to baseline, and revoking active sessions.
+  - Extended `testControlService` and thin HTTP route `/api/internal/test-control` with `reset-identity-baseline` action guarded by scenario allowlists (`onboarding`, `verification`), HMAC grant validation, and single-use sign-in ticket minting.
+  - Added Cypress `stagingTestControl:resetIdentityBaseline` Node task and `cy.resetStagingIdentity(role)` command returning only opaque fields (`leaseId`, `slot`, `userId`, `role`, `state`) across the task boundary.
+  - Updated `01-onboarding-and-verification.cy.ts` to execute authentic professional onboarding against clean baseline and verified directory boundary.
+  - Added `08-verification-public-trust.cy.ts` verifying public-trust status transitions while protecting direct contact data disclosure.
+- **Runbooks & Operational Readiness**:
+  - Added `docs/runbooks/staging-test-identity-lifecycle.md` documenting pool inventory, lease state machine, Datadog metric alert definitions, and disaster recovery.
+  - Added `docs/runbooks/staging-e2e-troubleshooting.md` documenting remediation steps for lease exhaustion, Clerk baseline failure, and grant token validation.
+  - Updated `.github/workflows/staging-e2e.yml` to include the `verification` scenario in dispatch options and spec matrix.
+  - Enhanced `scripts/emergency-staging-cleanup.mjs` to release stranded identity leases in emergency direct DB sweeps.
+
+### Changed — Staging test-control integrity
 
 - Extended staging-run ownership and emergency cleanup to cross-service routing and messaging roots, hardened test-control credential/host gates, and updated the protected staging workflow to retain redacted Cypress failure media.
 

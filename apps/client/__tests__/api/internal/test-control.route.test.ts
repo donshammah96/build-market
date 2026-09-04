@@ -20,13 +20,20 @@ describe("POST /api/internal/test-control", () => {
   });
 
   it("returns 404 when x-internal-secret is invalid or missing", async () => {
-    const req = new NextRequest("http://localhost:3500/api/internal/test-control", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": "wrong-secret",
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "wrong-secret",
+        },
+        body: JSON.stringify({
+          action: "create-run",
+          scenario: "onboarding",
+          actorLabel: "test",
+        }),
       },
-      body: JSON.stringify({ action: "create-run", scenario: "onboarding", actorLabel: "test" }),
-    });
+    );
 
     const response = await POST(req);
     expect(response.status).toBe(404);
@@ -37,17 +44,20 @@ describe("POST /api/internal/test-control", () => {
       ok({ runId: "test-run-123", grantToken: "signed-grant-token" }) as any,
     );
 
-    const req = new NextRequest("http://localhost:3500/api/internal/test-control", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": "valid-internal-secret",
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "valid-internal-secret",
+        },
+        body: JSON.stringify({
+          action: "create-run",
+          scenario: "onboarding",
+          actorLabel: "cypress-runner",
+        }),
       },
-      body: JSON.stringify({
-        action: "create-run",
-        scenario: "onboarding",
-        actorLabel: "cypress-runner",
-      }),
-    });
+    );
 
     const response = await POST(req);
     expect(response.status).toBe(201);
@@ -57,17 +67,20 @@ describe("POST /api/internal/test-control", () => {
   });
 
   it("returns 404 for protected action if grant token is missing or invalid", async () => {
-    const req = new NextRequest("http://localhost:3500/api/internal/test-control", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": "valid-internal-secret",
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "valid-internal-secret",
+        },
+        body: JSON.stringify({
+          action: "issue-session-handoff",
+          runId: "run-123",
+          role: "PROFESSIONAL",
+        }),
       },
-      body: JSON.stringify({
-        action: "issue-session-handoff",
-        runId: "run-123",
-        role: "PROFESSIONAL",
-      }),
-    });
+    );
 
     const response = await POST(req);
     expect(response.status).toBe(404);
@@ -84,27 +97,34 @@ describe("POST /api/internal/test-control", () => {
       300,
     );
 
-    vi.spyOn(testControlService, "issueBrowserSessionHandoff").mockResolvedValue(
+    vi.spyOn(
+      testControlService,
+      "issueBrowserSessionHandoff",
+    ).mockResolvedValue(
       ok({
         userId: "user_pro_1",
         email: "e2e_pro_1@staging.buildmarket.app",
         ticket: "valid_ticket",
-        signInUrl: "https://staging.clerk.accounts.dev/sign-in?ticket=valid_ticket",
+        signInUrl:
+          "https://staging.clerk.accounts.dev/sign-in?ticket=valid_ticket",
       }) as any,
     );
 
-    const req = new NextRequest("http://localhost:3500/api/internal/test-control", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": "valid-internal-secret",
-        "x-test-control-grant": grant,
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "valid-internal-secret",
+          "x-test-control-grant": grant,
+        },
+        body: JSON.stringify({
+          action: "issue-session-handoff",
+          runId: "run-123",
+          role: "PROFESSIONAL",
+        }),
       },
-      body: JSON.stringify({
-        action: "issue-session-handoff",
-        runId: "run-123",
-        role: "PROFESSIONAL",
-      }),
-    });
+    );
 
     const response = await POST(req);
     expect(response.status).toBe(200);
@@ -126,19 +146,22 @@ describe("POST /api/internal/test-control", () => {
       ok({ marketplaceLeadId: "lead_1", routingEventId: "route_1" }) as any,
     );
 
-    const req = new NextRequest("http://localhost:3500/api/internal/test-control", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": "valid-internal-secret",
-        "x-test-control-grant": grant,
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "valid-internal-secret",
+          "x-test-control-grant": grant,
+        },
+        body: JSON.stringify({
+          action: "seed-scenario",
+          runId: "run-123",
+          scenario: "lead-routing",
+          payload: {},
+        }),
       },
-      body: JSON.stringify({
-        action: "seed-scenario",
-        runId: "run-123",
-        scenario: "lead-routing",
-        payload: {},
-      }),
-    });
+    );
 
     const response = await POST(req);
     expect(response.status).toBe(201);
@@ -146,5 +169,82 @@ describe("POST /api/internal/test-control", () => {
       marketplaceLeadId: "lead_1",
       routingEventId: "route_1",
     });
+  });
+
+  it("dispatches reset-identity-baseline with grant verification for onboarding scenario", async () => {
+    const grant = signStagingGrant(
+      {
+        runId: "run-123",
+        scenario: "onboarding",
+        actions: ["reset-identity-baseline" as any],
+      },
+      "staging-control-secret",
+      300,
+    );
+
+    vi.spyOn(testControlService, "resetIdentityBaseline").mockResolvedValue(
+      ok({
+        leaseId: "lease-1",
+        slot: "pro-1",
+        userId: "user_pro_1",
+        role: "PROFESSIONAL",
+        ticket: "ticket_reset_123",
+        signInUrl:
+          "https://staging.clerk.accounts.dev/sign-in?ticket=ticket_reset_123",
+      }) as any,
+    );
+
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "valid-internal-secret",
+          "x-test-control-grant": grant,
+        },
+        body: JSON.stringify({
+          action: "reset-identity-baseline",
+          runId: "run-123",
+          role: "PROFESSIONAL",
+        }),
+      },
+    );
+
+    const response = await POST(req);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.ticket).toBe("ticket_reset_123");
+    expect(body.slot).toBe("pro-1");
+  });
+
+  it("rejects reset-identity-baseline if the grant scenario is not onboarding or verification", async () => {
+    const grant = signStagingGrant(
+      {
+        runId: "run-123",
+        scenario: "messaging",
+        actions: ["reset-identity-baseline" as any],
+      },
+      "staging-control-secret",
+      300,
+    );
+
+    const req = new NextRequest(
+      "http://localhost:3500/api/internal/test-control",
+      {
+        method: "POST",
+        headers: {
+          "x-internal-secret": "valid-internal-secret",
+          "x-test-control-grant": grant,
+        },
+        body: JSON.stringify({
+          action: "reset-identity-baseline",
+          runId: "run-123",
+          role: "PROFESSIONAL",
+        }),
+      },
+    );
+
+    const response = await POST(req);
+    expect(response.status).toBe(404);
   });
 });

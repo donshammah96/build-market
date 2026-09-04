@@ -10,12 +10,25 @@ describe("Staging E2E: project-linked review eligibility", () => {
   it("permits one review for the run-owned completed project and rejects replay", () => {
     cy.seedStagingScenario("review-eligibility").then(({ projectId }) => {
       cy.loginStagingUser("CLIENT");
-      const body = { projectId, rating: 5, comment: "Completed staging project" };
-      cy.request({ method: "POST", url: "/api/reviews", body }).its("status").should("eq", 201);
-      cy.request({ method: "POST", url: "/api/reviews", body, failOnStatusCode: false })
+      const body = {
+        projectId,
+        rating: 5,
+        comment: "Completed staging project",
+      };
+      cy.request({ method: "POST", url: "/api/reviews", body })
+        .its("status")
+        .should("eq", 201);
+      cy.request({
+        method: "POST",
+        url: "/api/reviews",
+        body,
+        failOnStatusCode: false,
+      })
         .its("status")
         .should("eq", 403);
-      cy.getStagingProjection().its("fixtures.reviews").should("have.length", 1);
+      cy.getStagingProjection()
+        .its("fixtures.reviews")
+        .should("have.length", 1);
     });
   });
 });

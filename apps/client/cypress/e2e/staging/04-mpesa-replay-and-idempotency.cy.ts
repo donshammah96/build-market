@@ -26,7 +26,10 @@ describe("Staging E2E: M-Pesa STK Replay and Idempotency Flow", () => {
             CallbackMetadata: {
               Item: [
                 { Name: "Amount", Value: 100 },
-                { Name: "MpesaReceiptNumber", Value: `NLX${Date.now().toString().slice(-7)}` },
+                {
+                  Name: "MpesaReceiptNumber",
+                  Value: `NLX${Date.now().toString().slice(-7)}`,
+                },
                 { Name: "TransactionDate", Value: 20260903070000 },
                 { Name: "PhoneNumber", Value: 254708374149 },
               ],
@@ -60,10 +63,9 @@ describe("Staging E2E: M-Pesa STK Replay and Idempotency Flow", () => {
       cy.getStagingProjection().then((proj) => {
         expect(proj.fixtures.mpesaTransactions).to.have.length(1);
         expect(proj.fixtures.mpesaCallbackEvents).to.have.length(1);
-        expect(proj.fixtures.mpesaCallbackEvents[0].processingStatus).to.be.oneOf([
-          "RECEIVED",
-          "PROCESSED",
-        ]);
+        expect(
+          proj.fixtures.mpesaCallbackEvents[0].processingStatus,
+        ).to.be.oneOf(["RECEIVED", "PROCESSED"]);
       });
     });
   });

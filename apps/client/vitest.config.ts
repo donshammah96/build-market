@@ -11,6 +11,7 @@ export default defineConfig({
     include: [
       "__tests__/**/*.{test,spec}.{js,ts,tsx}",
       "app/**/*.{test,spec}.{js,ts,tsx}",
+      "cypress/plugins/**/*.{test,spec}.{js,ts,tsx}",
     ],
     exclude: [
       ...configDefaults.exclude,
@@ -18,7 +19,9 @@ export default defineConfig({
       ".turbo/**",
       ".wrangler/**",
       "tmp/**",
-      "cypress/**",
+      "cypress/e2e/**",
+      "cypress/support/**",
+      "cypress/component/**",
     ],
     pool: "threads",
     maxWorkers: 4,

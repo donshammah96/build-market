@@ -20,7 +20,8 @@ export const reviewsService = {
     if (!review) {
       return err({
         error: "review_not_eligible",
-        message: "A review requires a completed project you own and can be submitted once.",
+        message:
+          "A review requires a completed project you own and can be submitted once.",
         status: 403,
       });
     }

@@ -13,7 +13,12 @@ export const reviewsRepository = {
    */
   async createEligibleProjectReview(
     reviewerId: string,
-    input: { projectId: string; rating: number; comment?: string; title?: string },
+    input: {
+      projectId: string;
+      rating: number;
+      comment?: string;
+      title?: string;
+    },
   ) {
     return prisma.$transaction(async (tx) => {
       const project = await tx.project.findFirst({

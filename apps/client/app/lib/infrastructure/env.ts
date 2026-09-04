@@ -550,12 +550,24 @@ const envGroups: EnvGroup[] = [
       { name: "FEATURE_PORTAL_STORES_V2", required: false, default: "true" },
       { name: "FEATURE_PORTAL_CALENDAR_V2", required: false, default: "true" },
       { name: "FEATURE_PORTAL_PORTFOLIO_V2", required: false, default: "true" },
-      { name: "FEATURE_MVP_MATERIALS_COMMERCE", required: false, default: "false" },
-      { name: "FEATURE_MVP_PROPERTY_TRANSACTIONS", required: false, default: "false" },
+      {
+        name: "FEATURE_MVP_MATERIALS_COMMERCE",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "FEATURE_MVP_PROPERTY_TRANSACTIONS",
+        required: false,
+        default: "false",
+      },
       { name: "FEATURE_MVP_IDEA_BOOKS", required: false, default: "false" },
       { name: "FEATURE_MVP_CPD", required: false, default: "false" },
       { name: "FEATURE_MVP_WALLETS_ESCROW", required: false, default: "false" },
-      { name: "FEATURE_MVP_PLATFORM_CUSTODY", required: false, default: "false" },
+      {
+        name: "FEATURE_MVP_PLATFORM_CUSTODY",
+        required: false,
+        default: "false",
+      },
     ],
   },
   {
@@ -1625,6 +1637,7 @@ function buildEnvConfig() {
     stagingTestControl: {
       secret: getOptionalStringEnv("TEST_CONTROL_SECRET"),
       grantPublicKey: getOptionalStringEnv("TEST_CONTROL_GRANT_PUBLIC_KEY"),
+      identitySlots: getOptionalStringEnv("STAGING_TEST_IDENTITY_SLOTS"),
     },
   } as const;
 }

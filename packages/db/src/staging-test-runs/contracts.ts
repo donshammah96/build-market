@@ -110,6 +110,7 @@ export function isStagingOwnedEntity(
  * Deleting parents before children causes FK constraint failures or violates auditability.
  */
 export const STAGING_CLEANUP_DEPENDENCY_ORDER: readonly string[] = [
+  "StagingTestIdentityLease",
   "MessageThread",
   "MarketplaceLead",
   "staging_test_outbound_deliveries",
@@ -146,3 +147,5 @@ export function assertStagingCleanupOrder(entities: string[]): boolean {
 
   return true;
 }
+
+export * from "./identity-contracts.js";

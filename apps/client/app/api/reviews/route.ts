@@ -105,14 +105,18 @@ export const POST = withAuth(async (request: NextRequest, context) => {
   }
   const parsed = SubmitReviewSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError("Invalid review", HttpStatus.BAD_REQUEST, parsed.error.issues);
+    return apiError(
+      "Invalid review",
+      HttpStatus.BAD_REQUEST,
+      parsed.error.issues,
+    );
   }
   const result = await reviewsService.submitProjectReview(
     { userId: context.dbUserId },
     parsed.data,
   );
   if (!result.ok) {
-    return apiError(result.message, result.status);
+    return apiError(result.message || "Failed to submit review", result.status);
   }
   return apiSuccess(result.data, HttpStatus.CREATED);
 });

@@ -71,14 +71,17 @@ export class QueueTestInspector {
       ORDER BY id DESC;
     `;
 
-    const result = await this.pgClient.query(query, [queueName, stagingTestRunId]);
+    const result = await this.pgClient.query(query, [
+      queueName,
+      stagingTestRunId,
+    ]);
     const records: QueueJobInspectionRecord[] = [];
 
     for (const row of result.rows) {
-      const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {};
+      const data =
+        typeof row.data === "string" ? JSON.parse(row.data) : row.data || {};
       const runId =
-        data?.stagingTestRunId ||
-        data?.testControl?.stagingTestRunId;
+        data?.stagingTestRunId || data?.testControl?.stagingTestRunId;
 
       if (runId === stagingTestRunId) {
         let state: QueueJobInspectionRecord["state"] = "unknown";
@@ -135,7 +138,8 @@ export class QueueTestInspector {
         ((data.testControl as any)?.stagingTestRunId as string);
 
       if (runId === stagingTestRunId) {
-        const state = (await job.getState()) as QueueJobInspectionRecord["state"];
+        const state =
+          (await job.getState()) as QueueJobInspectionRecord["state"];
         records.push({
           id: String(job.id),
           name: job.name,

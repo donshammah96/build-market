@@ -96,10 +96,21 @@ async function performDatabaseSweep() {
         await client.query("DELETE FROM \"Project\" WHERE stagingTestRunId = $1", [runId]);
         await client.query("DELETE FROM \"ProfessionalProfile\" WHERE stagingTestRunId = $1", [runId]);
         await client.query("DELETE FROM users WHERE stagingTestRunId = $1", [runId]);
+        await client.query("UPDATE staging_test_identity_leases SET state = 'RELEASED', \"releasedAt\" = NOW() WHERE \"stagingTestRunId\" = $1 AND state IN ('LEASED', 'RESETTING', 'READY')", [runId]);
         await client.query("UPDATE staging_test_runs SET state = 'CLEANED', cleanedAt = NOW() WHERE id = $1", [runId]);
         await client.query("COMMIT");
       }
       console.log(`[emergency-cleanup] Swept ${selectRes.rows.length} stranded test run(s).`);
+
+      const expiredLeases = await client.query(`
+        UPDATE staging_test_identity_leases
+        SET state = 'RELEASED', "releasedAt" = NOW()
+        WHERE state IN ('LEASED', 'RESETTING', 'READY')
+          AND "leaseExpiresAt" < NOW()
+      `);
+      if (expiredLeases.rowCount > 0) {
+        console.log(`[emergency-cleanup] Released ${expiredLeases.rowCount} expired identity lease(s).`);
+      }
     } finally {
       client.release();
     }

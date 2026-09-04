@@ -5,15 +5,13 @@ import {
   isStagingRunActive,
   type StagingScenario,
 } from "@build/db/staging-test-runs";
+import { signStagingGrant, resolveStagingControlSecret } from "./contracts.js";
+import { testControlRepository, type CreateRunParams } from "./repository.js";
 import {
-  signStagingGrant,
-  resolveStagingControlSecret,
-  type StagingGrantPayload,
-} from "./contracts.js";
-import {
-  testControlRepository,
-  type CreateRunParams,
-} from "./repository.js";
+  identityRepository,
+  type IdentityResetProjection,
+} from "./identity-repository.js";
+import { restoreClerkIdentityBaseline } from "./clerk-identity-adapter.js";
 
 export interface TestControlError {
   error: string;
@@ -49,6 +47,7 @@ export class TestControlService {
           actions: [
             "seed-scenario",
             "issue-session-handoff",
+            "reset-identity-baseline",
             "seed-mpesa-transaction",
             "get-run-projection",
             "cleanup-run",
@@ -81,7 +80,10 @@ export class TestControlService {
     >
   > {
     const run = await testControlRepository.findRunById(params.runId);
-    if (!run || !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })) {
+    if (
+      !run ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
       return err({
         error: "RUN_NOT_ACTIVE",
         message: "Staging test run is not found or has expired",
@@ -109,7 +111,9 @@ export class TestControlService {
         });
       }
 
-      const ticketResponse = await (clerk as any).signInTokens.createSignInToken({
+      const ticketResponse = await (
+        clerk as any
+      ).signInTokens.createSignInToken({
         userId: user.id,
         expiresInSeconds: 300,
       });
@@ -130,6 +134,107 @@ export class TestControlService {
   }
 
   /**
+   * Resets the identity baseline for a leased test identity in staging.
+   * Sequence: validate run -> lease identity -> mark resetting -> reset Clerk -> restore DB baseline -> mark ready -> mint Clerk ticket.
+   */
+  async resetIdentityBaseline(params: {
+    runId: string;
+    role: "CLIENT" | "PROFESSIONAL";
+  }): Promise<
+    Result<
+      {
+        leaseId: string;
+        slot: string;
+        userId: string;
+        role: "CLIENT" | "PROFESSIONAL";
+        ticket: string;
+        signInUrl: string;
+        projection: IdentityResetProjection;
+      },
+      TestControlError
+    >
+  > {
+    const run = await testControlRepository.findRunById(params.runId);
+    if (
+      !run ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
+      return err({
+        error: "RUN_NOT_ACTIVE",
+        message: "Staging test run is not found or has expired",
+        status: 400,
+      });
+    }
+
+    if (run.scenario !== "onboarding" && run.scenario !== "verification") {
+      return err({
+        error: "RUN_SCENARIO_MISMATCH",
+        message: `Scenario "${run.scenario}" is not eligible for identity baseline reset`,
+        status: 400,
+      });
+    }
+
+    try {
+      const lease = await identityRepository.leaseIdentity({
+        runId: params.runId,
+        scenario: run.scenario as any,
+        role: params.role,
+      });
+
+      if (!lease) {
+        return err({
+          error: "IDENTITY_LEASE_EXHAUSTED",
+          message: `All staging identity slots for role "${params.role}" are currently leased`,
+          status: 409,
+        });
+      }
+
+      // Reset Clerk identity baseline
+      const clerkResetResult = await restoreClerkIdentityBaseline(lease);
+      if (!clerkResetResult.ok) {
+        return clerkResetResult;
+      }
+
+      // Restore DB baseline
+      const projection = await identityRepository.restoreIdentityBaseline({
+        leaseId: lease.id,
+        runId: params.runId,
+        baseline: {
+          role: params.role,
+          userStatus: "ONBOARDING",
+          onboardingState: "NOT_STARTED",
+          isProfileComplete: false,
+          verified: false,
+          trustTier: "UNVERIFIED",
+        },
+      });
+
+      // Issue single-use Clerk ticket
+      const clerk = (await clerkClient()) as any;
+      const ticketResponse = await clerk.signInTokens.createSignInToken({
+        userId: lease.clerkId,
+        expiresInSeconds: 300,
+      });
+
+      return ok({
+        leaseId: lease.id,
+        slot: lease.slot,
+        userId: lease.userId,
+        role: lease.role,
+        ticket: ticketResponse.token,
+        signInUrl: ticketResponse.url,
+        projection,
+      });
+    } catch (e: any) {
+      return err({
+        error: "RESET_IDENTITY_FAILED",
+        message: e.message || "Failed to reset identity baseline",
+        status: 500,
+      });
+    }
+  }
+
+  /**
    * Seeds a pending MpesaTransaction record bound to the staging test run.
    */
   async seedPendingMpesaTransaction(params: {
@@ -138,9 +243,21 @@ export class TestControlService {
     phoneNumber: string;
     checkoutRequestId?: string;
     merchantRequestId?: string;
-  }): Promise<Result<{ transactionId: string; checkoutRequestId: string; merchantRequestId: string }, TestControlError>> {
+  }): Promise<
+    Result<
+      {
+        transactionId: string;
+        checkoutRequestId: string;
+        merchantRequestId: string;
+      },
+      TestControlError
+    >
+  > {
     const run = await testControlRepository.findRunById(params.runId);
-    if (!run || !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })) {
+    if (
+      !run ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
       return err({
         error: "RUN_NOT_ACTIVE",
         message: "Staging test run is not active or has expired",
@@ -149,7 +266,8 @@ export class TestControlService {
     }
 
     try {
-      const tx = await testControlRepository.seedPendingMpesaTransaction(params);
+      const tx =
+        await testControlRepository.seedPendingMpesaTransaction(params);
       return ok({
         transactionId: tx.id,
         checkoutRequestId: tx.checkoutRequestId!,
@@ -196,7 +314,9 @@ export class TestControlService {
   /**
    * Retrieves full entity projection owned by the test run.
    */
-  async getRunProjection(runId: string): Promise<Result<any, TestControlError>> {
+  async getRunProjection(
+    runId: string,
+  ): Promise<Result<any, TestControlError>> {
     try {
       const projection = await testControlRepository.getRunProjection(runId);
       if (!projection.run) {
@@ -219,7 +339,9 @@ export class TestControlService {
   /**
    * Executes atomic cascading cleanup of all entities owned by the test run.
    */
-  async cleanupRun(runId: string): Promise<Result<{ cleaned: true }, TestControlError>> {
+  async cleanupRun(
+    runId: string,
+  ): Promise<Result<{ cleaned: true }, TestControlError>> {
     const run = await testControlRepository.findRunById(runId);
     if (!run) {
       return err({
@@ -234,6 +356,7 @@ export class TestControlService {
     }
 
     try {
+      await identityRepository.releaseIdentityLease(runId);
       await testControlRepository.cleanupRun(runId);
       return ok({ cleaned: true });
     } catch (e: any) {

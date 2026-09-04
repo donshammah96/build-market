@@ -48,9 +48,11 @@ export class TestControlRepository {
     merchantRequestId?: string;
   }) {
     const checkoutRequestId =
-      params.checkoutRequestId ?? `ws_CO_${Date.now()}_${params.runId.slice(0, 8)}`;
+      params.checkoutRequestId ??
+      `ws_CO_${Date.now()}_${params.runId.slice(0, 8)}`;
     const merchantRequestId =
-      params.merchantRequestId ?? `mr_${Date.now()}_${params.runId.slice(0, 8)}`;
+      params.merchantRequestId ??
+      `mr_${Date.now()}_${params.runId.slice(0, 8)}`;
 
     return prisma.mpesaTransaction.create({
       data: {
@@ -79,11 +81,17 @@ export class TestControlRepository {
   }): Promise<Record<string, string>> {
     const [client, professional] = await Promise.all([
       prisma.user.findFirst({
-        where: { email: "e2e_client_1@staging.buildmarket.app", role: "CLIENT" },
+        where: {
+          email: "e2e_client_1@staging.buildmarket.app",
+          role: "CLIENT",
+        },
         select: { id: true },
       }),
       prisma.user.findFirst({
-        where: { email: "e2e_pro_1@staging.buildmarket.app", role: "PROFESSIONAL" },
+        where: {
+          email: "e2e_pro_1@staging.buildmarket.app",
+          role: "PROFESSIONAL",
+        },
         select: { id: true, professionalProfile: { select: { userId: true } } },
       }),
     ]);
@@ -115,7 +123,9 @@ export class TestControlRepository {
             projectType: "RESIDENTIAL",
             title: `E2E routing ${params.runId}`,
             description: "Run-owned staging routing fixture",
-            qualification: { create: { confidenceLabel: "high", confidenceScore: 0.95 } },
+            qualification: {
+              create: { confidenceLabel: "high", confidenceScore: 0.95 },
+            },
             routingEvents: {
               create: {
                 professionalId: professional.professionalProfile.userId,
@@ -175,7 +185,11 @@ export class TestControlRepository {
             actualCompletionDate: new Date(),
           },
         });
-        return { projectId: project.id, clientId: client.id, professionalId: professional.id };
+        return {
+          projectId: project.id,
+          clientId: client.id,
+          professionalId: professional.id,
+        };
       }
       case "onboarding":
       case "verification":
@@ -198,7 +212,7 @@ export class TestControlRepository {
               simulateFailure: "TRANSIENT_ERROR",
               failAttempts: 1,
             },
-          },
+          } as any,
           { attempts: 2, backoff: { type: "fixed", delay: 1_000 } },
         );
         return { queueJobId: String(job.id) };
@@ -219,6 +233,7 @@ export class TestControlRepository {
       outboundDeliveries,
       marketplaceLeads,
       messageThreads,
+      identityLeases,
     ] = await Promise.all([
       prisma.stagingTestRun.findUnique({ where: { id: runId } }),
       prisma.user.findMany({
@@ -251,15 +266,40 @@ export class TestControlRepository {
       }),
       prisma.stagingTestOutboundDelivery.findMany({
         where: { stagingTestRunId: runId },
-        select: { id: true, channel: true, recipientHash: true, createdAt: true },
+        select: {
+          id: true,
+          channel: true,
+          recipientHash: true,
+          createdAt: true,
+        },
       }),
       prisma.marketplaceLead.findMany({
         where: { stagingTestRunId: runId },
-        select: { id: true, status: true, routingEvents: { select: { id: true, contactDisclosedAt: true } } },
+        select: {
+          id: true,
+          status: true,
+          routingEvents: { select: { id: true, contactDisclosedAt: true } },
+        },
       }),
       prisma.messageThread.findMany({
         where: { stagingTestRunId: runId },
-        select: { id: true, lastMessage: true, messages: { select: { id: true, content: true } } },
+        select: {
+          id: true,
+          lastMessage: true,
+          messages: { select: { id: true, content: true } },
+        },
+      }),
+      prisma.stagingTestIdentityLease.findMany({
+        where: { stagingTestRunId: runId },
+        select: {
+          id: true,
+          slot: true,
+          role: true,
+          state: true,
+          leaseExpiresAt: true,
+          resetAt: true,
+          releasedAt: true,
+        },
       }),
     ]);
 
@@ -276,6 +316,7 @@ export class TestControlRepository {
         outboundDeliveries,
         marketplaceLeads,
         messageThreads,
+        identityLeases,
       },
     };
   }
@@ -291,9 +332,17 @@ export class TestControlRepository {
         data: { state: "CLEANING" },
       });
 
-      // 2. Delete owned outbound deliveries
+      // 2. Release active identity leases before marking CLEANED (retained for audit evidence)
+      await tx.stagingTestIdentityLease.updateMany({
+        where: { stagingTestRunId: runId, state: { not: "RELEASED" } },
+        data: { state: "RELEASED", releasedAt: new Date() },
+      });
+
+      // 3. Delete owned outbound deliveries
       await tx.messageThread.deleteMany({ where: { stagingTestRunId: runId } });
-      await tx.marketplaceLead.deleteMany({ where: { stagingTestRunId: runId } });
+      await tx.marketplaceLead.deleteMany({
+        where: { stagingTestRunId: runId },
+      });
       await tx.stagingTestOutboundDelivery.deleteMany({
         where: { stagingTestRunId: runId },
       });
@@ -357,3 +406,5 @@ export class TestControlRepository {
 }
 
 export const testControlRepository = new TestControlRepository();
+
+export * from "./identity-repository.js";

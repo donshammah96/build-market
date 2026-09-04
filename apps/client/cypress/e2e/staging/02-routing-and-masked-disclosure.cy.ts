@@ -24,7 +24,9 @@ describe("Staging E2E: routed lead contact disclosure", () => {
         method: "POST",
         url: `/api/leads/qualification/routing/${routingEventId}/accept`,
         headers: { "Idempotency-Key": `staging-accept-${routingEventId}` },
-      }).its("status").should("eq", 200);
+      })
+        .its("status")
+        .should("eq", 200);
 
       cy.getStagingProjection().then((projection) => {
         const fixture = projection.fixtures.marketplaceLeads[0];

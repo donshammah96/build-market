@@ -3955,8 +3955,9 @@ model StagingTestRun {
   mpesaTransactions   MpesaTransaction[]
   mpesaCallbackEvents MpesaCallbackEvent[]
   outboundDeliveries  StagingTestOutboundDelivery[]
-  marketplaceLeads   MarketplaceLead[]
-  messageThreads     MessageThread[]
+  marketplaceLeads    MarketplaceLead[]
+  messageThreads      MessageThread[]
+  identityLeases      StagingTestIdentityLease[]
 
   @@index([state, expiresAt])
   @@index([scenario, createdAt])
@@ -3976,5 +3977,26 @@ model StagingTestOutboundDelivery {
 
   @@index([stagingTestRunId, channel])
   @@map("staging_test_outbound_deliveries")
+}
+
+model StagingTestIdentityLease {
+  id               String         @id @default(uuid())
+  stagingTestRunId String
+  stagingTestRun   StagingTestRun @relation(fields: [stagingTestRunId], references: [id], onDelete: Cascade)
+  slot             String
+  role             String         // CLIENT, PROFESSIONAL
+  userId           String
+  clerkId          String
+  state            String         @default("LEASED") // LEASED, RESETTING, READY, RELEASED, FAILED
+  leaseExpiresAt   DateTime
+  resetAt          DateTime?
+  releasedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([stagingTestRunId, slot])
+  @@index([stagingTestRunId])
+  @@index([slot, state])
+  @@map("staging_test_identity_leases")
 }
 

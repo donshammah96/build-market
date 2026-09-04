@@ -258,6 +258,7 @@ overrides:
   deepmerge-ts: ">=8.0.0"
   browserslist: ">=4.28.7"
   mysql2: ">=3.22.0"
+  fflate: ">=0.4.9"
   # NOTE: the previous "admin>next": "16.2.6" entry has been removed. pnpm's
   # `pkgA>pkgB` override selector only matches pkgB when it is a dependency of
   # an installed *npm package* named pkgA — "admin" is a workspace project

@@ -5,7 +5,9 @@ describe("staging release capability rollback", () => {
     }
 
     if (Cypress.config("baseUrl") === "http://localhost:3500") {
-      throw new Error("STAGING_E2E_BASE_URL must target the staging deployment");
+      throw new Error(
+        "STAGING_E2E_BASE_URL must target the staging deployment",
+      );
     }
   });
 

@@ -1,15 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import {
-  STAGING_SCENARIOS,
-  type StagingScenario,
-} from "@build/db/staging-test-runs";
+import { STAGING_SCENARIOS } from "@build/db/staging-test-runs";
 
 export const STAGING_GRANT_AUDIENCE = "buildmarket-staging-test-control";
 export const MAX_GRANT_LIFETIME_SECONDS = 300; // 5 minutes
 export const STAGING_GRANT_ACTIONS = [
   "seed-scenario",
   "issue-session-handoff",
+  "reset-identity-baseline",
   "seed-mpesa-transaction",
   "get-run-projection",
   "cleanup-run",
@@ -97,7 +95,9 @@ export function verifyStagingGrant(
   }
 
   try {
-    const raw = JSON.parse(Buffer.from(serialized, "base64url").toString("utf-8"));
+    const raw = JSON.parse(
+      Buffer.from(serialized, "base64url").toString("utf-8"),
+    );
     const parsed = StagingGrantPayloadSchema.safeParse(raw);
     if (!parsed.success) return null;
 
@@ -105,7 +105,10 @@ export function verifyStagingGrant(
     const now = Math.floor(Date.now() / 1000);
 
     // Enforce expiry and maximum lifetime window
-    if (now >= grant.exp || grant.exp > grant.iat + MAX_GRANT_LIFETIME_SECONDS) {
+    if (
+      now >= grant.exp ||
+      grant.exp > grant.iat + MAX_GRANT_LIFETIME_SECONDS
+    ) {
       return null;
     }
 
@@ -163,9 +166,16 @@ export const CleanupRunActionSchema = z.object({
   runId: z.string().min(1),
 });
 
+export const ResetIdentityBaselineActionSchema = z.object({
+  action: z.literal("reset-identity-baseline"),
+  runId: z.string().min(1),
+  role: z.enum(["CLIENT", "PROFESSIONAL"]),
+});
+
 export const TestControlActionSchema = z.discriminatedUnion("action", [
   CreateRunActionSchema,
   IssueSessionHandoffActionSchema,
+  ResetIdentityBaselineActionSchema,
   SeedScenarioActionSchema,
   SeedMpesaTransactionActionSchema,
   GetRunProjectionActionSchema,

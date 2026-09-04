@@ -29,7 +29,10 @@ describe("QueueTestInspector (Dual Postgres/Redis Inspection)", () => {
         pgClient: mockPgClient as any,
       });
 
-      const records = await inspector.inspectJobsByRun("run-uuid-1", "notifications");
+      const records = await inspector.inspectJobsByRun(
+        "run-uuid-1",
+        "notifications",
+      );
       expect(records).toHaveLength(1);
       expect(records[0]?.id).toBe("job-pg-1");
       expect(records[0]?.stagingTestRunId).toBe("run-uuid-1");
@@ -70,7 +73,10 @@ describe("QueueTestInspector (Dual Postgres/Redis Inspection)", () => {
         queueFactory: () => mockQueue as any,
       });
 
-      const records = await inspector.inspectJobsByRun("run-uuid-1", "mpesa-stk-callback");
+      const records = await inspector.inspectJobsByRun(
+        "run-uuid-1",
+        "mpesa-stk-callback",
+      );
       expect(records).toHaveLength(1);
       expect(records[0]?.id).toBe("job-redis-1");
       expect(records[0]?.state).toBe("failed");

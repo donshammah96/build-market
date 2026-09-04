@@ -81,9 +81,7 @@ export function capabilityForPath(pathname: string): MvpCapability | null {
 export function getCapabilityDecision(
   capability: MvpCapability,
 ): CapabilityDecision {
-  const state: CapabilityState = env.features?.[
-    CAPABILITY_ENV_KEYS[capability]
-  ]
+  const state: CapabilityState = env.features?.[CAPABILITY_ENV_KEYS[capability]]
     ? "live"
     : "disabled";
   return {

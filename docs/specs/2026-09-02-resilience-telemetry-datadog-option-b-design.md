@@ -33,15 +33,15 @@ Datadog's HTTP Logs API accepts batched JSON logs, limits an uncompressed payloa
 
 ## Current-state audit
 
-| Area | Finding | Risk | Required disposition |
-| --- | --- | --- | --- |
-| `resilience/logger.ts` | Good Pino foundation, but stdout is its only sink. | Resilience events are absent from direct Datadog ingestion. | Retain as the one logger; add controlled Option B sink. |
-| `telemetry/logger.ts` | Per-line unawaited `fetch`, errors swallowed, divergent redaction. | Log loss at serverless suspension, costs/connection churn, PII drift. | Remove after import inventory proves no live consumers. |
-| `resilience/config.ts` | Empty strings coerce to `0`; invalid numeric domains are accepted; histogram empty segments become a zero bucket. | Bad production resilience configuration. | Fix as an independent reliability gate. |
-| `resilience/cache.ts` and `executor.ts` | SWR boundary is ineffective in orchestration; fallback values can be cached; default cache key collides for parameterized calls. | Incorrect/stale or cross-request data returned. | Fix before broad rollout. |
-| `circuit-breaker.ts` | Half-open allows unbounded concurrent probe calls. | Recovery thundering herd and immediate re-open. | Add bounded half-open probes. |
-| `metrics.ts` | Histograms are omitted from bulk snapshots and samples are unbounded; no exporter exists. | Memory growth and misleading observability. | Bound/repair locally; defer exporter replacement to OTel Metrics phase. |
-| environment templates | Existing applications use `DD_API_KEY`, `DD_SERVICE`, `DD_ENV`, and mostly `DD_SITE_HOST`; client Vercel template lacks the complete Datadog block. | Inconsistent deploy configuration. | Standardize on `DD_SITE`; retain deprecated read compatibility for `DD_SITE_HOST` for one release. |
+| Area                                    | Finding                                                                                                                                             | Risk                                                                  | Required disposition                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `resilience/logger.ts`                  | Good Pino foundation, but stdout is its only sink.                                                                                                  | Resilience events are absent from direct Datadog ingestion.           | Retain as the one logger; add controlled Option B sink.                                            |
+| `telemetry/logger.ts`                   | Per-line unawaited `fetch`, errors swallowed, divergent redaction.                                                                                  | Log loss at serverless suspension, costs/connection churn, PII drift. | Remove after import inventory proves no live consumers.                                            |
+| `resilience/config.ts`                  | Empty strings coerce to `0`; invalid numeric domains are accepted; histogram empty segments become a zero bucket.                                   | Bad production resilience configuration.                              | Fix as an independent reliability gate.                                                            |
+| `resilience/cache.ts` and `executor.ts` | SWR boundary is ineffective in orchestration; fallback values can be cached; default cache key collides for parameterized calls.                    | Incorrect/stale or cross-request data returned.                       | Fix before broad rollout.                                                                          |
+| `circuit-breaker.ts`                    | Half-open allows unbounded concurrent probe calls.                                                                                                  | Recovery thundering herd and immediate re-open.                       | Add bounded half-open probes.                                                                      |
+| `metrics.ts`                            | Histograms are omitted from bulk snapshots and samples are unbounded; no exporter exists.                                                           | Memory growth and misleading observability.                           | Bound/repair locally; defer exporter replacement to OTel Metrics phase.                            |
+| environment templates                   | Existing applications use `DD_API_KEY`, `DD_SERVICE`, `DD_ENV`, and mostly `DD_SITE_HOST`; client Vercel template lacks the complete Datadog block. | Inconsistent deploy configuration.                                    | Standardize on `DD_SITE`; retain deprecated read compatibility for `DD_SITE_HOST` for one release. |
 
 ## Architecture
 
@@ -59,25 +59,25 @@ flowchart LR
 
 ### Runtime delivery contract
 
-| Runtime | Required log path | Option B behavior | Delivery expectation |
-| --- | --- | --- | --- |
-| Vercel Node serverless | Pino stdout -> Datadog Vercel Log Drain | Disabled by default. It may be enabled only after proving per-invocation flush behavior; it is never the sole delivery route. | Platform drains provide durable off-process delivery after output capture. |
-| `apps/workers` / persistent Node daemon | Pino stdout plus bounded HTTP transport | Enabled with `DD_LOGS_ENABLED=true` and a valid `DD_API_KEY`. | Best effort in process; `flush()` on graceful SIGTERM/SIGINT is mandatory. |
-| Cloudflare Workers | Existing `workers/dd-tail-forwarder` | Do not import Node/Pino transport. Standardize its bindings separately. | Tail worker batches and awaits its API request. |
-| local/test | stdout/test destination only | Disabled unless an explicit integration test injects a fake sink. | No credentials or network calls. |
+| Runtime                                 | Required log path                       | Option B behavior                                                                                                             | Delivery expectation                                                       |
+| --------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Vercel Node serverless                  | Pino stdout -> Datadog Vercel Log Drain | Disabled by default. It may be enabled only after proving per-invocation flush behavior; it is never the sole delivery route. | Platform drains provide durable off-process delivery after output capture. |
+| `apps/workers` / persistent Node daemon | Pino stdout plus bounded HTTP transport | Enabled with `DD_LOGS_ENABLED=true` and a valid `DD_API_KEY`.                                                                 | Best effort in process; `flush()` on graceful SIGTERM/SIGINT is mandatory. |
+| Cloudflare Workers                      | Existing `workers/dd-tail-forwarder`    | Do not import Node/Pino transport. Standardize its bindings separately.                                                       | Tail worker batches and awaits its API request.                            |
+| local/test                              | stdout/test destination only            | Disabled unless an explicit integration test injects a fake sink.                                                             | No credentials or network calls.                                           |
 
 ## Datadog configuration contract
 
 All Datadog-owned variables use the `DD_*` prefix. Application-neutral logging controls (`LOG_LEVEL`, `LOG_FORMAT`) stay unchanged.
 
-| Variable | Required | Default | Rule |
-| --- | --- | --- | --- |
-| `DD_API_KEY` | Yes when direct logs, OTLP authorization, or a runtime's tracing integration uses it | unset | Secret; never write it to logs or client bundles. |
-| `DD_SITE` | No | `us5.datadoghq.com` | Canonical Datadog site host without a URL scheme. |
-| `DD_SERVICE` | Yes in deployed runtimes | runtime-specific name | Stable service identity; matches OTel service naming. |
-| `DD_ENV` | Yes in deployed runtimes | `development` locally | One of the deployment environment labels approved by operations. |
-| `DD_VERSION` | Yes in deployed runtimes | build/revision identifier | Immutable release or commit identity. |
-| `DD_LOGS_ENABLED` | No | `false` | Direct Option B transport opt-in. It is valid only with `DD_API_KEY`. |
+| Variable          | Required                                                                             | Default                   | Rule                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------ | ------------------------- | --------------------------------------------------------------------- |
+| `DD_API_KEY`      | Yes when direct logs, OTLP authorization, or a runtime's tracing integration uses it | unset                     | Secret; never write it to logs or client bundles.                     |
+| `DD_SITE`         | No                                                                                   | `us5.datadoghq.com`       | Canonical Datadog site host without a URL scheme.                     |
+| `DD_SERVICE`      | Yes in deployed runtimes                                                             | runtime-specific name     | Stable service identity; matches OTel service naming.                 |
+| `DD_ENV`          | Yes in deployed runtimes                                                             | `development` locally     | One of the deployment environment labels approved by operations.      |
+| `DD_VERSION`      | Yes in deployed runtimes                                                             | build/revision identifier | Immutable release or commit identity.                                 |
+| `DD_LOGS_ENABLED` | No                                                                                   | `false`                   | Direct Option B transport opt-in. It is valid only with `DD_API_KEY`. |
 
 `DD_SITE_HOST` is a deprecated compatibility alias, read only when `DD_SITE` is absent. It is removed after one release with no remaining template, code, or deployment references. `DATADOG_*` variables are not introduced.
 

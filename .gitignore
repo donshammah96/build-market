@@ -93,6 +93,8 @@ docs/*
 !docs/specs/**
 !docs/launch/
 !docs/launch/**
+!docs/runbooks/
+!docs/runbooks/**
 !apps/admin/docs/
 !apps/admin/docs/**
 !apps/client/docs/

@@ -47,7 +47,10 @@ function requireManageContent(
   return ok(true);
 }
 
-function requireLivePropertiesCapability(): Result<true, PropertiesDomainError> {
+function requireLivePropertiesCapability(): Result<
+  true,
+  PropertiesDomainError
+> {
   const capability = requireLiveAdminMvpCapability("property_transactions");
   return capability.ok
     ? ok(true)

@@ -14,6 +14,8 @@ describe("Staging E2E: capability rollback", () => {
     cy.request({ url: "/api/stores", failOnStatusCode: false })
       .its("status")
       .should("eq", 404);
-    cy.getStagingProjection().its("run.scenario").should("eq", "capability-rollback");
+    cy.getStagingProjection()
+      .its("run.scenario")
+      .should("eq", "capability-rollback");
   });
 });

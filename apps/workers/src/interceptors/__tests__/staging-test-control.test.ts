@@ -67,7 +67,10 @@ describe("Staging Test Control Interceptor", () => {
           stagingTestRunId: "run-uuid-1",
           channel: "SMS",
           recipient: "+254700000001",
-          metadata: { phone: "+254700000001", message: "Verification successful" },
+          metadata: {
+            phone: "+254700000001",
+            message: "Verification successful",
+          },
         },
         stagingEnv,
       );
@@ -155,14 +158,22 @@ describe("Staging Test Control Interceptor", () => {
     it("limits a transient fault to the declared initial attempts", () => {
       expect(() =>
         checkSimulatedFailure(
-          { stagingTestRunId: "run-1", simulateFailure: "TRANSIENT_ERROR", failAttempts: 1 },
+          {
+            stagingTestRunId: "run-1",
+            simulateFailure: "TRANSIENT_ERROR",
+            failAttempts: 1,
+          },
           stagingEnv,
           0,
         ),
       ).toThrow(/TRANSIENT_ERROR/);
       expect(() =>
         checkSimulatedFailure(
-          { stagingTestRunId: "run-1", simulateFailure: "TRANSIENT_ERROR", failAttempts: 1 },
+          {
+            stagingTestRunId: "run-1",
+            simulateFailure: "TRANSIENT_ERROR",
+            failAttempts: 1,
+          },
           stagingEnv,
           1,
         ),

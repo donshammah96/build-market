@@ -58,12 +58,13 @@ export async function POST(request: NextRequest) {
   }
 
   // 5. Dynamic import of domain logic only after security gates have passed
-  const { TestControlActionSchema, verifyStagingGrant, resolveStagingControlSecret } = await import(
-    "@/app/lib/domains/testing/test-control/contracts"
-  );
-  const { testControlService } = await import(
-    "@/app/lib/domains/testing/test-control/service"
-  );
+  const {
+    TestControlActionSchema,
+    verifyStagingGrant,
+    resolveStagingControlSecret,
+  } = await import("@/app/lib/domains/testing/test-control/contracts");
+  const { testControlService } =
+    await import("@/app/lib/domains/testing/test-control/service");
 
   const parsedAction = TestControlActionSchema.safeParse(jsonBody);
   if (!parsedAction.success) {
@@ -85,6 +86,15 @@ export async function POST(request: NextRequest) {
       : null;
     if (!grant || !grant.actions.includes(payload.action)) {
       return notFoundResponse();
+    }
+
+    if (payload.action === "reset-identity-baseline") {
+      if (
+        grant.scenario !== "onboarding" &&
+        grant.scenario !== "verification"
+      ) {
+        return notFoundResponse();
+      }
     }
   }
 
@@ -108,6 +118,20 @@ export async function POST(request: NextRequest) {
 
     case "issue-session-handoff": {
       const result = await testControlService.issueBrowserSessionHandoff({
+        runId: payload.runId,
+        role: payload.role,
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error, message: result.message },
+          { status: result.status },
+        );
+      }
+      return NextResponse.json(result.data, { status: 200 });
+    }
+
+    case "reset-identity-baseline": {
+      const result = await testControlService.resetIdentityBaseline({
         runId: payload.runId,
         role: payload.role,
       });

@@ -69,7 +69,11 @@ export async function processNotificationRetryJob(
     });
     const activeTestRun = run?.state === "ACTIVE" && run.expiresAt > new Date();
     if (activeTestRun) {
-      checkSimulatedFailure((job.data as any).testControl, workerEnv, job.attemptsMade);
+      checkSimulatedFailure(
+        (job.data as any).testControl,
+        workerEnv,
+        job.attemptsMade,
+      );
     }
     await interceptOutboundDelivery(
       {

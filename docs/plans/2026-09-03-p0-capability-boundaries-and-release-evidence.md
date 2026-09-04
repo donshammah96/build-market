@@ -34,7 +34,9 @@
 ### 2. Deny deferred pages and APIs at the edge
 
 #### [MODIFY] `apps/client/middleware.ts`
+
 #### [MODIFY] `apps/client/app/lib/security/middleware/route-matcher.ts`
+
 #### [NEW] `apps/client/__tests__/middleware/capability-boundary.test.ts`
 
 - **Interfaces consumed:** `capabilityForPath()` and `getCapabilityDecision()`.
@@ -50,7 +52,9 @@
 ### 3. Add server-adapter defense in depth
 
 #### [NEW] `apps/client/app/lib/api/capability-guard.ts`
+
 #### [MODIFY] affected route handlers under `apps/client/app/api/stores/**`, `apps/client/app/api/properties/**`, `apps/client/app/api/idea-books/**`, `apps/client/app/api/professionals/cpd/**`, `apps/client/app/api/v1/market-data/materials-price-index/**`, and `apps/client/app/api/projects/**/escrow/**`
+
 #### [MODIFY] affected server actions under `apps/client/app/actions/`
 
 - **Interfaces produced:** `denyDisabledCapability(capability): NextResponse | null` and `requireLiveCapability(capability): Result<void, AppError>`.
@@ -65,8 +69,11 @@
 ### 4. Remove dormant content from discovery and label analytics
 
 #### [MODIFY] `apps/client/app/layout.tsx`
+
 #### [MODIFY] `apps/client/app/lib/domains/search/service.ts`
+
 #### [MODIFY] `apps/client/app/lib/analytics/professional-funnel-sink.ts`
+
 #### [NEW] `apps/client/__tests__/lib/capabilities/discovery-and-analytics.test.ts`
 
 - The current site metadata robots policy and any generated sitemap implementation must use `isCapabilityLive`; add a dedicated `app/sitemap.ts` only if dynamic sitemap generation is introduced during the route inventory.
@@ -80,9 +87,13 @@
 ### 5. Suppress deferred async work and external delivery
 
 #### [NEW] `apps/workers/src/capabilities/guard.ts`
+
 #### [MODIFY] `apps/workers/src/processors/price-index.processor.ts`
+
 #### [MODIFY] `apps/workers/src/domains/mpesa/settlement.ts`
+
 #### [MODIFY] feature-specific notification/email producer call sites identified by the route/domain inventory
+
 #### [NEW] `apps/workers/src/capabilities/__tests__/guard.test.ts`
 
 - **Interfaces produced:** `shouldProcessCapabilityWork(capability, source): CapabilityWorkDecision` and structured suppression logging with capability/source/reason/correlation ID.
@@ -96,8 +107,11 @@
 ### 6. Make admin visibility explicitly dormant and prevent mutations
 
 #### [MODIFY] `apps/admin/src/lib/config/feature-flags.ts`
+
 #### [MODIFY] `apps/admin/src/lib/security/route-registry.ts`
+
 #### [MODIFY] existing stores/properties/verification admin actions under `apps/admin/src/actions/admin/` and their domain services
+
 #### [NEW] `apps/admin/__tests__/config/mvp-capabilities.test.ts`
 
 - **Interfaces consumed:** server capability state published by the same environment contract; never a `NEXT_PUBLIC` client value as an authority decision.
@@ -111,8 +125,11 @@
 ### 7. Define non-mutating release verification and manifest generation
 
 #### [NEW] `scripts/generate-release-evidence.mjs`
+
 #### [NEW] `scripts/__tests__/generate-release-evidence.test.mjs`
+
 #### [MODIFY] `package.json`
+
 #### [MODIFY] `.gitignore`
 
 - **Interfaces produced:** `pnpm run release:verify` and `pnpm run release:evidence:generate`; manifest schema version, SHA-256 report digest list, run metadata, redacted environment name, and result.
@@ -127,6 +144,7 @@
 ### 8. Store immutable staging release evidence in CI
 
 #### [MODIFY] `.github/workflows/ci.yml`
+
 #### [MODIFY] `docs/launch/GO_NO_GO.md`
 
 - Add a staging-only release-evidence job after validation and staging test prerequisites. It invokes `release:verify`, generates the manifest with `RELEASE_EVIDENCE_ENVIRONMENT=staging`, validates digests, uploads only allowlisted reports, and sets explicit artifact retention.
@@ -140,8 +158,11 @@
 ### 9. Build a deterministic staging E2E release suite
 
 #### [NEW] `apps/client/cypress/e2e/release/` scenario specs and support commands
+
 #### [MODIFY] `apps/client/cypress.config.ts`
+
 #### [MODIFY] `apps/client/package.json`
+
 #### [NEW] `apps/client/docs/STAGING_RELEASE_E2E_RUNBOOK.md`
 
 - **Interfaces produced:** `pnpm --filter client test:staging-release-e2e` using `STAGING_E2E_BASE_URL`, isolated run IDs, fixture setup/teardown, and JUnit/JSON reports that are safe for release evidence.
@@ -157,11 +178,17 @@
 ### 10. Update operational records and changelogs
 
 #### [MODIFY] `docs/MVP_LAUNCH_AUDIT_AND_HARDENING.md`
+
 #### [MODIFY] `docs/MVP_LAUNCH_RECOMMENDATIONS.md`
+
 #### [MODIFY] `docs/CHANGELOG.md`
+
 #### [MODIFY] `apps/client/docs/CHANGELOG.md`
+
 #### [MODIFY] `apps/admin/docs/CHANGELOG.md`
+
 #### [MODIFY] `apps/workers/docs/CHANGELOG.md`
+
 #### [MODIFY] `apps/client/docs/STATUS.md`, `apps/admin/docs/STATUS.md`, and `apps/workers/docs/STATUS.md`
 
 - Record P0-5/P0-6 implemented controls, evidence scope, feature exclusions, operator rollback reference, verification commands/results, owners, and remaining external staging prerequisites. Do not mark the marketplace launch-ready.
