@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed — Database Connection Resolution & Loopback Guard in Hosted Serverless Runtimes
+
+- **`packages/db`**:
+  - Extracted database URL resolution to `packages/db/lib/connection-url.ts` with multi-source fallback support (`DATABASE_URL`, `POSTGRES_PRISMA_URL`, `POSTGRES_URL`, `SUPABASE_DATABASE_URL`).
+  - Added resilient recovery for the common `DATABSE_URL` configuration typo with a structured console warning.
+  - Added fail-fast validation in hosted serverless runtimes (`VERCEL` or `NODE_ENV=production`) that explicitly rejects loopback hosts (`localhost`, `127.0.0.1`, `::1`) with an actionable diagnostic error guide instead of generic Prisma connection timeouts.
+  - Added unit test suite `packages/db/lib/__tests__/prisma.test.ts` covering resolution precedence, alias fallbacks, typo recovery, and loopback denial.
+
 ### Fixed — Admin Verification Notification Test Isolation for Dormant MVP Capabilities
 
 - **`apps/admin`**:
