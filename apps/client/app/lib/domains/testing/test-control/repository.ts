@@ -407,4 +407,4 @@ export class TestControlRepository {
 
 export const testControlRepository = new TestControlRepository();
 
-export * from "./identity-repository.js";
+export * from "./identity-repository";

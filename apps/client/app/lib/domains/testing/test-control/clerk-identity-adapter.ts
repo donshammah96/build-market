@@ -6,8 +6,8 @@ import {
 } from "@build/db/staging-test-runs";
 import { err, ok, type Result } from "@/app/lib/errors/result";
 import { env } from "@/app/lib/infrastructure/env";
-import type { IdentityLease } from "./identity-repository.js";
-import type { TestControlError } from "./service.js";
+import type { IdentityLease } from "./identity-repository";
+import type { TestControlError } from "./service";
 
 const DEFAULT_STAGING_SLOTS: readonly StagingSlotConfig[] = [
   {

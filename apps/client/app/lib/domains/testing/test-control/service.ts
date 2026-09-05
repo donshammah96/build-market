@@ -5,13 +5,13 @@ import {
   isStagingRunActive,
   type StagingScenario,
 } from "@build/db/staging-test-runs";
-import { signStagingGrant, resolveStagingControlSecret } from "./contracts.js";
-import { testControlRepository, type CreateRunParams } from "./repository.js";
+import { signStagingGrant, resolveStagingControlSecret } from "./contracts";
+import { testControlRepository, type CreateRunParams } from "./repository";
 import {
   identityRepository,
   type IdentityResetProjection,
-} from "./identity-repository.js";
-import { restoreClerkIdentityBaseline } from "./clerk-identity-adapter.js";
+} from "./identity-repository";
+import { restoreClerkIdentityBaseline } from "./clerk-identity-adapter";
 
 export interface TestControlError {
   error: string;
