@@ -16,6 +16,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Staging Database Loopback Guard & Preflight Verification
+
+- **Client Environment & Runtime Hardening (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/api/internal/test-control/route.ts`)**:
+  - Hardened the `database` group in `env.ts` to reject loopback hosts (`localhost`, `127.0.0.1`, `::1`) when running in production or hosted environments (`NODE_ENV === "production"` or `VERCEL === "1"`), unless `ALLOW_LOCALHOST_DB === "true"`.
+  - Updated `testControlService.createRun` to intercept database connection and loopback configuration errors, mapping them to a typed domain error `{ error: "STAGING_DATABASE_MISCONFIGURED", status: 503 }`.
+  - Preserved thin HTTP route boundaries (ADR-002) and strict environment read encapsulation (ADR-004) in `/api/internal/test-control/route.ts` by delegating error handling to domain service results without route-level `process.env` inspection.
+  - Added unit tests in `__tests__/lib/env.validation.test.ts` and `__tests__/lib/domains/testing/test-control.service.test.ts`.
+
 ### Fixed — Staging E2E internal auth alignment and emergency DB sweep quoting
 
 - **Staging Test-Control Internal Auth Alignment (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/cypress.config.ts`, `.github/workflows/staging-e2e.yml`, `apps/client/.env.example`)**:

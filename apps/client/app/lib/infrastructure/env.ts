@@ -182,10 +182,35 @@ const envGroups: EnvGroup[] = [
       {
         name: "DATABASE_URL",
         required: true,
-        validate: (v) =>
-          v.startsWith("postgresql://") || v.startsWith("postgres://"),
+        validate: (v) => {
+          if (!v.startsWith("postgresql://") && !v.startsWith("postgres://")) {
+            return false;
+          }
+          const isHosted =
+            process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+          if (isHosted && !process.env.ALLOW_LOCALHOST_DB) {
+            try {
+              const parseable = v.replace(
+                /^(postgres|postgresql):\/\//i,
+                "http://",
+              );
+              const parsed = new URL(parseable);
+              if (
+                parsed.hostname === "localhost" ||
+                parsed.hostname === "127.0.0.1" ||
+                parsed.hostname === "::1"
+              ) {
+                return false;
+              }
+            } catch {
+              return false;
+            }
+          }
+          return true;
+        },
         errorMessage:
           "Must be a valid PostgreSQL connection string. " +
+          "Loopback addresses (localhost/127.0.0.1) are rejected in hosted/production environments. " +
           "Use the Supabase Supavisor session-mode pooler URL " +
           "(postgresql://postgres.PROJECT_REF:PASSWORD@aws-REGION.pooler.supabase.com:5432/postgres).",
       },

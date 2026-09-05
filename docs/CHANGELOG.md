@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added — Staging Deployment Database Reachability Preflight & Architecture Hardening
+
+- **CI Workflow & Preflight Tooling (`.github/workflows/staging-e2e.yml`, `scripts/preflight-staging-db-check.mjs`, `scripts/emergency-staging-cleanup.mjs`)**:
+  - Added fast-fail preflight probe `scripts/preflight-staging-db-check.mjs` running before Cypress in `staging-e2e.yml` to verify that the deployed staging instance can execute test run database transactions.
+  - Automatically loads local environment files (`.env.local`, `apps/client/.env.local`) and supports CLI URL arguments for standalone local verification.
+  - Catches both structured `STAGING_DATABASE_MISCONFIGURED` responses and legacy Prisma `127.0.0.1:5432` connection timeouts, terminating CI in ~1s with actionable Vercel redeployment guidance instead of waiting for 8 Cypress specs to fail.
+  - Added runner-side database host logging (redacted) and local `.env.local` support to `scripts/emergency-staging-cleanup.mjs`.
+- **`apps/client`**:
+  - Hardened `database` group validation in `apps/client/app/lib/infrastructure/env.ts` to reject loopback hosts (`localhost`, `127.0.0.1`, `::1`) in hosted or production environments (`VERCEL=1` or `NODE_ENV=production`) unless `ALLOW_LOCALHOST_DB=true`.
+  - Mapped database connectivity and loopback configuration failures in `testControlService.createRun` to a typed domain error `{ error: "STAGING_DATABASE_MISCONFIGURED", status: 503 }`.
+  - Preserved thin HTTP adapter and canonical env access boundaries (ADR-002, ADR-004) in `/api/internal/test-control/route.ts` by delegating error handling to domain service results without ad-hoc `process.env` inspection.
+  - Added comprehensive unit test coverage in `__tests__/lib/env.validation.test.ts` (hosted loopback rejection/allowance) and `__tests__/lib/domains/testing/test-control.service.test.ts`.
+
 ### Fixed — Database Connection Resolution & Loopback Guard in Hosted Serverless Runtimes
 
 - **`packages/db`**:

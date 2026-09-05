@@ -67,6 +67,9 @@ jobs:
       - name: Build shared packages
         run: pnpm run build --filter="@build/*"
 
+      - name: Preflight - verify staging deployment can reach its database
+        run: node scripts/preflight-staging-db-check.mjs
+
       - name: Run Cypress staging E2E suite
         run: |
           if [ "${{ github.event.inputs.scenario }}" = "all" ] || [ -z "${{ github.event.inputs.scenario }}" ]; then

@@ -57,6 +57,25 @@ describe("TestControlService", () => {
     }
   });
 
+  it("maps loopback database error to STAGING_DATABASE_MISCONFIGURED with status 503", async () => {
+    vi.spyOn(testControlRepository, "createRun").mockRejectedValue(
+      new Error(
+        "[@build/db] DATABASE_URL points to loopback host '127.0.0.1' in a hosted environment",
+      ),
+    );
+
+    const result = await testControlService.createRun({
+      scenario: "onboarding",
+      actorLabel: "cypress-ci",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("STAGING_DATABASE_MISCONFIGURED");
+      expect(result.status).toBe(503);
+    }
+  });
+
   it("issues a Clerk browser session handoff for an active staging run", async () => {
     const mockRun = {
       id: "run-uuid-1",

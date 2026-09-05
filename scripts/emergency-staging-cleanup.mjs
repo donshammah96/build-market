@@ -6,6 +6,26 @@
  * stranded/expired staging test runs and prevent fixture leakage.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
+// Attempt to load local environment files if running locally outside CI
+for (const envFile of [
+  ".env.local",
+  "apps/client/.env.local",
+  ".env",
+  "apps/client/.env",
+]) {
+  const resolved = path.resolve(process.cwd(), envFile);
+  if (fs.existsSync(resolved)) {
+    try {
+      process.loadEnvFile?.(resolved);
+    } catch {
+      // Ignore syntax or permission errors when reading optional env files
+    }
+  }
+}
+
 const databaseUrl = process.env.DATABASE_URL;
 const baseUrl = process.env.STAGING_E2E_BASE_URL;
 const internalSecret = (
@@ -17,6 +37,18 @@ const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
 const stagingAuthSecret = (process.env.STAGING_AUTH_SECRET || "").trim();
 const stagingAuthUser = (process.env.STAGING_AUTH_USER || "").trim();
 const stagingAuthPassword = (process.env.STAGING_AUTH_PASSWORD || "").trim();
+
+// Never log the raw connection string (it carries credentials) — just the
+// host, so a divergence between "what the CI runner connects to" and "what
+// the deployed app connects to" is visible at a glance in the logs.
+function redactedDbHost(rawUrl) {
+  if (!rawUrl) return "(unset)";
+  try {
+    return new URL(rawUrl).hostname;
+  } catch {
+    return "(unparseable)";
+  }
+}
 
 function getApiHeaders(additional = {}) {
   const headers = {
@@ -70,10 +102,18 @@ async function performApiCleanup() {
         body: JSON.stringify({ action: "cleanup-run", runId }),
       });
     } else {
+      const probeBodyText = await res.text();
       console.warn(
         `[emergency-cleanup] Probe failed with status ${res.status}:`,
-        await res.text(),
+        probeBodyText,
       );
+      if (probeBodyText.includes("STAGING_DATABASE_MISCONFIGURED")) {
+        console.warn(
+          "[emergency-cleanup] The deployed app itself cannot reach its database " +
+            "(this is a Vercel env-var scoping problem, not something this script " +
+            "or the CI runner's own DB access can fix). See STAGING_DB_LOCALHOST_AUTOPSY.md.",
+        );
+      }
     }
     return true;
   } catch (err) {
@@ -89,6 +129,10 @@ async function performDatabaseSweep() {
     );
     return;
   }
+
+  console.log(
+    `[emergency-cleanup] Runner-side DATABASE_URL host: ${redactedDbHost(databaseUrl)}`,
+  );
 
   let Pool;
   try {

@@ -58,10 +58,27 @@ export class TestControlService {
       );
 
       return ok({ runId: run.id, grantToken });
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || "");
+      const isLoopbackMisconfig =
+        msg.includes("[@build/db] DATABASE_URL points to loopback host") ||
+        /Can't reach database server at (127\.0\.0\.1|localhost|::1)/i.test(
+          msg,
+        );
+
+      if (isLoopbackMisconfig) {
+        return err({
+          error: "STAGING_DATABASE_MISCONFIGURED",
+          message:
+            "DATABASE_URL is not correctly configured for this deployment (resolves to a local/invalid host). " +
+            "This is an environment configuration problem, not a transient database issue.",
+          status: 503,
+        });
+      }
+
       return err({
         error: "CREATE_RUN_FAILED",
-        message: e.message || "Failed to initialize staging test run",
+        message: msg || "Failed to initialize staging test run",
         status: 500,
       });
     }
