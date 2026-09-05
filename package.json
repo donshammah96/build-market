@@ -78,8 +78,10 @@
     "workers:check-types": "pnpm -C apps/workers run check-types"
   },
   "devDependencies": {
+    "@types/pg": "catalog:",
     "@typescript/typescript6": "catalog:",
     "next": "catalog:",
+    "pg": "catalog:",
     "prettier": "catalog:",
     "rimraf": "^6.1.3",
     "turbo": "catalog:",
