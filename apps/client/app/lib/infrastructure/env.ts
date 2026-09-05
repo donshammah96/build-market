@@ -376,6 +376,7 @@ const envGroups: EnvGroup[] = [
       { name: "NOTIFICATION_SERVICE_URL", required: false },
       { name: "HCAPTCHA_SECRET_KEY", required: false },
       { name: "INTERNAL_API_SECRET", required: false },
+      { name: "INTERNAL_SERVICE_SECRET", required: false },
       {
         name: "SCAN_CALLBACK_HMAC_SECRET",
         required: true,
@@ -1425,7 +1426,10 @@ function buildEnvConfig() {
         "http://localhost:3005",
       ),
       hcaptchaSecretKey: getOptionalStringEnv("HCAPTCHA_SECRET_KEY"),
-      internalApiSecret: getOptionalStringEnv("INTERNAL_API_SECRET"),
+      internalApiSecret: (
+        getOptionalStringEnv("INTERNAL_API_SECRET") ||
+        getOptionalStringEnv("INTERNAL_SERVICE_SECRET")
+      )?.trim(),
       scanCallbackHmacSecret: getOptionalStringEnv("SCAN_CALLBACK_HMAC_SECRET"),
     },
 
@@ -1635,9 +1639,13 @@ function buildEnvConfig() {
 
     // Staging Test Control Authority (DD_ENV === "staging" || NODE_ENV === "test")
     stagingTestControl: {
-      secret: getOptionalStringEnv("TEST_CONTROL_SECRET"),
-      grantPublicKey: getOptionalStringEnv("TEST_CONTROL_GRANT_PUBLIC_KEY"),
-      identitySlots: getOptionalStringEnv("STAGING_TEST_IDENTITY_SLOTS"),
+      secret: getOptionalStringEnv("TEST_CONTROL_SECRET")?.trim(),
+      grantPublicKey: getOptionalStringEnv(
+        "TEST_CONTROL_GRANT_PUBLIC_KEY",
+      )?.trim(),
+      identitySlots: getOptionalStringEnv(
+        "STAGING_TEST_IDENTITY_SLOTS",
+      )?.trim(),
     },
   } as const;
 }

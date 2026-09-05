@@ -16,6 +16,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Staging E2E internal auth alignment and emergency DB sweep quoting
+
+- **Staging Test-Control Internal Auth Alignment (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/cypress.config.ts`, `.github/workflows/staging-e2e.yml`, `apps/client/.env.example`)**:
+  - Resolved HTTP 403 Forbidden failure on `POST /api/internal/test-control` by wiring bidirectional fallback between `INTERNAL_API_SECRET` and `INTERNAL_SERVICE_SECRET` across client runtime env, GitHub Actions CI workflow, and environment templates.
+  - Added `.trim()` sanitization to `baseUrl`, `internalSecret`, `testSecret`, and staging authentication credentials across Cypress configuration, emergency cleanup scripts, and `env.ts` to prevent constant-time string comparison (`timingSafeEqualStrings`) byte-length rejections caused by trailing newlines or whitespace.
+  - Added `INTERNAL_SERVICE_SECRET` to `apps/client/.env.example` and `envGroups`, maintaining full compliance with the automated client environment contract check (`pnpm run check-env-contract`).
+- **Emergency Staging Cleanup Sweeper (`scripts/emergency-staging-cleanup.mjs`)**:
+  - Quoted all mixed-case PostgreSQL table and column identifiers (`"expiresAt"`, `"stagingTestRunId"`, `"leaseExpiresAt"`, `"releasedAt"`, `"cleanedAt"`, `"staging_test_runs"`, `"staging_test_identity_leases"`) in raw SQL sweeps, resolving the `column "expiresat" does not exist` runtime error.
+  - Added diagnostic logging for non-OK HTTP response codes and response bodies during the pre-sweep API probe.
+
 ### Changed â€” Staging E2E control-plane hardening
 
 - Replaced the `seed-scenario` acknowledgement with durable, run-owned routing, messaging, and review fixtures; added ownership/cleanup coverage for `MarketplaceLead` and `MessageThread` roots.

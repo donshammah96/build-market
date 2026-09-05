@@ -8,12 +8,15 @@
 
 const databaseUrl = process.env.DATABASE_URL;
 const baseUrl = process.env.STAGING_E2E_BASE_URL;
-const internalSecret =
-  process.env.INTERNAL_API_SECRET || process.env.INTERNAL_SERVICE_SECRET;
-const testSecret = process.env.TEST_CONTROL_SECRET;
-const stagingAuthSecret = process.env.STAGING_AUTH_SECRET;
-const stagingAuthUser = process.env.STAGING_AUTH_USER;
-const stagingAuthPassword = process.env.STAGING_AUTH_PASSWORD;
+const internalSecret = (
+  process.env.INTERNAL_API_SECRET ||
+  process.env.INTERNAL_SERVICE_SECRET ||
+  ""
+).trim();
+const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
+const stagingAuthSecret = (process.env.STAGING_AUTH_SECRET || "").trim();
+const stagingAuthUser = (process.env.STAGING_AUTH_USER || "").trim();
+const stagingAuthPassword = (process.env.STAGING_AUTH_PASSWORD || "").trim();
 
 function getApiHeaders(additional = {}) {
   const headers = {
@@ -66,6 +69,11 @@ async function performApiCleanup() {
         headers: getApiHeaders({ "x-test-control-grant": grantToken }),
         body: JSON.stringify({ action: "cleanup-run", runId }),
       });
+    } else {
+      console.warn(
+        `[emergency-cleanup] Probe failed with status ${res.status}:`,
+        await res.text(),
+      );
     }
     return true;
   } catch (err) {
@@ -84,8 +92,11 @@ async function performDatabaseSweep() {
 
   let Pool;
   try {
-    const pg = await import("pg");
-    Pool = pg.Pool || pg.default?.Pool;
+    const pgModule = await import("pg");
+    Pool = pgModule.Pool || pgModule.default?.Pool;
+    if (!Pool) {
+      throw new Error("Pool constructor not found on 'pg' module");
+    }
   } catch (err) {
     console.warn(
       "[emergency-cleanup] 'pg' package not available; skipping direct DB sweep:",
@@ -107,9 +118,9 @@ async function performDatabaseSweep() {
     try {
       // Find expired or stranded runs older than 10 minutes
       const selectRes = await client.query(`
-        SELECT id FROM staging_test_runs
-        WHERE state IN ('ACTIVE', 'CLEANING')
-          AND expiresAt < NOW() + INTERVAL '5 minutes'
+        SELECT "id" FROM "staging_test_runs"
+        WHERE "state" IN ('ACTIVE', 'CLEANING')
+          AND "expiresAt" < NOW() + INTERVAL '5 minutes'
       `);
 
       for (const row of selectRes.rows) {
@@ -126,40 +137,42 @@ async function performDatabaseSweep() {
           [runId],
         );
         await client.query(
-          "DELETE FROM staging_test_outbound_deliveries WHERE stagingTestRunId = $1",
+          'DELETE FROM "staging_test_outbound_deliveries" WHERE "stagingTestRunId" = $1',
           [runId],
         );
         await client.query(
-          'DELETE FROM "MpesaCallbackEvent" WHERE stagingTestRunId = $1',
+          'DELETE FROM "MpesaCallbackEvent" WHERE "stagingTestRunId" = $1',
           [runId],
         );
         await client.query(
-          'DELETE FROM "MpesaTransaction" WHERE stagingTestRunId = $1',
-          [runId],
-        );
-        await client.query('DELETE FROM "Review" WHERE stagingTestRunId = $1', [
-          runId,
-        ]);
-        await client.query('DELETE FROM "Lead" WHERE stagingTestRunId = $1', [
-          runId,
-        ]);
-        await client.query(
-          'DELETE FROM "Project" WHERE stagingTestRunId = $1',
+          'DELETE FROM "MpesaTransaction" WHERE "stagingTestRunId" = $1',
           [runId],
         );
         await client.query(
-          'DELETE FROM "ProfessionalProfile" WHERE stagingTestRunId = $1',
+          'DELETE FROM "Review" WHERE "stagingTestRunId" = $1',
           [runId],
         );
-        await client.query("DELETE FROM users WHERE stagingTestRunId = $1", [
+        await client.query('DELETE FROM "Lead" WHERE "stagingTestRunId" = $1', [
           runId,
         ]);
         await client.query(
-          "UPDATE staging_test_identity_leases SET state = 'RELEASED', \"releasedAt\" = NOW() WHERE \"stagingTestRunId\" = $1 AND state IN ('LEASED', 'RESETTING', 'READY')",
+          'DELETE FROM "Project" WHERE "stagingTestRunId" = $1',
           [runId],
         );
         await client.query(
-          "UPDATE staging_test_runs SET state = 'CLEANED', cleanedAt = NOW() WHERE id = $1",
+          'DELETE FROM "ProfessionalProfile" WHERE "stagingTestRunId" = $1',
+          [runId],
+        );
+        await client.query(
+          'DELETE FROM "users" WHERE "stagingTestRunId" = $1',
+          [runId],
+        );
+        await client.query(
+          'UPDATE "staging_test_identity_leases" SET "state" = \'RELEASED\', "releasedAt" = NOW() WHERE "stagingTestRunId" = $1 AND "state" IN (\'LEASED\', \'RESETTING\', \'READY\')',
+          [runId],
+        );
+        await client.query(
+          'UPDATE "staging_test_runs" SET "state" = \'CLEANED\', "cleanedAt" = NOW() WHERE "id" = $1',
           [runId],
         );
         await client.query("COMMIT");
@@ -169,9 +182,9 @@ async function performDatabaseSweep() {
       );
 
       const expiredLeases = await client.query(`
-        UPDATE staging_test_identity_leases
-        SET state = 'RELEASED', "releasedAt" = NOW()
-        WHERE state IN ('LEASED', 'RESETTING', 'READY')
+        UPDATE "staging_test_identity_leases"
+        SET "state" = 'RELEASED', "releasedAt" = NOW()
+        WHERE "state" IN ('LEASED', 'RESETTING', 'READY')
           AND "leaseExpiresAt" < NOW()
       `);
       if (expiredLeases.rowCount > 0) {

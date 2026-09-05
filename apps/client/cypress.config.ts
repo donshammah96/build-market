@@ -28,17 +28,23 @@ export default defineConfig({
       let activeRunId: string | null = null;
       let activeGrantToken: string | null = null;
 
-      const baseUrl =
+      const baseUrl = (
         config.env.STAGING_E2E_BASE_URL ||
         process.env.STAGING_E2E_BASE_URL ||
-        "http://localhost:3500";
-      const internalSecret =
-        process.env.INTERNAL_API_SECRET || process.env.INTERNAL_SERVICE_SECRET;
-      const testSecret = process.env.TEST_CONTROL_SECRET || "";
-      const stagingAuthSecret = process.env.STAGING_AUTH_SECRET || "";
+        "http://localhost:3500"
+      ).trim();
+      const internalSecret = (
+        process.env.INTERNAL_API_SECRET ||
+        process.env.INTERNAL_SERVICE_SECRET ||
+        ""
+      ).trim();
+      const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
+      const stagingAuthSecret = (process.env.STAGING_AUTH_SECRET || "").trim();
 
-      const stagingAuthUser = process.env.STAGING_AUTH_USER || "";
-      const stagingAuthPassword = process.env.STAGING_AUTH_PASSWORD || "";
+      const stagingAuthUser = (process.env.STAGING_AUTH_USER || "").trim();
+      const stagingAuthPassword = (
+        process.env.STAGING_AUTH_PASSWORD || ""
+      ).trim();
 
       function assertControlCredentials() {
         if (!internalSecret || !testSecret) {
