@@ -28,6 +28,10 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **Emergency Staging Cleanup Sweeper (`scripts/emergency-staging-cleanup.mjs`)**:
   - Quoted all mixed-case PostgreSQL table and column identifiers (`"expiresAt"`, `"stagingTestRunId"`, `"leaseExpiresAt"`, `"releasedAt"`, `"cleanedAt"`, `"staging_test_runs"`, `"staging_test_identity_leases"`) in raw SQL sweeps, resolving the `column "expiresat" does not exist` runtime error.
   - Added diagnostic logging for non-OK HTTP response codes and response bodies during the pre-sweep API probe.
+- **Staging Perimeter Protection SSL/DCV Challenge Exemption (`apps/client/app/lib/security/middleware/staging-auth.ts`, `apps/client/__tests__/middleware/staging-auth.test.ts`)**:
+  - Added `pathname.startsWith("/.well-known/")` to `isStagingProtectionExempt()` in edge middleware protection logic.
+  - Resolves HTTP 401 Unauthorized rejections on automated Cloudflare Domain Control Validation (DCV) hostname probes (`/.well-known/cf-custom-hostname-challenge/*`) and ACME challenges, ensuring uninterrupted SSL certificate provisioning and renewal for `staging.buildmarket.app`.
+  - Added unit test coverage in `__tests__/middleware/staging-auth.test.ts` (13/13 passing).
 
 ### Changed — Staging E2E control-plane hardening
 

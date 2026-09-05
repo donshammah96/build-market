@@ -69,6 +69,10 @@ export function isStagingProtectionExempt(req: NextRequest): boolean {
     return true;
   }
 
+  if (pathname.startsWith("/.well-known/")) {
+    return true;
+  }
+
   const internalSecret = req.headers.get("x-internal-secret");
   if (internalSecret && ensureValidInternalSecret(internalSecret) === null) {
     return true;
