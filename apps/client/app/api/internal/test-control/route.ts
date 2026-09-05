@@ -7,24 +7,31 @@ import {
 
 const MAX_BODY_BYTES = 64 * 1024; // 64KB max
 
-function notFoundResponse() {
-  return new NextResponse(null, { status: 404 });
+function notFoundResponse(reason?: string) {
+  const headers: Record<string, string> = {};
+  if (reason) {
+    headers["x-test-control-denial"] = reason;
+  }
+  return new NextResponse(null, { status: 404, headers });
 }
 
 export async function POST(request: NextRequest) {
   // 1. Hard fail-closed environment gate before dynamic imports
-  const isStaging = env.otel.ddEnv === "staging";
+  const isStaging =
+    env.otel.ddEnv === "staging" ||
+    Boolean(env.stagingTestControl?.enabled) ||
+    Boolean(env.stagingAuth?.isEnabled);
   const isTest = env.isTest;
 
   if (!isStaging && !isTest) {
-    return notFoundResponse();
+    return notFoundResponse("not_staging_environment");
   }
 
   // 2. Validate internal service secret
   const internalSecretHeader = request.headers.get("x-internal-secret");
   const secretError = ensureValidInternalSecret(internalSecretHeader);
   if (secretError !== null) {
-    return notFoundResponse();
+    return notFoundResponse("internal_secret_rejected");
   }
 
   // 3. A separately rotated control secret is mandatory in staging. Test mode
@@ -32,7 +39,7 @@ export async function POST(request: NextRequest) {
   // deployable secret.
   const configuredTestSecret = env.stagingTestControl?.secret;
   if (!configuredTestSecret && !isTest) {
-    return notFoundResponse();
+    return notFoundResponse("missing_configured_test_control_secret");
   }
   if (configuredTestSecret) {
     const testSecretHeader = request.headers.get("x-test-control-secret");
@@ -40,7 +47,7 @@ export async function POST(request: NextRequest) {
       !testSecretHeader ||
       !timingSafeEqualStrings(testSecretHeader, configuredTestSecret)
     ) {
-      return notFoundResponse();
+      return notFoundResponse("test_control_secret_mismatch");
     }
   }
 

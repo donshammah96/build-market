@@ -26,6 +26,72 @@ The staging environment maintains 6 dedicated, non-routable pool slots:
 
 ---
 
+## Pre-provisioning Initial Identities (One-Time Setup)
+
+### 1. Clerk Dashboard Metadata Configuration
+
+In the Clerk Dashboard (`Users` -> select user -> `Metadata`):
+
+**For Professionals (`e2e_pro_1`, `e2e_pro_2`, `e2e_pro_3`):**
+
+```json
+{
+  "role": "PROFESSIONAL",
+  "onboardingComplete": false,
+  "isOnboarded": false,
+  "isProfileComplete": false
+}
+```
+
+**For Clients (`e2e_client_1`, `e2e_client_2`, `e2e_client_3`):**
+
+```json
+{
+  "role": "CLIENT",
+  "onboardingComplete": false,
+  "isOnboarded": false,
+  "isProfileComplete": false
+}
+```
+
+### 2. Staging Database Seeding (`users` Table)
+
+> [!NOTE]
+> PostgreSQL enforces `"updatedAt" TIMESTAMP(3) NOT NULL` on `"users"`. Because Prisma's `@updatedAt` directive is managed client-side and does not declare a database-level `DEFAULT`, all direct raw SQL `INSERT` statements **must explicitly specify `"updatedAt" = NOW()`**.
+
+```sql
+INSERT INTO "users" (
+  "id",
+  "clerkId",
+  "email",
+  "role",
+  "status",
+  "isEmailVerified",
+  "isProfileComplete",
+  "updatedAt",
+  "createdAt"
+) VALUES
+  (
+    gen_random_uuid(),
+    'user_3ItBP8JFyS2GsV7nVGxqyZRVbUD', -- Replace with Clerk User ID for pro-1
+    'e2e_pro_1@staging.buildmarket.app',
+    'PROFESSIONAL',
+    'ONBOARDING',
+    true,
+    false,
+    NOW(),
+    NOW()
+  )
+ON CONFLICT ("clerkId") DO UPDATE SET
+  "email" = EXCLUDED."email",
+  "role" = EXCLUDED."role",
+  "status" = EXCLUDED."status",
+  "isEmailVerified" = EXCLUDED."isEmailVerified",
+  "updatedAt" = NOW();
+```
+
+---
+
 ## State Machine & Transitions
 
 ```text

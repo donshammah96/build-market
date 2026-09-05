@@ -20,13 +20,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 - **Staging Test-Control Internal Auth Alignment (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/cypress.config.ts`, `.github/workflows/staging-e2e.yml`, `apps/client/.env.example`)**:
   - Resolved HTTP 403 Forbidden failure on `POST /api/internal/test-control` by wiring bidirectional fallback between `INTERNAL_API_SECRET` and `INTERNAL_SERVICE_SECRET` across client runtime env, GitHub Actions CI workflow, and environment templates.
+  - Hardened staging environment classification in `/api/internal/test-control/route.ts` to recognize `ENABLE_STAGING_TEST_CONTROL=true` and `stagingAuth.isEnabled` alongside `DD_ENV === "staging"`, preventing fail-closed 404 rejections in environments where `DD_ENV` is not preset.
+  - Added diagnostic `x-test-control-denial` response headers and formatted Cypress task error reporting to explicitly surface the gate denial reason on non-OK responses.
   - Added `.trim()` sanitization to `baseUrl`, `internalSecret`, `testSecret`, and staging authentication credentials across Cypress configuration, emergency cleanup scripts, and `env.ts` to prevent constant-time string comparison (`timingSafeEqualStrings`) byte-length rejections caused by trailing newlines or whitespace.
-  - Added `INTERNAL_SERVICE_SECRET` to `apps/client/.env.example` and `envGroups`, maintaining full compliance with the automated client environment contract check (`pnpm run check-env-contract`).
+  - Added `INTERNAL_SERVICE_SECRET`, `ENABLE_STAGING_TEST_CONTROL`, and `STAGING_TEST_IDENTITY_SLOTS` to `apps/client/.env.example` and `envGroups`, maintaining full compliance with the automated client environment contract check (`pnpm run check-env-contract`).
+  - Removed deprecated `"baseUrl": ".."` and `"ignoreDeprecations": "6.0"` from `apps/client/cypress/tsconfig.json`, updating paths to `"@/*": ["../*"]` relative to the cypress directory for TS6+ compliance.
 - **Emergency Staging Cleanup Sweeper (`scripts/emergency-staging-cleanup.mjs`)**:
   - Quoted all mixed-case PostgreSQL table and column identifiers (`"expiresAt"`, `"stagingTestRunId"`, `"leaseExpiresAt"`, `"releasedAt"`, `"cleanedAt"`, `"staging_test_runs"`, `"staging_test_identity_leases"`) in raw SQL sweeps, resolving the `column "expiresat" does not exist` runtime error.
   - Added diagnostic logging for non-OK HTTP response codes and response bodies during the pre-sweep API probe.
 
-### Changed â€” Staging E2E control-plane hardening
+### Changed — Staging E2E control-plane hardening
 
 - Replaced the `seed-scenario` acknowledgement with durable, run-owned routing, messaging, and review fixtures; added ownership/cleanup coverage for `MarketplaceLead` and `MessageThread` roots.
 - Removed deployable default credentials from the Cypress and route adapters, require an HTTPS allowlisted staging host, and bind M-Pesa callback events to their owned test run.

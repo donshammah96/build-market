@@ -91,6 +91,15 @@ export default defineConfig({
         return headers;
       }
 
+      function formatControlError(
+        status: number,
+        headers: Headers,
+        bodyText: string,
+      ) {
+        const denial = headers.get("x-test-control-denial");
+        return `status ${status}${denial ? ` [denial: ${denial}]` : ""}: ${bodyText}`;
+      }
+
       on("task", {
         log(message: string) {
           console.log(message);
@@ -120,7 +129,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `createRun failed with status ${res.status}: ${await res.text()}`,
+              `createRun failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           const body = await res.json();
@@ -149,7 +158,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `issueSession failed with status ${res.status}: ${await res.text()}`,
+              `issueSession failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           return res.json();
@@ -175,7 +184,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `resetIdentityBaseline failed with status ${res.status}: ${await res.text()}`,
+              `resetIdentityBaseline failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           const body = await res.json();
@@ -216,7 +225,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `seedMpesa failed with status ${res.status}: ${await res.text()}`,
+              `seedMpesa failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           return res.json();
@@ -244,7 +253,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `seedScenario failed with status ${res.status}: ${await res.text()}`,
+              `seedScenario failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           return res.json();
@@ -267,7 +276,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `getProjection failed with status ${res.status}: ${await res.text()}`,
+              `getProjection failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           return res.json();
@@ -290,7 +299,7 @@ export default defineConfig({
           });
           if (!res.ok) {
             throw new Error(
-              `cleanup failed with status ${res.status}: ${await res.text()}`,
+              `cleanup failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
           activeRunId = null;

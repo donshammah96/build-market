@@ -726,8 +726,10 @@ const envGroups: EnvGroup[] = [
     name: "stagingTestControl",
     description: "Staging Test Control Authority Configuration",
     variables: [
+      { name: "ENABLE_STAGING_TEST_CONTROL", required: false },
       { name: "TEST_CONTROL_SECRET", required: false },
       { name: "TEST_CONTROL_GRANT_PUBLIC_KEY", required: false },
+      { name: "STAGING_TEST_IDENTITY_SLOTS", required: false },
     ],
   },
   {
@@ -1639,6 +1641,9 @@ function buildEnvConfig() {
 
     // Staging Test Control Authority (DD_ENV === "staging" || NODE_ENV === "test")
     stagingTestControl: {
+      enabled:
+        getBooleanEnv("ENABLE_STAGING_TEST_CONTROL", false) ||
+        getOptionalStringEnv("DD_ENV") === "staging",
       secret: getOptionalStringEnv("TEST_CONTROL_SECRET")?.trim(),
       grantPublicKey: getOptionalStringEnv(
         "TEST_CONTROL_GRANT_PUBLIC_KEY",
