@@ -88,6 +88,23 @@ ON CONFLICT ("clerkId") DO UPDATE SET
   "status" = EXCLUDED."status",
   "isEmailVerified" = EXCLUDED."isEmailVerified",
   "updatedAt" = NOW();
+
+-- Base Professional Profile (required for routing and project associations)
+INSERT INTO "ProfessionalProfile" (
+  "userId",
+  "companyName",
+  "profession",
+  "county",
+  "updatedAt"
+) SELECT
+  "id",
+  'E2E Pro 1 Construction',
+  'GENERAL_CONTRACTOR',
+  'NAIROBI',
+  NOW()
+FROM "users"
+WHERE "email" = 'e2e_pro_1@staging.buildmarket.app'
+ON CONFLICT ("userId") DO NOTHING;
 ```
 
 ---

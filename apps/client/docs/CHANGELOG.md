@@ -18,6 +18,9 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
+- **Staging Test Identity Professional Profile Resolution (`apps/client/app/lib/domains/testing/test-control/repository.ts`)**:
+  - Implemented self-healing upsert for `ProfessionalProfile` during `seedScenario` execution in `TestControlRepository`. Base staging professional identities (`e2e_pro_1`) require a `ProfessionalProfile` relation for lead routing and project associations; when missing, test-control automatically provisions the profile row with `PENDING` verification and `UNVERIFIED` trust tier, eliminating the `STAGING_TEST_IDENTITY_MISSING` 500 error in E2E scenario seeding.
+
 - **MpesaTransaction Database Schema Migration (`packages/db/prisma/migrations/20260911140000_add_mpesa_transaction_subscription_id`)**:
   - Added missing migration for `MpesaTransaction.subscriptionId` (`TEXT`, nullable) with index `MpesaTransaction_subscriptionId_idx` matching `schema.prisma`. Resolves Prisma 500 error during `seedMpesa` execution in staging E2E tests where Prisma expected the column to exist in the database.
 

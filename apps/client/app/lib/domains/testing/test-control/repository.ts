@@ -96,7 +96,24 @@ export class TestControlRepository {
       }),
     ]);
 
-    if (!client || !professional?.professionalProfile) {
+    let proProfile = professional?.professionalProfile;
+    if (professional && !proProfile) {
+      proProfile = await prisma.professionalProfile.upsert({
+        where: { userId: professional.id },
+        create: {
+          userId: professional.id,
+          companyName: "E2E Pro One Construction",
+          profession: "GENERAL_CONTRACTOR",
+          verificationStatus: "PENDING",
+          trustTier: "UNVERIFIED",
+          county: "NAIROBI",
+        },
+        update: {},
+        select: { userId: true },
+      });
+    }
+
+    if (!client || !professional || !proProfile) {
       throw new Error(
         "STAGING_TEST_IDENTITY_MISSING: provision e2e_client_1 and e2e_pro_1 before running staging E2E",
       );
@@ -128,7 +145,7 @@ export class TestControlRepository {
             },
             routingEvents: {
               create: {
-                professionalId: professional.professionalProfile.userId,
+                professionalId: proProfile.userId,
                 matchScore: 0.95,
                 confidenceLabel: "high",
               },
@@ -177,7 +194,7 @@ export class TestControlRepository {
         const project = await prisma.project.create({
           data: {
             clientId: client.id,
-            professionalId: professional.professionalProfile.userId,
+            professionalId: proProfile.userId,
             stagingTestRunId: params.runId,
             title: `E2E completed project ${params.runId}`,
             description: "Run-owned review eligibility fixture",

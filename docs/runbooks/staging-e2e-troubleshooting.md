@@ -15,7 +15,7 @@ Test run fails during setup with:
 `resetIdentityBaseline failed with status 409: All staging identity slots for role "PROFESSIONAL" are currently leased`
 
 **Root Cause:**
-All 3 pool slots (`pro-1`, `pro-2`, `pro-3`) are actively held in `LEASED`, `RESETTING`, or `READY` states, likely due to an unhandled exception or CI job cancellation before `cleanupStagingRun()` executed.
+All 3 pool slots (`e2e_pro_1`, `e2e_pro_2`, `e2e_pro_3`) are actively held in `LEASED`, `RESETTING`, or `READY` states, likely due to an unhandled exception or CI job cancellation before `cleanupStagingRun()` executed.
 
 **Remediation:**
 
