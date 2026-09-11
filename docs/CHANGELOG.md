@@ -10,6 +10,9 @@
   - Catches both structured `STAGING_DATABASE_MISCONFIGURED` responses and legacy Prisma `127.0.0.1:5432` connection timeouts, terminating CI in ~1s with actionable Vercel redeployment guidance instead of waiting for 8 Cypress specs to fail.
   - Added runner-side database host logging (redacted) and local `.env.local` support to `scripts/emergency-staging-cleanup.mjs`.
 - **`apps/client`**:
+  - Reconciled environment variable contract by registering `ALLOW_LOCALHOST_DB` in `apps/client/app/lib/infrastructure/env.ts` and documenting it in `apps/client/.env.example`.
+  - Added platform-injected `VERCEL` variable to `ALLOWED_UNDECLARED` in `apps/client/scripts/check-env-contract.mjs`, unblocking the automated CI environment contract gate.
+  - Hardened loopback check in `env.ts` to strictly verify `process.env.ALLOW_LOCALHOST_DB !== "true"`, preventing string truthiness ambiguity.
   - Hardened `database` group validation in `apps/client/app/lib/infrastructure/env.ts` to reject loopback hosts (`localhost`, `127.0.0.1`, `::1`) in hosted or production environments (`VERCEL=1` or `NODE_ENV=production`) unless `ALLOW_LOCALHOST_DB=true`.
   - Mapped database connectivity and loopback configuration failures in `testControlService.createRun` to a typed domain error `{ error: "STAGING_DATABASE_MISCONFIGURED", status: 503 }`.
   - Preserved thin HTTP adapter and canonical env access boundaries (ADR-002, ADR-004) in `/api/internal/test-control/route.ts` by delegating error handling to domain service results without ad-hoc `process.env` inspection.

@@ -188,7 +188,7 @@ const envGroups: EnvGroup[] = [
           }
           const isHosted =
             process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-          if (isHosted && !process.env.ALLOW_LOCALHOST_DB) {
+          if (isHosted && process.env.ALLOW_LOCALHOST_DB !== "true") {
             try {
               const parseable = v.replace(
                 /^(postgres|postgresql):\/\//i,
@@ -228,6 +228,7 @@ const envGroups: EnvGroup[] = [
       },
       // POSTGRES_URL is an optional alias (e.g., Vercel Postgres injects this automatically).
       { name: "POSTGRES_URL", required: false },
+      { name: "ALLOW_LOCALHOST_DB", required: false },
     ],
   },
   {

@@ -18,6 +18,7 @@ const FILE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs"]);
 const ALLOWED_UNDECLARED = new Set([
   "NODE_ENV",
   "CI",
+  "VERCEL",
   "NEXT_PHASE",
   "NEXT_RUNTIME",
   // Temporary compatibility read: DD_SITE is canonical and is the only

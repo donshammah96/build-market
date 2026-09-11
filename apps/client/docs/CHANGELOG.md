@@ -16,6 +16,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Client Environment Contract Enforcement & Loopback Override Alignment
+
+- **Environment Contract & Canonical Registry Alignment (`apps/client/scripts/check-env-contract.mjs`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/.env.example`)**:
+  - Added `VERCEL` to `ALLOWED_UNDECLARED` in `apps/client/scripts/check-env-contract.mjs`, aligning platform-injected runtime variables with `CI`, `NODE_ENV`, `NEXT_PHASE`, and `NEXT_RUNTIME`.
+  - Formally declared `ALLOW_LOCALHOST_DB` under the `database` group variables in `apps/client/app/lib/infrastructure/env.ts` (`required: false`) and documented `ALLOW_LOCALHOST_DB="false"` with operator safety guidance in `apps/client/.env.example`, restoring ADR-004 inventory completeness.
+  - Hardened loopback safety check in `env.ts` to strictly evaluate `process.env.ALLOW_LOCALHOST_DB !== "true"`, preventing string-truthiness ambiguity and enforcing fail-closed loopback rejection in hosted/production environments.
+  - Restored passing status to automated CI gate `pnpm run client:check-env-contract` (`.github/workflows/ci.yml`).
+
 ### Added — Staging Database Loopback Guard & Preflight Verification
 
 - **Client Environment & Runtime Hardening (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/api/internal/test-control/route.ts`)**:
