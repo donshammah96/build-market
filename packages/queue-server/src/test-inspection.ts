@@ -84,16 +84,13 @@ export class QueueTestInspector {
         data?.stagingTestRunId || data?.testControl?.stagingTestRunId;
 
       if (runId === stagingTestRunId) {
-        let state: QueueJobInspectionRecord["state"] = "unknown";
-        if (row.failedreason) {
-          state = "failed";
-        } else if (row.finishedon) {
-          state = "completed";
-        } else if (row.processedon) {
-          state = "active";
-        } else {
-          state = "waiting";
-        }
+        const state: QueueJobInspectionRecord["state"] = row.failedreason
+          ? "failed"
+          : row.finishedon
+            ? "completed"
+            : row.processedon
+              ? "active"
+              : "waiting";
 
         records.push({
           id: String(row.id),

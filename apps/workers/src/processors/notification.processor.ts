@@ -61,7 +61,7 @@ export async function processNotificationRetryJob(
 
   const workerEnv = validateWorkerEnv();
   const testRunId =
-    user.stagingTestRunId || (job.data as any).testControl?.stagingTestRunId;
+    user.stagingTestRunId || job.data.testControl?.stagingTestRunId;
   if (testRunId) {
     const run = await prisma.stagingTestRun.findUnique({
       where: { id: testRunId },
@@ -69,18 +69,14 @@ export async function processNotificationRetryJob(
     });
     const activeTestRun = run?.state === "ACTIVE" && run.expiresAt > new Date();
     if (activeTestRun) {
-      checkSimulatedFailure(
-        (job.data as any).testControl,
-        workerEnv,
-        job.attemptsMade,
-      );
+      checkSimulatedFailure(job.data.testControl, workerEnv, job.attemptsMade);
     }
     await interceptOutboundDelivery(
       {
         stagingTestRunId: testRunId,
         channel: "EMAIL",
         recipient: user.email,
-        subject: `Verification Update: ${result.decision || "Decision Recorded"}`,
+        subject: `Verification Update: ${result?.decision || "Decision Recorded"}`,
         metadata: {
           entityId: result?.entityId,
           decision: result?.decision,
@@ -91,10 +87,10 @@ export async function processNotificationRetryJob(
   }
 
   // 2. Persist in-app notification
-  const title = `Verification Update: ${result.decision || "Decision Recorded"}`;
-  const message = result.reason
-    ? `Your verification status for entity ${result.entityId} has been updated. Reason: ${result.reason}`
-    : `Your verification status for entity ${result.entityId} has been updated.`;
+  const title = `Verification Update: ${result?.decision || "Decision Recorded"}`;
+  const message = result?.reason
+    ? `Your verification status for entity ${result?.entityId || "unknown"} has been updated. Reason: ${result.reason}`
+    : `Your verification status for entity ${result?.entityId || "unknown"} has been updated.`;
 
   await prisma.notification.create({
     data: {

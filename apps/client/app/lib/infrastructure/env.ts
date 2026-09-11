@@ -404,11 +404,40 @@ const envGroups: EnvGroup[] = [
       { name: "INTERNAL_API_SECRET", required: false },
       { name: "INTERNAL_SERVICE_SECRET", required: false },
       {
+        name: "ENTERPRISE_API_KEY_HASH_SECRET",
+        required: false,
+        default: "buildmarket_enterprise_api_key_default_hash_secret",
+        validate: (v) => v.trim().length >= 16,
+        errorMessage:
+          "ENTERPRISE_API_KEY_HASH_SECRET must be at least 16 characters long",
+      },
+      {
+        name: "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET",
+        required: false,
+        validate: (v) => !v || v.trim().length >= 16,
+        errorMessage:
+          "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET must be at least 16 characters long",
+      },
+      {
         name: "SCAN_CALLBACK_HMAC_SECRET",
         required: true,
         validate: (v) => v.length >= 32,
         errorMessage:
           "Must be at least 32 characters long for secure webhook HMAC validation (generate with: openssl rand -hex 32)",
+      },
+      {
+        name: "MPESA_CALLBACK_SECRET",
+        required: false,
+        validate: (v) => !v || v.trim().length >= 16,
+        errorMessage:
+          "MPESA_CALLBACK_SECRET must be at least 16 characters long",
+      },
+      {
+        name: "MPESA_PHONE_SEARCH_HASH_SECRET",
+        required: false,
+        validate: (v) => !v || v.trim().length >= 16,
+        errorMessage:
+          "MPESA_PHONE_SEARCH_HASH_SECRET must be at least 16 characters long",
       },
     ],
   },
@@ -1458,7 +1487,18 @@ function buildEnvConfig() {
         getOptionalStringEnv("INTERNAL_API_SECRET") ||
         getOptionalStringEnv("INTERNAL_SERVICE_SECRET")
       )?.trim(),
+      enterpriseApiKeyHashSecret: getStringEnv(
+        "ENTERPRISE_API_KEY_HASH_SECRET",
+        "buildmarket_enterprise_api_key_default_hash_secret",
+      ),
+      enterpriseApiKeyPreviousHashSecret: getOptionalStringEnv(
+        "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET",
+      ),
       scanCallbackHmacSecret: getOptionalStringEnv("SCAN_CALLBACK_HMAC_SECRET"),
+      mpesaCallbackSecret: getOptionalStringEnv("MPESA_CALLBACK_SECRET"),
+      mpesaPhoneSearchHashSecret: getOptionalStringEnv(
+        "MPESA_PHONE_SEARCH_HASH_SECRET",
+      ),
     },
 
     // Feature Flags

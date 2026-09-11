@@ -1,4 +1,5 @@
 import type { AdminActor } from "@/lib/security/admin-actor";
+import type { TransactionStatus } from "@build/db";
 
 export type MpesaActor = AdminActor;
 
@@ -11,7 +12,7 @@ export interface CreateMpesaPayoutInput {
 }
 
 export interface SearchMpesaTransactionsInput {
-  status?: string | undefined;
+  status?: TransactionStatus | undefined;
   phoneSearchHash?: string | undefined;
   userId?: string | undefined;
   checkoutRequestId?: string | undefined;

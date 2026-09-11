@@ -3198,6 +3198,7 @@ model Review {
   stagingTestRunId String?
   stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
 
+  @@unique([reviewerId, projectId])
   @@index([status])
   @@index([professionalId])
   @@index([storeId])

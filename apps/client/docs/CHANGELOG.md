@@ -16,6 +16,33 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
+
+- **M-Pesa Webhook Authenticity & High-Risk Checkout Protection (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/app/api/webhooks/mpesa/stk-callback/route.ts`, `apps/client/app/lib/domains/payments/mpesa-callback.ts`, `apps/client/app/api/v1/subscriptions/checkout/route.ts`, `apps/client/app/lib/security/high-risk-registry.ts`)**:
+  - Implemented timing-safe webhook callback authenticity verification (`verifyMpesaCallbackAuthenticity`) against `MPESA_CALLBACK_SECRET`, failing closed before reading body payload or querying database state. Added unit test suite in `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`.
+  - Hardened subscription checkout route `/api/v1/subscriptions/checkout` with `withAuth(..., { recentAuth: { maxAgeSeconds: 180 } })`, strict role gating (`PROFESSIONAL`, `ADMIN`, `SUPER_ADMIN`), actor-scoped rate limiting (`getActorRateLimitIdentifier(dbUserId, "subscription-mpesa-checkout")`), per-invocation logger initialization, and mapped domain errors, eliminating unhandled 500 exceptions and satisfying SEC-LINT-004. Registered route under `HIGH_VALUE_ROUTE_GUARD_RULES`.
+  - Populated `phoneSearchHash` in `createPendingMpesaCheckout` via `@build/mpesa` helper `computePhoneSearchHash`, validated `MPESA_PHONE_SEARCH_HASH_SECRET` in `env.ts`, and updated repository test-environment salt resolution to typed `env.isTest`.
+
+- **Quote Materials Checkout Authorization (`apps/client/app/lib/domains/quotes/boq-store-bridge.ts`, `apps/client/app/api/quotes/[id]/checkout-materials/route.ts`, `apps/client/__tests__/domains/quotes/boq-store-bridge.test.ts`)**:
+  - Bound `buildDraftOrderFromQuote` to authenticated caller identity, enforcing client quote ownership (`quote.clientId === actor.userId` or admin role), accepted status (`quote.status === "ACCEPTED"`), and latest version (`quote.isLatest === true`).
+
+- **Review Atomic Deduplication (`apps/client/app/lib/domains/reviews/repository.ts`, `packages/db/prisma/schema.prisma`)**:
+  - Added unique constraint `@@unique([reviewerId, projectId])` on `Review` model and migration `20260911130000_add_review_reviewer_project_uniqueness`. Handled Prisma unique constraint violation code `P2002` in review repository to return `null` atomically on concurrent duplicate reviews.
+
+- **UI Hydration & Queue Server Backend Validation (`packages/ui/src/trust-seal-badge.tsx`, `packages/queue-server/src/backend.ts`)**:
+  - Replaced render-time `Math.random()` with React 19's `useId()` in `TrustSealBadge`, eliminating SVG path hydration mismatches.
+  - Added fail-closed check in `getQueueConnectionOptions` to explicitly reject unsupported `postgres` BullMQ backend configurations instead of silently defaulting to Redis.
+
+### Added — Zero-Downtime Enterprise API Key Secret Rotation & Migration Strategy
+
+- **Enterprise Authentication & Environment Contract (`apps/client/app/api/v1/shared/enterprise-auth.ts`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/.env.example`, `turbo.json`, `apps/client/__tests__/api/v1/enterprise-auth.test.ts`)**:
+  - Implemented dual-secret fallback verification and in-flight lazy migration in `authenticateEnterpriseClient` to enable rotating `ENTERPRISE_API_KEY_HASH_SECRET` without invalidating active enterprise integrations.
+  - Added optional `ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET` (minimum 16 characters) to `envGroups.services` and `buildEnvConfig` in `apps/client/app/lib/infrastructure/env.ts`, declaring it in `apps/client/.env.example` and `turbo.json` `globalEnv`.
+  - Refactored `hashApiKey(apiKey, explicitSecret?)` in `enterprise-auth.ts` to allow computing hashes against specified salts/secrets while preserving default values.
+  - When an incoming API request misses under the primary secret hash and a previous secret is configured, `authenticateEnterpriseClient` falls back to verify against the previous hash; if valid and active, it executes a non-blocking in-flight update (`prisma.enterpriseApiClient.update`) to re-hash the stored key to the current secret.
+  - Added unit test suite in `apps/client/__tests__/api/v1/enterprise-auth.test.ts` verifying fallback authentication, lazy database re-hashing, and rejection of revoked/inactive keys.
+  - Verified `pnpm --filter client test`, `pnpm run client:check-env-contract` (0 missing keys), `pnpm run client:check-security-drift`, and `pnpm --filter client check-types`.
+
 ### Fixed — Turbopack Route Adapter Enum Decoupling & Boundary Alignment
 
 - **Route Adapters & Schema Validation (`apps/client/app/api/onboarding/professional/complete/route.ts`, `apps/client/app/api/leads/qualification/routing/...`)**:

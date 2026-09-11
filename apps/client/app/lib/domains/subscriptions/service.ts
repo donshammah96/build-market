@@ -88,6 +88,18 @@ export class ClientSubscriptionsService {
     actor: ClientActor,
     input: InitiateSubscriptionCheckoutInput,
   ): Promise<Result<SubscriptionCheckoutResult, SubscriptionsDomainError>> {
+    if (
+      actor.role !== "PROFESSIONAL" &&
+      actor.role !== "ADMIN" &&
+      actor.role !== "SUPER_ADMIN"
+    ) {
+      return err({
+        code: "FORBIDDEN",
+        message:
+          "Only professional accounts can initiate subscription checkout flows",
+      });
+    }
+
     const formattedPhone = normalizeKenyanPhoneNumber(input.phoneNumber);
     if (!formattedPhone) {
       return err({

@@ -46,12 +46,14 @@ const baseUrl = (
   ""
 ).trim();
 const internalSecret = (
-  process.env.INTERNAL_SERVICE_SECRET ||
   process.env.INTERNAL_API_SECRET ||
+  process.env.INTERNAL_SERVICE_SECRET ||
   ""
 ).trim();
 const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
 const stagingAuthSecret = (process.env.STAGING_AUTH_SECRET || "").trim();
+const stagingAuthUser = (process.env.STAGING_AUTH_USER || "").trim();
+const stagingAuthPassword = (process.env.STAGING_AUTH_PASSWORD || "").trim();
 
 function fail(message) {
   console.error(`[preflight] FAIL: ${message}`);
@@ -59,13 +61,22 @@ function fail(message) {
 }
 
 function headers(extra = {}) {
-  return {
+  const result = {
     "Content-Type": "application/json",
     "x-internal-secret": internalSecret,
     ...(testSecret ? { "x-test-control-secret": testSecret } : {}),
     ...(stagingAuthSecret ? { "x-staging-secret": stagingAuthSecret } : {}),
     ...extra,
   };
+
+  if (!stagingAuthSecret && stagingAuthUser && stagingAuthPassword) {
+    const basic = Buffer.from(
+      `${stagingAuthUser}:${stagingAuthPassword}`,
+    ).toString("base64");
+    result["Authorization"] = `Basic ${basic}`;
+  }
+
+  return result;
 }
 
 async function main() {
@@ -128,7 +139,8 @@ async function main() {
 
   if (isLoopbackError) {
     fail(
-      (body?.message || "Deployment resolved database host to localhost/127.0.0.1.") +
+      (body?.message ||
+        "Deployment resolved database host to localhost/127.0.0.1.") +
         "\n  -> This is a Vercel deployment/environment-variable problem: the running deployment is either " +
         "missing DATABASE_URL or was deployed before the variable was added to Vercel." +
         "\n  -> ACTION REQUIRED: Trigger a fresh deployment of the 'staging' branch on Vercel so the newly added DATABASE_URL is active." +

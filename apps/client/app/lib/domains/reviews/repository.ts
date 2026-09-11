@@ -34,26 +34,38 @@ export const reviewsRepository = {
       if (!project?.professionalId) return null;
 
       const duplicate = await tx.review.findFirst({
-        where: { reviewerId, projectId: project.id, deletedAt: null },
+        where: { reviewerId, projectId: project.id },
         select: { id: true },
       });
       if (duplicate) return null;
 
-      return tx.review.create({
-        data: {
-          reviewerId,
-          professionalId: project.professionalId,
-          projectId: project.id,
-          type: "PROFESSIONAL",
-          rating: input.rating,
-          comment: input.comment,
-          title: input.title,
-          status: "PENDING",
-          isVerified: true,
-          stagingTestRunId: project.stagingTestRunId,
-        },
-        select: { id: true },
-      });
+      try {
+        return await tx.review.create({
+          data: {
+            reviewerId,
+            professionalId: project.professionalId,
+            projectId: project.id,
+            type: "PROFESSIONAL",
+            rating: input.rating,
+            comment: input.comment,
+            title: input.title,
+            status: "PENDING",
+            isVerified: true,
+            stagingTestRunId: project.stagingTestRunId,
+          },
+          select: { id: true },
+        });
+      } catch (err: unknown) {
+        if (
+          err &&
+          typeof err === "object" &&
+          "code" in err &&
+          (err as { code: string }).code === "P2002"
+        ) {
+          return null;
+        }
+        throw err;
+      }
     });
   },
 

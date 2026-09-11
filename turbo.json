@@ -1,6 +1,8 @@
 {
   "ui": "tui",
-  "globalDependencies": [".env*"],
+  "globalDependencies": [
+    ".env*"
+  ],
   "globalEnv": [
     "NODE_ENV",
     "NEXT_PUBLIC_APP_URL",
@@ -223,14 +225,27 @@
     "FEATURE_MVP_WALLETS_ESCROW",
     "TEST_CONTROL_SECRET",
     "TEST_CONTROL_GRANT_PUBLIC_KEY",
-    "INTERNAL_SERVICE_SECRET"
+    "INTERNAL_SERVICE_SECRET",
+    "ENTERPRISE_API_KEY_HASH_SECRET",
+    "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET",
+    "MPESA_PHONE_SEARCH_HASH_SECRET"
   ],
   "tasks": {
     "build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**",
+        "build/**"
+      ],
       "env": [
         "NODE_ENV",
         "DATABASE_URL",
@@ -319,7 +334,9 @@
       ]
     },
     "lint": {
-      "dependsOn": ["^lint"],
+      "dependsOn": [
+        "^lint"
+      ],
       "cache": true,
       "env": [
         "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
@@ -341,16 +358,22 @@
       ]
     },
     "check-types": {
-      "dependsOn": ["^check-types"],
+      "dependsOn": [
+        "^check-types"
+      ],
       "cache": true
     },
     "dev": {
       "cache": false,
       "persistent": true,
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "cache": true,
       "inputs": [
         "src/**/*.ts",
@@ -372,7 +395,9 @@
       ]
     },
     "test:integration": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "cache": false,
       "env": [
         "NATS_TEST_URL",

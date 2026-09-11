@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { TransactionStatus } from "@build/db";
 import { safeAction } from "@/_core/safe-action";
 import { parseActionInput } from "@/_core/validation";
 import { AdminOperationName } from "@/lib/infrastructure/operation-names";
@@ -25,7 +26,7 @@ const CreateMpesaPayoutSchema = z.object({
 });
 
 const SearchMpesaTransactionsSchema = z.object({
-  status: z.string().optional(),
+  status: z.nativeEnum(TransactionStatus).optional(),
   phoneSearchHash: z.string().optional(),
   userId: z.string().optional(),
   checkoutRequestId: z.string().optional(),

@@ -42,19 +42,43 @@ export interface DraftMaterialsOrderResult {
 }
 
 export interface BoqStoreBridgeError {
-  code: "QUOTE_NOT_FOUND" | "NO_BOQ_ITEMS" | "STORE_SEARCH_ERROR";
+  code:
+    | "QUOTE_NOT_FOUND"
+    | "NO_BOQ_ITEMS"
+    | "STORE_SEARCH_ERROR"
+    | "FORBIDDEN"
+    | "INVALID_STATUS"
+    | "OUTDATED_VERSION";
   message: string;
   details?: Record<string, unknown>;
+}
+
+export interface QuoteActor {
+  userId: string;
+  role: string;
 }
 
 export class BoqStoreBridgeService {
   /**
    * Matches accepted quote BOQ line items against the active BuildMarket store product catalog.
+   * Enforces client ownership, accepted status, and latest-version semantics.
    * Ambiguous items (confidence < 0.70) are assigned UNMATCHED_NEEDS_MANUAL_SELECTION.
    */
   async buildDraftOrderFromQuote(
-    quoteId: string,
+    quoteIdOrActor: string | QuoteActor,
+    actorOrQuoteId?: QuoteActor | string,
   ): Promise<Result<DraftMaterialsOrderResult, BoqStoreBridgeError>> {
+    let quoteId: string;
+    let actor: QuoteActor | undefined;
+
+    if (typeof quoteIdOrActor === "string") {
+      quoteId = quoteIdOrActor;
+      actor = typeof actorOrQuoteId === "object" ? actorOrQuoteId : undefined;
+    } else {
+      actor = quoteIdOrActor;
+      quoteId = typeof actorOrQuoteId === "string" ? actorOrQuoteId : "";
+    }
+
     try {
       const quote = await prisma.quote.findUnique({
         where: { id: quoteId },
@@ -67,6 +91,35 @@ export class BoqStoreBridgeService {
         return err({
           code: "QUOTE_NOT_FOUND",
           message: `Quote with id '${quoteId}' was not found.`,
+        });
+      }
+
+      if (
+        actor &&
+        quote.clientId &&
+        quote.clientId !== actor.userId &&
+        actor.role !== "ADMIN" &&
+        actor.role !== "SUPER_ADMIN"
+      ) {
+        return err({
+          code: "FORBIDDEN",
+          message:
+            "You are not authorized to checkout materials for this quote.",
+        });
+      }
+
+      if (quote.status && quote.status !== "ACCEPTED") {
+        return err({
+          code: "INVALID_STATUS",
+          message: `Only accepted quotes can be used to checkout materials (current status: ${quote.status}).`,
+        });
+      }
+
+      if (quote.isLatest === false) {
+        return err({
+          code: "OUTDATED_VERSION",
+          message:
+            "Only the latest version of an accepted quote can be used to checkout materials.",
         });
       }
 

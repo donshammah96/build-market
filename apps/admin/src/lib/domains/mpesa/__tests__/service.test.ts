@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { AdminRole } from "@build/enums";
 import {
-  enqueueMpesaPayout,
   enqueueMpesaRequery,
   getMpesaTransactionDetailsService,
   searchMpesaTransactionsService,

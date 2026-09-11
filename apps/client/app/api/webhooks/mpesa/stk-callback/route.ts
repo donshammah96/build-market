@@ -7,7 +7,10 @@ import {
 } from "@build/mpesa";
 import { addMpesaStkCallbackJob } from "@build/queue-server";
 import { NextRequest } from "next/server";
-import { providerCallbackResponse } from "../shared";
+import {
+  providerCallbackResponse,
+  verifyMpesaCallbackAuthenticity,
+} from "../shared";
 
 const MAX_CALLBACK_BYTES = 32 * 1024;
 
@@ -16,6 +19,10 @@ function acceptedResponse(status = 202) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!verifyMpesaCallbackAuthenticity(request)) {
+    return acceptedResponse(401);
+  }
+
   const rawBody = await request.text();
   if (Buffer.byteLength(rawBody, "utf8") > MAX_CALLBACK_BYTES) {
     return acceptedResponse(413);

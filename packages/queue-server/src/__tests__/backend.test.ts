@@ -50,7 +50,7 @@ describe("Queue Backend Resolution & Isolation", () => {
   it("configures PostgreSQL connection options scoped to 'bullmq' schema with pool bounds", () => {
     process.env.DATABASE_URL =
       "postgres://user:pass@localhost:5432/buildmarket";
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
 
     const opts = getPostgresQueueConnectionOptions("maintenance-jobs");
 
@@ -81,7 +81,7 @@ describe("Queue Backend Resolution & Isolation", () => {
   it("omits ssl requirement outside production environments", () => {
     process.env.DATABASE_URL =
       "postgres://user:pass@localhost:5432/buildmarket";
-    process.env.NODE_ENV = "test";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
     const opts = getPostgresQueueConnectionOptions("maintenance-jobs");
     expect(opts.ssl).toBeUndefined();
@@ -116,6 +116,14 @@ describe("Queue Backend Resolution & Isolation", () => {
     expect(conn.port).toBe(6380);
     expect(conn.password).toBe("secret");
     expect(conn.db).toBe(2);
+  });
+
+  it("fails closed when queue connection options are requested for postgres backend", () => {
+    process.env.QUEUE_BACKEND_MAINTENANCE_JOBS = "postgres";
+
+    expect(() => getQueueConnectionOptions("maintenance-jobs")).toThrowError(
+      /PostgreSQL queue backend is not supported for queue "maintenance-jobs"/,
+    );
   });
 
   it("enforces immutable retention policies for audit safety and bloat control", () => {

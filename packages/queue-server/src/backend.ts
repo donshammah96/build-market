@@ -113,10 +113,23 @@ export function getPostgresQueueConnectionOptions(
 /**
  * Returns the appropriate connection options for BullMQ Queue and Worker instances.
  * BullMQ v5 is an ioredis-driven queue runner; connection options must provide
- * valid Redis TCP options (from REDIS_URL).
+ * valid Redis TCP options (from REDIS_URL). Fails closed if PostgreSQL is configured.
  */
 export function getQueueConnectionOptions(
-  _queueName?: string,
+  queueName?: string,
 ): ConnectionOptions {
+  const backend = queueName
+    ? getQueueBackendType(queueName)
+    : process.env.QUEUE_BACKEND?.trim()?.toLowerCase() === "postgres"
+      ? "postgres"
+      : "redis";
+
+  if (backend === "postgres") {
+    throw new Error(
+      `[BullMQ] PostgreSQL queue backend is not supported${queueName ? ` for queue "${queueName}"` : ""}. ` +
+        `BullMQ requires Redis connection options. Please configure QUEUE_BACKEND=redis.`,
+    );
+  }
+
   return createRedisConnection() as unknown as ConnectionOptions;
 }

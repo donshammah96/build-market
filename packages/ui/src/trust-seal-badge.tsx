@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useId } from "react";
 
 export type TrustTierType =
   | "UNVERIFIED"
@@ -32,6 +32,7 @@ export const TrustSealBadge: React.FC<TrustSealBadgeProps> = ({
   size = "md",
   className = "",
 }) => {
+  const reactId = useId().replace(/:/g, "");
   const formattedDate = verifiedAt
     ? new Date(verifiedAt).toLocaleDateString("en-KE", {
         month: "short",
@@ -138,7 +139,7 @@ export const TrustSealBadge: React.FC<TrustSealBadgeProps> = ({
 
   const primaryColor = isElite ? "#A8452B" : "#3F6B4E"; // Brick accent for Elite, Survey Green for License
   const secondaryColor = "#16233B"; // Blueprint navy
-  const pathId = `seal-arc-${tier}-${Math.random().toString(36).substring(2, 7)}`;
+  const pathId = `seal-arc-${tier}-${reactId}`;
 
   return (
     <div
@@ -171,7 +172,6 @@ export const TrustSealBadge: React.FC<TrustSealBadgeProps> = ({
           fill="#FAF9F5"
           stroke={primaryColor}
           strokeWidth={isElite ? "2" : "1.5"}
-          strokeDasharray={isElite ? "none" : "none"}
         />
 
         {/* Inner Decorative Hairline */}

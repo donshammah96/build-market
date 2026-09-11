@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Security & Fixed — M-Pesa Admin Action Schema Validation & Secret Boundary Alignment
+
+- **M-Pesa Action & Policy Governance (`src/actions/admin/mpesa.ts`, `src/lib/domains/mpesa/contracts.ts`, `src/lib/domains/mpesa/policy.ts`, `src/lib/infrastructure/env-schema.ts`)**:
+  - Tightened `SearchMpesaTransactionsSchema` in `src/actions/admin/mpesa.ts` from loose `z.string().optional()` to `z.nativeEnum(TransactionStatus).optional()`, enforcing typed enum validation before domain dispatch.
+  - Eliminated hardcoded HMAC salt fallback in `src/lib/domains/mpesa/policy.ts`, enforcing strict reads from `adminEnvConfig.MPESA_PHONE_SEARCH_HASH_SECRET` with fail-closed behavior in production and staging environments.
+  - Added `MPESA_PHONE_SEARCH_HASH_SECRET` to `adminBaseEnvSchema` in `src/lib/infrastructure/env-schema.ts` and template `.env.*` files.
+
 ### Fixed — Verification Notification Test Isolation Under Dormant MVP Capabilities
 
 - **Verification Notification Tests (`src/lib/domains/verification/__tests__/notification-service.test.ts`)**:

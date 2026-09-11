@@ -63,4 +63,49 @@ describe("ResilientExecutor cache and outcome contract", () => {
     expect(second.data).toBe("second");
     expect(operation).toHaveBeenCalledTimes(2);
   });
+
+  it("executeWithCriticality succeeds for normal and background without cacheKey", async () => {
+    const executor = new ResilientExecutor("test-executor");
+    const opNormal = vi.fn(async () => "normal-val");
+    const opBg = vi.fn(async () => "bg-val");
+
+    const resNormal = await executor.executeWithCriticality(
+      opNormal,
+      "normal",
+      "normal_op",
+    );
+    const resBg = await executor.executeWithCriticality(
+      opBg,
+      "background",
+      "bg_op",
+    );
+
+    expect(resNormal.success).toBe(true);
+    expect(resNormal.data).toBe("normal-val");
+    expect(resBg.success).toBe(true);
+    expect(resBg.data).toBe("bg-val");
+  });
+
+  it("executeWithCriticality enables caching when cacheKey is provided", async () => {
+    const executor = new ResilientExecutor("test-executor");
+    const op = vi.fn(async () => "cached-val");
+
+    const first = await executor.executeWithCriticality(
+      op,
+      "normal",
+      "normal_op",
+      "cached-key",
+    );
+    const second = await executor.executeWithCriticality(
+      op,
+      "normal",
+      "normal_op",
+      "cached-key",
+    );
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(second.fromCache).toBe(true);
+    expect(op).toHaveBeenCalledTimes(1);
+  });
 });

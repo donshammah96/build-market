@@ -71,4 +71,90 @@ describe("BOQ to Store Material Matching Bridge", () => {
       expect(unmatched?.notes).toContain("Manual product selection required");
     }
   });
+
+  it("rejects unauthorized client actor with FORBIDDEN", async () => {
+    (prisma.quote.findUnique as any).mockResolvedValue({
+      id: "quote-1",
+      clientId: "owner-client-id",
+      status: "ACCEPTED",
+      isLatest: true,
+      items: [
+        { id: "item-1", description: "Cement", quantity: 1, unit: "bag" },
+      ],
+    });
+
+    const result = await boqStoreBridgeService.buildDraftOrderFromQuote(
+      { userId: "different-user-id", role: "CLIENT" },
+      "quote-1",
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("FORBIDDEN");
+    }
+  });
+
+  it("allows admin actor even if not the client owner", async () => {
+    (prisma.quote.findUnique as any).mockResolvedValue({
+      id: "quote-1",
+      clientId: "owner-client-id",
+      status: "ACCEPTED",
+      isLatest: true,
+      items: [
+        { id: "item-1", description: "Cement", quantity: 1, unit: "bag" },
+      ],
+    });
+    (prisma.product.findMany as any).mockResolvedValue([]);
+
+    const result = await boqStoreBridgeService.buildDraftOrderFromQuote(
+      { userId: "admin-user-id", role: "ADMIN" },
+      "quote-1",
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects non-accepted quote status", async () => {
+    (prisma.quote.findUnique as any).mockResolvedValue({
+      id: "quote-1",
+      clientId: "owner-client-id",
+      status: "PENDING",
+      isLatest: true,
+      items: [
+        { id: "item-1", description: "Cement", quantity: 1, unit: "bag" },
+      ],
+    });
+
+    const result = await boqStoreBridgeService.buildDraftOrderFromQuote(
+      { userId: "owner-client-id", role: "CLIENT" },
+      "quote-1",
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("INVALID_STATUS");
+    }
+  });
+
+  it("rejects superseded quote version", async () => {
+    (prisma.quote.findUnique as any).mockResolvedValue({
+      id: "quote-1",
+      clientId: "owner-client-id",
+      status: "ACCEPTED",
+      isLatest: false,
+      items: [
+        { id: "item-1", description: "Cement", quantity: 1, unit: "bag" },
+      ],
+    });
+
+    const result = await boqStoreBridgeService.buildDraftOrderFromQuote(
+      { userId: "owner-client-id", role: "CLIENT" },
+      "quote-1",
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("OUTDATED_VERSION");
+    }
+  });
 });

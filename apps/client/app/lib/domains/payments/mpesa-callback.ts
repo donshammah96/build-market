@@ -7,7 +7,10 @@ import {
 } from "@build/mpesa";
 import { addMpesaB2cResultJob } from "@build/queue-server";
 import { NextRequest } from "next/server";
-import { providerCallbackResponse } from "@/app/api/webhooks/mpesa/shared";
+import {
+  providerCallbackResponse,
+  verifyMpesaCallbackAuthenticity,
+} from "@/app/api/webhooks/mpesa/shared";
 
 function accepted(status = 202) {
   return providerCallbackResponse(status);
@@ -17,6 +20,10 @@ export async function receiveB2cCallback(
   request: NextRequest,
   callbackType: "B2C_RESULT" | "B2C_TIMEOUT",
 ) {
+  if (!verifyMpesaCallbackAuthenticity(request)) {
+    return accepted(401);
+  }
+
   const rawBody = await request.text();
   if (Buffer.byteLength(rawBody, "utf8") > 32 * 1024) return accepted(413);
   let body: unknown;

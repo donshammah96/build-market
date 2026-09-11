@@ -28,7 +28,7 @@ export async function searchTransactions(input: SearchMpesaTransactionsInput) {
   const where: Prisma.MpesaTransactionWhereInput = {};
 
   if (input.status) {
-    where.status = input.status as TransactionStatus;
+    where.status = input.status;
   }
   if (input.userId) {
     where.userId = input.userId;

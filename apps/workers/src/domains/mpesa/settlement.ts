@@ -28,6 +28,7 @@ export interface SettlementResult {
 
 const TERMINAL_STATUSES: readonly TransactionStatus[] = [
   TransactionStatus.SUCCESS,
+  TransactionStatus.FAILED,
   TransactionStatus.REVERSED,
   TransactionStatus.REFUNDED,
   TransactionStatus.CANCELLED,
@@ -66,19 +67,60 @@ export async function executeMpesaStkSettlement(
     ? TransactionStatus.SUCCESS
     : TransactionStatus.FAILED;
 
-  await tx.mpesaTransaction.update({
-    where: { id: transaction.id },
-    data: {
-      status: nextStatus,
-      resultCode: String(input.resultCode),
-      resultDesc: input.resultDesc,
-      mpesaReceiptNumber: input.receiptNumber ?? transaction.mpesaReceiptNumber,
-      callbackReceivedAt: new Date(),
-      callbackPayload:
-        (input.providerPayload as Prisma.InputJsonValue) ?? undefined,
-      callbackEventCount: { increment: 1 },
-    },
-  });
+  // Conditional state transition: atomic update if and only if not already terminal
+  if (typeof tx.mpesaTransaction.updateMany === "function") {
+    const updateResult = await tx.mpesaTransaction.updateMany({
+      where: {
+        id: transaction.id,
+        status: { notIn: Array.from(TERMINAL_STATUSES) },
+      },
+      data: {
+        status: nextStatus,
+        resultCode: String(input.resultCode),
+        resultDesc: input.resultDesc,
+        mpesaReceiptNumber:
+          input.receiptNumber ?? transaction.mpesaReceiptNumber,
+        callbackReceivedAt: new Date(),
+        callbackPayload:
+          (input.providerPayload as Prisma.InputJsonValue) ?? undefined,
+        callbackEventCount: { increment: 1 },
+      },
+    });
+
+    if (updateResult.count === 0) {
+      const current = await tx.mpesaTransaction.findUnique({
+        where: { id: transaction.id },
+        select: { status: true },
+      });
+      if (input.callbackEventId) {
+        await tx.mpesaCallbackEvent.update({
+          where: { id: input.callbackEventId },
+          data: { processingStatus: "PROCESSED", processedAt: new Date() },
+        });
+      }
+      return {
+        transactionId: transaction.id,
+        status: current?.status ?? transaction.status,
+        isTerminal: true,
+        settled: false,
+      };
+    }
+  } else {
+    await tx.mpesaTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: nextStatus,
+        resultCode: String(input.resultCode),
+        resultDesc: input.resultDesc,
+        mpesaReceiptNumber:
+          input.receiptNumber ?? transaction.mpesaReceiptNumber,
+        callbackReceivedAt: new Date(),
+        callbackPayload:
+          (input.providerPayload as Prisma.InputJsonValue) ?? undefined,
+        callbackEventCount: { increment: 1 },
+      },
+    });
+  }
 
   let settled = false;
 
@@ -131,20 +173,33 @@ export async function executeMpesaStkSettlement(
           },
         });
 
-        await tx.professionalTransaction.create({
-          data: {
-            professionalId: subscription.professionalId,
-            subscriptionId: subscription.id,
-            description: `Subscription renewal (${interval.toLowerCase()})`,
-            type: TransactionType.EXPENSE,
-            category: TransactionCategory.SUBSCRIPTION_FEE,
-            method: PaymentMethod.MPESA,
-            amount: transaction.amount,
-            referenceCode: receipt,
-            status: TransactionStatus.SUCCESS,
-            completedAt: new Date(),
-          },
-        });
+        const existingRenewalTx =
+          typeof tx.professionalTransaction?.findFirst === "function"
+            ? await tx.professionalTransaction.findFirst({
+                where: {
+                  referenceCode: receipt,
+                  type: TransactionType.EXPENSE,
+                  category: TransactionCategory.SUBSCRIPTION_FEE,
+                },
+              })
+            : null;
+
+        if (!existingRenewalTx) {
+          await tx.professionalTransaction.create({
+            data: {
+              professionalId: subscription.professionalId,
+              subscriptionId: subscription.id,
+              description: `Subscription renewal (${interval.toLowerCase()})`,
+              type: TransactionType.EXPENSE,
+              category: TransactionCategory.SUBSCRIPTION_FEE,
+              method: PaymentMethod.MPESA,
+              amount: transaction.amount,
+              referenceCode: receipt,
+              status: TransactionStatus.SUCCESS,
+              completedAt: new Date(),
+            },
+          });
+        }
         settled = true;
       }
     }
@@ -158,45 +213,67 @@ export async function executeMpesaStkSettlement(
       const professionalId = transaction.userId;
       const settlementKey = `mpesa:${transaction.id}:lead-credit`;
 
-      let wallet = await tx.leadCreditWallet.findUnique({
-        where: { professionalId },
-      });
-      if (!wallet) {
-        wallet = await tx.leadCreditWallet.create({
-          data: { professionalId, balance: 0 },
+      const existingEntry =
+        typeof tx.leadCreditLedgerEntry?.findFirst === "function"
+          ? await tx.leadCreditLedgerEntry.findFirst({
+              where: { settlementKey },
+            })
+          : null;
+
+      if (!existingEntry && credits > 0) {
+        let wallet = await tx.leadCreditWallet.findUnique({
+          where: { professionalId },
         });
+        if (!wallet) {
+          wallet = await tx.leadCreditWallet.create({
+            data: { professionalId, balance: 0 },
+          });
+        }
+
+        const balanceAfter = wallet.balance + credits;
+        await tx.leadCreditWallet.update({
+          where: { professionalId },
+          data: { balance: balanceAfter },
+        });
+
+        await tx.leadCreditLedgerEntry.create({
+          data: {
+            professionalId,
+            type: LeadCreditTxnType.PURCHASE,
+            amount: credits,
+            balanceAfter,
+            settlementKey,
+            note: `M-Pesa Lead Credits Top-up (Ref: ${receipt})`,
+          },
+        });
+
+        const existingCreditTx =
+          typeof tx.professionalTransaction?.findFirst === "function"
+            ? await tx.professionalTransaction.findFirst({
+                where: {
+                  referenceCode: receipt,
+                  type: TransactionType.EXPENSE,
+                  category: TransactionCategory.LEAD_PURCHASE,
+                },
+              })
+            : null;
+
+        if (!existingCreditTx) {
+          await tx.professionalTransaction.create({
+            data: {
+              professionalId,
+              description: `Purchased ${credits} lead credits`,
+              type: TransactionType.EXPENSE,
+              category: TransactionCategory.LEAD_PURCHASE,
+              method: PaymentMethod.MPESA,
+              amount: transaction.amount,
+              referenceCode: receipt,
+              status: TransactionStatus.SUCCESS,
+              completedAt: new Date(),
+            },
+          });
+        }
       }
-
-      const balanceAfter = wallet.balance + credits;
-      await tx.leadCreditWallet.update({
-        where: { professionalId },
-        data: { balance: balanceAfter },
-      });
-
-      await tx.leadCreditLedgerEntry.create({
-        data: {
-          professionalId,
-          type: LeadCreditTxnType.PURCHASE,
-          amount: credits,
-          balanceAfter,
-          settlementKey,
-          note: `M-Pesa Lead Credits Top-up (Ref: ${receipt})`,
-        },
-      });
-
-      await tx.professionalTransaction.create({
-        data: {
-          professionalId,
-          description: `Purchased ${credits} lead credits`,
-          type: TransactionType.EXPENSE,
-          category: TransactionCategory.LEAD_PURCHASE,
-          method: PaymentMethod.MPESA,
-          amount: transaction.amount,
-          referenceCode: receipt,
-          status: TransactionStatus.SUCCESS,
-          completedAt: new Date(),
-        },
-      });
       settled = true;
     }
 
@@ -248,7 +325,7 @@ export async function executeMpesaStkSettlement(
   return {
     transactionId: transaction.id,
     status: nextStatus,
-    isTerminal: false,
+    isTerminal: TERMINAL_STATUSES.includes(nextStatus),
     settled,
   };
 }

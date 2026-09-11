@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { StagingScenario } from "./contracts.js";
 
 export const STAGING_IDENTITY_LEASE_STATES = [
   "LEASED",

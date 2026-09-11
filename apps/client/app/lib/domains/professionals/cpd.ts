@@ -105,7 +105,7 @@ export class ClientCpdService {
       });
 
       const hasNca = licenses.some((l) => l.authority === LicenseAuthority.NCA);
-      const targetPoints = hasNca ? 10 : 10; // National standard requirement
+      const targetPoints = hasNca ? 10 : licenses.length > 0 ? 10 : 0; // Statutory requirement for licensed pros
 
       const records: ProfessionalCpdRecord[] =
         await prisma.professionalCpdRecord.findMany({

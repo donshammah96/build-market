@@ -1,9 +1,14 @@
-import { createHash } from "node:crypto";
+import { scryptSync } from "node:crypto";
 import { prisma, type EnterpriseApiClient } from "@build/db";
 import { checkSlidingWindowRateLimit } from "@build/redis";
+import { env } from "@/app/lib/infrastructure/env";
 
-export function hashApiKey(apiKey: string): string {
-  return createHash("sha256").update(apiKey.trim()).digest("hex");
+export function hashApiKey(apiKey: string, explicitSecret?: string): string {
+  const secret =
+    explicitSecret ||
+    env.services.enterpriseApiKeyHashSecret ||
+    "buildmarket_enterprise_api_key_default_hash_secret";
+  return scryptSync(apiKey.trim(), secret, 32).toString("hex");
 }
 
 export interface EnterpriseAuthResult {
@@ -15,6 +20,7 @@ export interface EnterpriseAuthResult {
 
 /**
  * Authenticates an enterprise API key and validates permissions and rate limits.
+ * Supports zero-downtime secret rotation via fallback verification and lazy re-hashing.
  */
 export async function authenticateEnterpriseClient(
   authHeader: string | null,
@@ -33,9 +39,35 @@ export async function authenticateEnterpriseClient(
   const rawKey = authHeader.substring(7).trim();
   const hashedKey = hashApiKey(rawKey);
 
-  const client = await prisma.enterpriseApiClient.findUnique({
+  let client = await prisma.enterpriseApiClient.findUnique({
     where: { hashedApiKey: hashedKey },
   });
+
+  // Fallback to previous secret during secret rotation / migration
+  if (!client && env.services.enterpriseApiKeyPreviousHashSecret) {
+    const fallbackHashedKey = hashApiKey(
+      rawKey,
+      env.services.enterpriseApiKeyPreviousHashSecret,
+    );
+    const fallbackClient = await prisma.enterpriseApiClient.findUnique({
+      where: { hashedApiKey: fallbackHashedKey },
+    });
+
+    if (fallbackClient) {
+      if (fallbackClient.isActive && fallbackClient.revokedAt === null) {
+        // Transparently migrate record to current hash
+        try {
+          await prisma.enterpriseApiClient.update({
+            where: { id: fallbackClient.id },
+            data: { hashedApiKey: hashedKey },
+          });
+        } catch {
+          // Non-blocking: if concurrent request already updated the record, proceed
+        }
+      }
+      client = fallbackClient;
+    }
+  }
 
   if (!client || !client.isActive || client.revokedAt !== null) {
     return {

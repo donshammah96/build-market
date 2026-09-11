@@ -59,26 +59,43 @@ export async function processMpesaB2cInitiateJob(
 export async function processMpesaB2cResultJob(
   job: Job<MpesaB2cResultJobData>,
 ) {
-  const event = await prisma.mpesaCallbackEvent.findUnique({
-    where: { id: job.data.callbackEventId },
-  });
-  if (!event) throw new Error("M-Pesa B2C callback event not found");
-  if (event.processedAt) return { eventId: event.id, status: "PROCESSED" };
-
-  const payload = (event.redactedPayload ?? {}) as {
-    ResultCode?: number;
-    ResultDesc?: string;
-    ConversationID?: string;
-    TransactionID?: string;
-  };
-  const status = resolveB2cResultStatus(Number(payload.ResultCode));
-
   return prisma.$transaction(async (tx) => {
+    const event = await tx.mpesaCallbackEvent.findUnique({
+      where: { id: job.data.callbackEventId },
+    });
+    if (!event) throw new Error("M-Pesa B2C callback event not found");
+    if (event.processedAt) return { eventId: event.id, status: "PROCESSED" };
+
+    const payload = (event.redactedPayload ?? {}) as {
+      ResultCode?: number;
+      ResultDesc?: string;
+      ConversationID?: string;
+      TransactionID?: string;
+    };
+    const rawStatus = resolveB2cResultStatus(Number(payload.ResultCode));
+    const transactionId = payload.TransactionID?.trim();
+
+    if (rawStatus === "SUCCESS" && !transactionId) {
+      throw new Error(
+        `[M-Pesa B2C] Callback for payout ${job.data.payoutId} reported SUCCESS but lacks provider TransactionID. Failing to allow safe retry or manual reconciliation.`,
+      );
+    }
+
+    const status = rawStatus;
+
     const payout = await tx.mpesaB2C.findUnique({
       where: { id: job.data.payoutId },
     });
     if (!payout) throw new Error("M-Pesa payout not found");
-    const transactionId = payload.TransactionID;
+
+    if (payout.status === TransactionStatus.SUCCESS) {
+      await tx.mpesaCallbackEvent.update({
+        where: { id: event.id },
+        data: { processingStatus: "PROCESSED", processedAt: new Date() },
+      });
+      return { eventId: event.id, status: "ALREADY_TERMINAL" };
+    }
+
     await tx.mpesaB2C.update({
       where: { id: payout.id },
       data: {
@@ -88,32 +105,44 @@ export async function processMpesaB2cResultJob(
             : TransactionStatus.FAILED,
         resultCode: String(payload.ResultCode),
         resultDesc: payload.ResultDesc,
-        transactionId,
+        transactionId: transactionId || undefined,
         completedAt: status === "SUCCESS" ? new Date() : undefined,
         callbackReceivedAt: event.receivedAt,
         callbackPayload: event.redactedPayload ?? undefined,
       },
     });
+
     if (status === "SUCCESS" && transactionId) {
-      await tx.professionalTransaction.create({
-        data: {
-          professionalId: payout.professionalId,
-          description: "M-Pesa professional payout",
-          type: TransactionType.WITHDRAWAL,
-          category: TransactionCategory.WITHDRAWAL,
-          method: PaymentMethod.MPESA,
-          amount: payout.amount,
-          netAmount: payout.amount,
+      const existingTx = await tx.professionalTransaction.findFirst({
+        where: {
           referenceCode: transactionId,
-          status: TransactionStatus.SUCCESS,
-          completedAt: new Date(),
+          type: TransactionType.WITHDRAWAL,
         },
       });
+
+      if (!existingTx) {
+        await tx.professionalTransaction.create({
+          data: {
+            professionalId: payout.professionalId,
+            description: "M-Pesa professional payout",
+            type: TransactionType.WITHDRAWAL,
+            category: TransactionCategory.WITHDRAWAL,
+            method: PaymentMethod.MPESA,
+            amount: payout.amount,
+            netAmount: payout.amount,
+            referenceCode: transactionId,
+            status: TransactionStatus.SUCCESS,
+            completedAt: new Date(),
+          },
+        });
+      }
     }
+
     await tx.mpesaCallbackEvent.update({
       where: { id: event.id },
       data: { processingStatus: "PROCESSED", processedAt: new Date() },
     });
+
     return { eventId: event.id, status };
   });
 }

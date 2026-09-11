@@ -101,6 +101,7 @@ export const adminBaseEnvSchema = z.object({
   DD_LOGS_ENABLED: booleanString,
   UPSTASH_REDIS_REST_URL: z.string().min(1).optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+  MPESA_PHONE_SEARCH_HASH_SECRET: z.string().min(1).optional(),
 });
 
 export const adminEnvSchema = adminBaseEnvSchema

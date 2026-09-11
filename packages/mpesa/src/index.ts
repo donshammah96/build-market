@@ -1,6 +1,10 @@
 export { MpesaError } from "./errors.js";
 export type { MpesaErrorCode } from "./errors.js";
-export { normalizeKenyanPhone, redactPhoneNumber } from "./phone.js";
+export {
+  normalizeKenyanPhone,
+  redactPhoneNumber,
+  computePhoneSearchHash,
+} from "./phone.js";
 export {
   b2cResultSchema,
   b2cInitiateResponseSchema,

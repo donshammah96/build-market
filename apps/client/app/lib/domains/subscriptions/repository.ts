@@ -9,6 +9,8 @@ import {
   MpesaTransactionPurpose,
   MpesaTransactionType,
 } from "@build/db";
+import { computePhoneSearchHash } from "@build/mpesa";
+import { env } from "@/app/lib/infrastructure/env";
 
 export class ClientSubscriptionsRepository {
   async listActivePlans() {
@@ -41,6 +43,13 @@ export class ClientSubscriptionsRepository {
     idempotencyKey: string;
     metadata?: Record<string, string>;
   }) {
+    const hashSecret =
+      env.services.mpesaPhoneSearchHashSecret ||
+      (env.isTest ? "test_phone_search_hash_salt_only" : "");
+    const phoneSearchHash = hashSecret
+      ? computePhoneSearchHash(params.phoneNumber, hashSecret)
+      : null;
+
     return prisma.mpesaTransaction.upsert({
       where: { idempotencyKey: params.idempotencyKey },
       create: {
@@ -50,12 +59,15 @@ export class ClientSubscriptionsRepository {
         transactionType: MpesaTransactionType.CUSTOMER_PAY_BILL_ONLINE,
         amount: params.amount,
         phoneNumber: params.phoneNumber,
+        phoneSearchHash,
         checkoutRequestId: params.checkoutRequestId,
         merchantRequestId: params.merchantRequestId,
         idempotencyKey: params.idempotencyKey,
         metadata: params.metadata,
       },
-      update: {},
+      update: {
+        phoneSearchHash: phoneSearchHash ?? undefined,
+      },
     });
   }
 

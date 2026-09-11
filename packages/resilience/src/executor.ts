@@ -218,10 +218,12 @@ export class ResilientExecutor {
     operation: () => Promise<T>,
     criticality: OperationCriticality,
     operationName?: string,
+    cacheKey?: string,
   ): Promise<OperationResult<T>> {
     const options: ResilienceOptions<T> = {
       timeout: criticality,
       operationName,
+      cacheKey,
     };
 
     // Configure based on criticality
@@ -237,16 +239,20 @@ export class ResilientExecutor {
         break;
 
       case "normal":
-        // Normal operations: retry, cache, standard circuit breaker
+        // Normal operations: retry, cache (only if cacheKey supplied), standard circuit breaker
         options.retry = { maxAttempts: 3 };
-        options.cache = { ttl: 60000, staleWhileRevalidate: 30000 };
+        options.cache = cacheKey?.trim()
+          ? { ttl: 60000, staleWhileRevalidate: 30000 }
+          : false;
         options.circuitBreaker = true;
         break;
 
       case "background":
-        // Background operations: aggressive retry, long cache, lenient circuit breaker
+        // Background operations: aggressive retry, long cache (only if cacheKey supplied), lenient circuit breaker
         options.retry = { maxAttempts: 5, maxDelayMs: 30000 };
-        options.cache = { ttl: 300000, staleWhileRevalidate: 60000 }; // 5min cache
+        options.cache = cacheKey?.trim()
+          ? { ttl: 300000, staleWhileRevalidate: 60000 }
+          : false;
         options.circuitBreaker = {
           failureThreshold: 10,
           timeout: 120000, // 2min
