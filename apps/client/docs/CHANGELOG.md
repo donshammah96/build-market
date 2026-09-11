@@ -16,6 +16,20 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Turbopack Route Adapter Enum Decoupling & Boundary Alignment
+
+- **Route Adapters & Schema Validation (`apps/client/app/api/onboarding/professional/complete/route.ts`, `apps/client/app/api/leads/qualification/routing/...`)**:
+  - Replaced direct `@prisma/client` and `@build/db` runtime enum imports with zero-dependency `@build/enums` constants (`PROFESSIONS`, `COUNTIES`, `LICENSE_AUTHORITIES`, `PROPERTY_TYPES`, `PROPERTY_CATEGORIES`, `PROPERTY_STATUSES`, `UserRole`).
+  - Switched from `z.nativeEnum(...)` to `z.enum(...)` with canonical const arrays, maintaining strict compile-time and runtime validation parity while eliminating route-level CommonJS runtime coupling.
+  - Enforced ADR-002 thin adapter invariants: route handlers remain lightweight HTTP ingress adapters without database ORM runtime dependencies.
+
+### Fixed — CI Smoke Gate Ephemeral Database Loopback Override (.github/workflows/ci.yml)
+
+- **CI Workflow & Build Infrastructure (`.github/workflows/ci.yml`)**:
+  - Restored static ephemeral CI PostgreSQL service container endpoint (`postgresql://ci:ci@127.0.0.1:5432/build_market_ci`) and added `ALLOW_LOCALHOST_DB: "true"` to `client-preview-smoke-gate`'s runner environment.
+  - Fixes build crash where `next build` sets `NODE_ENV="production"`, causing `apps/client/app/lib/infrastructure/env.ts` to reject the CI runner's loopback database URL during static page data collection for `/_not-found`.
+  - Preserves strict fail-closed loopback database rejection across cloud production and staging deployments while ensuring CI smoke tests run cleanly and deterministically against local ephemeral service containers.
+
 ### Fixed — TypeScript CLI Binary Discovery in Monorepo TS6 Bridge (Next.js 16.3.4)
 
 - **Toolchain & Build Compatibility (`scripts/patch-typescript.mjs`)**:

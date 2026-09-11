@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed — Turbopack Dynamic Filesystem Tracing & Route Adapter Boundary Decoupling
+
+- **Toolchain & Client Build (`packages/queue-server/src/migrate.ts`, `apps/client/app/api/...`)**:
+  - Added `/*turbopackIgnore: true*/` annotation to `fs.existsSync` in `@build/queue-server/src/migrate.ts` and introduced build-phase short-circuit (`process.env.NEXT_PHASE === "phase-production-build"`), eliminating Turbopack full-monorepo project tracing warning (`Warning: Dynamic files`).
+  - Replaced direct `@prisma/client` and `@build/db` runtime enum imports in route adapters (`apps/client/app/api/onboarding/professional/complete/route.ts` and `apps/client/app/api/leads/qualification/routing/...`) with canonical `@build/enums` constants and `z.enum(...)` schemas, upholding ADR-002 thin adapter boundaries and reducing Turbopack CommonJS re-export warnings.
+
+### Fixed — CI Workflow Ephemeral Database Resolution & Loopback Guard Alignment
+
+- **CI Workflow & Client Smoke Gate (`.github/workflows/ci.yml`)**:
+  - Restored static ephemeral CI PostgreSQL service container endpoint (`postgresql://ci:ci@127.0.0.1:5432/build_market_ci`) across `client-preview-smoke-gate`, `admin-preview-smoke-gate`, `verification-ops-preview-smoke-gate`, `admin-nightly-test-all`, and lint jobs, ensuring tests execute against an isolated ephemeral runner container and do not fail on PRs where secrets are withheld.
+  - Added `ALLOW_LOCALHOST_DB: "true"` to `client-preview-smoke-gate`'s runner environment, explicitly authorizing the client app's `env.ts` hosted loopback validator to accept the runner's ephemeral PostgreSQL container during `next build` (which executes under `NODE_ENV=production`), resolving the `Error: Failed to collect page data for /_not-found` build crash.
+
 ### Fixed — TypeScript CLI Binary Discovery in Monorepo TS6 Bridge (Next.js 16.3.4)
 
 - **Build & Monorepo Tooling (`scripts/patch-typescript.mjs`)**:

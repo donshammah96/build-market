@@ -376,7 +376,7 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_ci_placeholder
           CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
           NEXT_PUBLIC_APP_URL: http://localhost:3500
           NEXT_PUBLIC_API_URL: http://localhost:3500/api
           ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -390,7 +390,7 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_ci_placeholder
           CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
           NEXT_PUBLIC_APP_URL: http://localhost:3005
           CLIENT_APP_URL: http://localhost:3500
           ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -429,7 +429,7 @@ jobs:
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_ci_placeholder
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
           NEXT_PUBLIC_VERIFICATION_OPS_URL: http://localhost:3501
           ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         run: pnpm exec turbo run lint --filter=verification-ops
@@ -513,7 +513,8 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
+      ALLOW_LOCALHOST_DB: "true"
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -925,7 +926,7 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
       CLIENT_APP_URL: http://127.0.0.1:3500
       # ASSUMPTION: admin calls out to the client app's API rather than
@@ -1166,7 +1167,7 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_VERIFICATION_OPS_URL: http://127.0.0.1:3501
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
@@ -1396,7 +1397,7 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
       CLIENT_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
