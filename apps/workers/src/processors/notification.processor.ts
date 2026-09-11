@@ -25,6 +25,9 @@ export async function processNotificationRetryJob(
   job: Job<NotificationRetryJobData>,
 ): Promise<NotificationJobResult> {
   const { recipientUserId, result } = job.data;
+  const entityId = result?.entityId;
+  const decision = result?.decision || "Decision Recorded";
+  const reason = result?.reason;
   const now = new Date();
 
   logger.info(
@@ -32,7 +35,7 @@ export async function processNotificationRetryJob(
     {
       jobId: job.id,
       recipientUserId,
-      entityId: result?.entityId,
+      entityId,
       attempt: job.attemptsMade + 1,
     },
   );
@@ -53,7 +56,7 @@ export async function processNotificationRetryJob(
     return {
       delivered: false,
       recipientUserId,
-      entityId: result?.entityId,
+      entityId,
       timestamp: now.toISOString(),
       channel: "none",
     };
@@ -76,10 +79,10 @@ export async function processNotificationRetryJob(
         stagingTestRunId: testRunId,
         channel: "EMAIL",
         recipient: user.email,
-        subject: `Verification Update: ${result?.decision || "Decision Recorded"}`,
+        subject: `Verification Update: ${decision}`,
         metadata: {
-          entityId: result?.entityId,
-          decision: result?.decision,
+          entityId,
+          decision,
         },
       },
       workerEnv,
@@ -87,10 +90,10 @@ export async function processNotificationRetryJob(
   }
 
   // 2. Persist in-app notification
-  const title = `Verification Update: ${result?.decision || "Decision Recorded"}`;
-  const message = result?.reason
-    ? `Your verification status for entity ${result?.entityId || "unknown"} has been updated. Reason: ${result.reason}`
-    : `Your verification status for entity ${result?.entityId || "unknown"} has been updated.`;
+  const title = `Verification Update: ${decision}`;
+  const message = reason
+    ? `Your verification status for entity ${entityId || "unknown"} has been updated. Reason: ${reason}`
+    : `Your verification status for entity ${entityId || "unknown"} has been updated.`;
 
   await prisma.notification.create({
     data: {
@@ -104,21 +107,23 @@ export async function processNotificationRetryJob(
   });
 
   // 3. Mark failed notification records as resolved if present
-  try {
-    await prisma.failedNotification.updateMany({
-      where: {
-        recipientUserId,
-        entityId: result.entityId,
-        status: { in: ["PENDING"] },
-      },
-      data: {
-        status: "COMPLETED",
-        attemptCount: { increment: 1 },
-        createdAt: now,
-      },
-    });
-  } catch {
-    // FailedNotification is optional / non-fatal
+  if (entityId) {
+    try {
+      await prisma.failedNotification.updateMany({
+        where: {
+          recipientUserId,
+          entityId,
+          status: { in: ["PENDING"] },
+        },
+        data: {
+          status: "COMPLETED",
+          attemptCount: { increment: 1 },
+          createdAt: now,
+        },
+      });
+    } catch {
+      // FailedNotification is optional / non-fatal
+    }
   }
 
   logger.info(
@@ -126,14 +131,14 @@ export async function processNotificationRetryJob(
     {
       jobId: job.id,
       recipientUserId,
-      entityId: result.entityId,
+      entityId,
     },
   );
 
   return {
     delivered: true,
     recipientUserId,
-    entityId: result.entityId,
+    entityId,
     timestamp: now.toISOString(),
     channel: "IN_APP",
   };
