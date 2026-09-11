@@ -34,9 +34,15 @@ const DEFAULT_STAGING_SLOTS: readonly StagingSlotConfig[] = [
 
 function resolveAllowedPoolEmails(): Set<string> {
   const envSlots = env.stagingTestControl?.identitySlots;
+  const isActualProduction =
+    env.isProd &&
+    !env.isVercelPreview &&
+    env.otel.ddEnv !== "staging" &&
+    !env.stagingTestControl?.enabled;
+
   const slots = envSlots
     ? parseStagingIdentitySlots(envSlots, {
-        isProduction: env.isProd,
+        isProduction: isActualProduction,
       })
     : DEFAULT_STAGING_SLOTS;
 

@@ -4,6 +4,12 @@
 
 ### Security & Fixed — Monorepo Architectural Hardening, Concurrency & Security Alignment
 
+- **MpesaTransaction Database Schema Migration (`packages/db/prisma/migrations/20260911140000_add_mpesa_transaction_subscription_id`)**:
+  - Added missing migration for `MpesaTransaction.subscriptionId` (`TEXT`, nullable) with index `MpesaTransaction_subscriptionId_idx` matching `schema.prisma`. Resolves Prisma 500 error during `seedMpesa` execution in staging E2E tests where Prisma expected the column to exist in the database.
+
+- **Staging Identity Slot Production Guard Resolution (`apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts`)**:
+  - Refined `isProduction` flag passed to `parseStagingIdentitySlots` in `resolveConfiguredSlots` and `resolveAllowedPoolEmails`. Previously, `env.isProd` was evaluated directly; because `process.env.NODE_ENV === "production"` on Vercel preview environments, this threw `"Cannot configure or parse staging identity slots in a production environment"`. Evaluated actual production status (`env.isProd && !env.isVercelPreview && env.otel.ddEnv !== "staging" && !env.stagingTestControl?.enabled`), preserving the fail-closed protection in real production while permitting staging slot leases in Vercel preview deployments.
+
 - **Database Package PrismaPg Adapter Initialization (`packages/db/lib/prisma.ts`)**:
   - Passed `poolConfig` directly to `new PrismaPg(poolConfig)` instead of instantiating an external `new Pool(poolConfig)`. This resolves an ESM/CJS module boundary issue where `externalPool instanceof Pool` evaluated to `false` inside `@prisma/adapter-pg`, causing the adapter to misidentify the Pool instance as a config object and pass internal options down to `Connection.startup`. That triggered a fatal `TypeError` in `pg-protocol/dist/serializer.js` and caused hosted serverless functions to fall back to loopback (`127.0.0.1:5432`).
 
