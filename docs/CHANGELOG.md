@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Security — Production Dependency Vulnerability Remediation (Next.js, sharp, js-yaml)
+
+- **Root Catalog & Overrides (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**:
+  - Upgraded Next.js toolchain (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.11` to `16.3.4` in the unified workspace catalog, resolving two Critical vulnerabilities: unauthenticated Remote Code Execution on Windows-hosted servers (GHSA-2xp9-vwfh-vxw4) and AVIF image optimization buffer exposure.
+  - Bumped `sharp` catalog dependency to `^0.35.4` and tightened `overrides.sharp` from `">=0.35.0"` to `">=0.35.4"`, neutralizing High-severity libheif vulnerabilities (GHSA-rgj7-g3m4-5g8c, GHSA-g89c-p67h-r497, GHSA-2jg2-4ch7-h545).
+  - Added override `"js-yaml": ">=4.3.2"` for transitive dependency in `dd-trace > @datadog/wasm-js-rewriter`, resolving High-severity merge key CPU exhaustion DoS (GHSA-2883-xcg3-v3hh).
+  - Restored clean `pnpm audit --prod` verification (0 vulnerabilities) and confirmed clean monorepo typechecking (`pnpm run check-types`) across all 23 packages.
+
 ### Added — Staging Deployment Database Reachability Preflight & Architecture Hardening
 
 - **CI Workflow & Preflight Tooling (`.github/workflows/staging-e2e.yml`, `scripts/preflight-staging-db-check.mjs`, `scripts/emergency-staging-cleanup.mjs`)**:

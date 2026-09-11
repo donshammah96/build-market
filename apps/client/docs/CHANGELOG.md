@@ -16,6 +16,13 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Security — Production Dependency Vulnerability Remediation (Next.js & sharp)
+
+- **Framework & Media Toolchain (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**:
+  - Upgraded Next.js toolchain (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.11` to `16.3.4` via the workspace catalog, patching unauthenticated Remote Code Execution on Windows servers (GHSA-2xp9-vwfh-vxw4) and AVIF image optimization vulnerability.
+  - Bumped `sharp` to `^0.35.4` and tightened override to `">=0.35.4"`, resolving libheif vulnerabilities (GHSA-rgj7-g3m4-5g8c, GHSA-g89c-p67h-r497, GHSA-2jg2-4ch7-h545).
+  - Maintained zero production vulnerabilities in `pnpm audit --prod` while preserving OpenNext Cloudflare worker compatibility.
+
 ### Fixed — Client Environment Contract Enforcement & Loopback Override Alignment
 
 - **Environment Contract & Canonical Registry Alignment (`apps/client/scripts/check-env-contract.mjs`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/.env.example`)**:
