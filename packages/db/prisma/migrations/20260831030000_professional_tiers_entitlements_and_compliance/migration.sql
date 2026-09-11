@@ -101,7 +101,6 @@ CREATE TABLE "LeadCreditLedgerEntry" (
     "balanceAfter" INTEGER NOT NULL,
     "relatedLeadId" TEXT,
     "relatedTransactionId" TEXT,
-    "settlementKey" TEXT,
     "note" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -193,7 +192,6 @@ CREATE INDEX "ProfessionalSubscription_planId_idx" ON "ProfessionalSubscription"
 
 -- CreateIndex
 CREATE INDEX "LeadCreditLedgerEntry_professionalId_createdAt_idx" ON "LeadCreditLedgerEntry"("professionalId", "createdAt");
-CREATE UNIQUE INDEX "LeadCreditLedgerEntry_settlementKey_key" ON "LeadCreditLedgerEntry"("settlementKey");
 
 -- CreateIndex
 CREATE INDEX "ProfessionalBadge_professionalId_idx" ON "ProfessionalBadge"("professionalId");
