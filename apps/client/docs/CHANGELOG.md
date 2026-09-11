@@ -16,6 +16,12 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — TypeScript CLI Binary Discovery in Monorepo TS6 Bridge (Next.js 16.3.4)
+
+- **Toolchain & Build Compatibility (`scripts/patch-typescript.mjs`)**:
+  - Added `pkg.bin = { tsc: "./lib/tsc.js" }` to the monorepo's synthetic `typescript` package manifest.
+  - Fixes `next build` failure under Next.js 16.3.4 where `experimental.useTypeScriptCli` defaults to `true` and checks `packageJson.bin.tsc`, causing false-positive `missingDepsError` during type validation.
+
 ### Security — Production Dependency Vulnerability Remediation (Next.js & sharp)
 
 - **Framework & Media Toolchain (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**:
