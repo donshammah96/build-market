@@ -14,7 +14,7 @@ interface GlobalDatabaseContext {
 
 const globalForPrisma = globalThis as unknown as GlobalDatabaseContext;
 
-function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
+function createDatabaseClient(): { prisma: PrismaClient; pool?: Pool } {
   // Use the pooled DATABASE_URL at runtime (with resilient aliases and loopback guards).
   // DIRECT_URL is consumed only by `prisma migrate deploy` — never at runtime.
   const connectionString = resolveDatabaseUrl();
@@ -35,8 +35,12 @@ function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
     connectionTimeoutMillis: 5000,
   };
 
-  const pool = new Pool(poolConfig);
-  const adapter = new PrismaPg(pool);
+  // Pass poolConfig directly to PrismaPg. Passing an external `new Pool()` instance
+  // fails cross-module `instanceof Pool` checks between ESM and CJS bundles of `pg`,
+  // causing @prisma/adapter-pg to misidentify the Pool instance as a plain config object
+  // and pass its internal options into `Connection.startup`, triggering a fatal TypeError
+  // in `pg-protocol` serializer and causing Prisma queries to fail or fall back to loopback.
+  const adapter = new PrismaPg(poolConfig);
 
   const client = new PrismaClient({
     adapter,
@@ -46,7 +50,7 @@ function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
         : ["error"],
   });
 
-  return { prisma: client, pool };
+  return { prisma: client };
 }
 
 function getDatabaseClient(): PrismaClient {

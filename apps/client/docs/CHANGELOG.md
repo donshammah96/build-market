@@ -18,6 +18,9 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
+- **Database Package PrismaPg Adapter Initialization (`packages/db/lib/prisma.ts`)**:
+  - Configured `PrismaPg` with `poolConfig` directly instead of passing an externally instantiated `Pool`. Resolves an ESM/CJS module boundary issue where `instanceof Pool` failed in hosted environments, causing `@prisma/adapter-pg` to treat the pool instance as an options map, crash in `pg-protocol/dist/serializer.js`, and cause queries to fall back to loopback (`127.0.0.1:5432`).
+
 - **M-Pesa Webhook Authenticity & High-Risk Checkout Protection (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/app/api/webhooks/mpesa/stk-callback/route.ts`, `apps/client/app/lib/domains/payments/mpesa-callback.ts`, `apps/client/app/api/v1/subscriptions/checkout/route.ts`, `apps/client/app/lib/security/high-risk-registry.ts`)**:
   - Implemented timing-safe webhook callback authenticity verification (`verifyMpesaCallbackAuthenticity`) against `MPESA_CALLBACK_SECRET`, failing closed before reading body payload or querying database state. Added unit test suite in `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`.
   - Hardened subscription checkout route `/api/v1/subscriptions/checkout` with `withAuth(..., { recentAuth: { maxAgeSeconds: 180 } })`, strict role gating (`PROFESSIONAL`, `ADMIN`, `SUPER_ADMIN`), actor-scoped rate limiting (`getActorRateLimitIdentifier(dbUserId, "subscription-mpesa-checkout")`), per-invocation logger initialization, and mapped domain errors, eliminating unhandled 500 exceptions and satisfying SEC-LINT-004. Registered route under `HIGH_VALUE_ROUTE_GUARD_RULES`.
