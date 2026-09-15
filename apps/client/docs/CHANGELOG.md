@@ -29,8 +29,9 @@ This format is based on Keep a Changelog and uses semantic categories:
   - Replaced direct equality checks with timing-safe string comparison (`timingSafeEqualStrings`) from `@/app/lib/security/internal-secret` for `x-internal-secret` and `x-test-control-secret` header checks against `env.services.internalApiSecret` and `env.stagingTestControl.secret`.
   - Restored fail-closed behavior (`if (!candidate) return false;`) when a callback secret is configured. Added regression tests covering internal and test-control header authentication in `__tests__/api/webhooks/mpesa-callback.test.ts`.
 
-- **Cypress Toolchain Deprecation Compatibility (`apps/client/cypress/tsconfig.json`)**:
-  - Updated compiler option `"ignoreDeprecations": "5.0"` in `apps/client/cypress/tsconfig.json` (from `"6.0"`), resolving IDE language service diagnostic error `TS5103` while maintaining full compatibility with the workspace TypeScript 6 compiler.
+- **Cypress Webpack Toolchain TypeScript 6 Deprecation Alignment (`apps/client/cypress/tsconfig.json`)**:
+  - Restored compiler option `"ignoreDeprecations": "6.0"` in `apps/client/cypress/tsconfig.json` (reverting `"5.0"`), resolving Webpack Compilation Error `TS5101: Option 'downlevelIteration' is deprecated and will stop functioning in TypeScript 7.0` encountered during Cypress spec bundling in CI.
+  - Mitigated internal configuration injection by Cypress 14's bundled `@cypress/webpack-preprocessor`, which passes `downlevelIteration: true` to `ts-loader` by default for ES5 legacy compatibility. Setting `"ignoreDeprecations": "6.0"` enables standard forward-compatibility under the workspace TypeScript 6.0 compiler without introducing unneeded custom preprocessor dependencies.
 
 - **Staging Test Identity Professional Profile Resolution (`apps/client/app/lib/domains/testing/test-control/repository.ts`)**:
   - Implemented self-healing upsert for `ProfessionalProfile` during `seedScenario` execution in `TestControlRepository`. Base staging professional identities (`e2e_pro_1`) require a `ProfessionalProfile` relation for lead routing and project associations; when missing, test-control automatically provisions the profile row with `PENDING` verification and `UNVERIFIED` trust tier, eliminating the `STAGING_TEST_IDENTITY_MISSING` 500 error in E2E scenario seeding.
