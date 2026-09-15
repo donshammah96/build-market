@@ -42,12 +42,21 @@ export const isSignUpRoute = createRouteMatcher([
   "/professional/sign-up(.*)",
 ]);
 
+export const isAuthRoute = createRouteMatcher([
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/verify(.*)",
+  "/sso-callback(.*)",
+  "/auth-callback",
+  "/unauthorized-sign-in(.*)",
+  "/professional/sign-up(.*)",
+]);
+
 export const isSettingsExemptRoute = createRouteMatcher([
   "/api/health(.*)",
   "/api/internal(.*)",
   "/api/metrics(.*)",
-  "/api/webhooks/clerk",
-  "/api/webhooks/resend",
+  "/api/webhooks/(.*)",
   "/api/clerk-webhook",
   "/api/csp-reports(.*)",
   "/maintenance",
@@ -57,8 +66,7 @@ const PUBLIC_API_ROUTES = [
   "/api/health(.*)",
   "/api/settings/public(.*)",
   "/api/newsletter/confirm(.*)",
-  "/api/webhooks/clerk",
-  "/api/webhooks/resend",
+  "/api/webhooks/(.*)",
   "/api/clerk-webhook",
   "/api/csp-reports(.*)",
 ] as const;

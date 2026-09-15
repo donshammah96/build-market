@@ -212,6 +212,14 @@ describe("middleware — API route classification order", () => {
     expect(eventsLogged()).toContain("mw_allow_public_api");
   });
 
+  it("REPRODUCTION: allows inbound mpesa webhook callbacks to proceed to route-level verification", async () => {
+    const res = await middleware(
+      createMockRequest("/api/webhooks/mpesa/stk-callback"),
+    );
+    expect(res.status).toBe(200);
+    expect(eventsLogged()).toContain("mw_allow_public_api");
+  });
+
   it("denies unauthenticated requests to protected API routes with a JSON 401, not a redirect", async () => {
     mockAuth.mockResolvedValue({ userId: null, sessionClaims: null });
 

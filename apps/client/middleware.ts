@@ -13,6 +13,7 @@ import {
   isApiRoute,
   isSettingsExemptRoute,
   isSignUpRoute,
+  isAuthRoute,
 } from "@/app/lib/security/middleware/route-matcher";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
 import {
@@ -533,9 +534,9 @@ const middleware = async (
   // --- FAST PATH FOR PUBLIC INFORMATIONAL ROUTES & PUBLIC APIS ---
   // Pure public informational pages (home, properties, idea-books) and public health/metric APIs
   // do not require Clerk authentication or signup guards. Serving them directly avoids blocking
-  // on remote Clerk API roundtrips during boot or offline CI. Sign-up routes delegate to clerkHandler
-  // so registration-blocking and maintenance rules execute.
-  if ((isPublicRoute(req) && !isSignUpRoute(req)) || isPublicApiRoute(req)) {
+  // on remote Clerk API roundtrips during boot or offline CI. Auth routes (/sign-in, /sign-up, etc.)
+  // delegate to clerkHandler so Clerk's AsyncLocalStorage request store initializes and registration/maintenance rules execute.
+  if ((isPublicRoute(req) && !isAuthRoute(req)) || isPublicApiRoute(req)) {
     logMiddlewareDecision(
       req,
       isPublicRoute(req) ? "mw_allow_public" : "mw_allow_public_api",

@@ -1247,6 +1247,14 @@ function buildEnvConfig() {
       .filter((value) => value.length > 0),
   };
 
+  // Primary app invariant: apps/client is the primary application, not a satellite.
+  // If NEXT_PUBLIC_CLERK_DOMAIN was erroneously configured in non-satellite environments (e.g. staging),
+  // clear it so Clerk SDK does not prepend "clerk." and override publishableKey frontendApi.
+  if (!clerk.isSatellite && process.env.NEXT_PUBLIC_CLERK_DOMAIN) {
+    delete process.env.NEXT_PUBLIC_CLERK_DOMAIN;
+    delete process.env.CLERK_DOMAIN;
+  }
+
   const satelliteIssues = validateSatelliteInvariants({
     isSatellite: clerk.isSatellite,
     domain: clerk.domain,
