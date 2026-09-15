@@ -42,10 +42,10 @@ The reset is idempotent. It rejects a non-active run, a scenario other than `onb
 - Add a typed, server-owned slot allowlist sourced from `STAGING_TEST_IDENTITY_SLOTS` as JSON with only `{ slot, role, email }`; validate at boot and reject production/test-disabled environments.
 - Extend cleanup order: reset/release the lease before marking the run `CLEANED`; retain the audit row for evidence instead of deleting it.
 
-- [ ] **RED:** Add database contract tests for active-lease exclusivity, scenario/role mismatch, stale lease rejection, and release idempotency.
-- [ ] **VERIFY RED:** `pnpm -C packages/db exec vitest run src/staging-test-runs/__tests__/identity-contracts.test.ts`.
-- [ ] **GREEN:** Implement schema, migration, typed slot contract, and pure state-transition helpers.
-- [ ] **VERIFY GREEN:** Run the focused suite and `pnpm -C packages/db exec prisma validate`.
+- [x] **RED:** Add database contract tests for active-lease exclusivity, scenario/role mismatch, stale lease rejection, and release idempotency.
+- [x] **VERIFY RED:** `pnpm -C packages/db exec vitest run src/staging-test-runs/__tests__/identity-contracts.test.ts`.
+- [x] **GREEN:** Implement schema, migration, typed slot contract, and pure state-transition helpers.
+- [x] **VERIFY GREEN:** Run the focused suite and `pnpm -C packages/db exec prisma validate`.
 
 ### 2. Add a persistence-only lease/reset repository
 
@@ -76,10 +76,10 @@ The reset is idempotent. It rejects a non-active run, a scenario other than `onb
 - `restoreIdentityBaseline` owns only rows tied to the leased `userId`: reset `User` status/profile fields, upsert `OnboardingState`, delete documented test-only profile/verification rows, and remove run-owned notifications/outbox rows. It performs explicit counts before/after and returns a redacted projection.
 - Do not delete the base `User` or the Clerk identity. The existing run-owned fixture cleanup remains responsible only for fixtures created by the run.
 
-- [ ] **RED:** Repository integration tests with two concurrent lease attempts and a foreign run attempting reset/release.
-- [ ] **VERIFY RED:** `pnpm client:test __tests__/lib/domains/testing/test-control.identity-repository.test.ts`.
-- [ ] **GREEN:** Implement transactions and count assertions.
-- [ ] **VERIFY GREEN:** Re-run the focused tests twice against an isolated database; the second reset must have the same projection.
+- [x] **RED:** Repository integration tests with two concurrent lease attempts and a foreign run attempting reset/release.
+- [x] **VERIFY RED:** `pnpm client:test __tests__/lib/domains/testing/test-control.identity-repository.test.ts`.
+- [x] **GREEN:** Implement transactions and count assertions.
+- [x] **VERIFY GREEN:** Re-run the focused tests twice against an isolated database; the second reset must have the same projection.
 
 ### 3. Add a narrow Clerk baseline adapter
 
@@ -92,10 +92,10 @@ The reset is idempotent. It rejects a non-active run, a scenario other than `onb
 - Set only the documented public/private metadata baseline and revoke all active sessions/sign-in tokens before issuing a new handoff ticket. Do not change password, primary email, MFA, organization memberships, or arbitrary Clerk profile fields.
 - If Clerk reset fails, mark the lease `FAILED`, return a retriable `CLERK_BASELINE_RESET_FAILED` result, and do not issue a handoff ticket.
 
-- [ ] **RED:** Tests for non-pool rejection, metadata exactness, session revocation, and Clerk failure marking the lease failed.
-- [ ] **VERIFY RED:** `pnpm client:test __tests__/lib/domains/testing/test-control.clerk-identity-adapter.test.ts`.
-- [ ] **GREEN:** Implement the adapter behind the staging/test environment gate.
-- [ ] **VERIFY GREEN:** Focused tests plus `pnpm -C apps/client run check-types`.
+- [x] **RED:** Tests for non-pool rejection, metadata exactness, session revocation, and Clerk failure marking the lease failed.
+- [x] **VERIFY RED:** `pnpm client:test __tests__/lib/domains/testing/test-control.clerk-identity-adapter.test.ts`.
+- [x] **GREEN:** Implement the adapter behind the staging/test environment gate.
+- [x] **VERIFY GREEN:** Focused tests plus `pnpm -C apps/client run check-types`.
 
 ### 4. Extend the test-control service and route
 
@@ -114,10 +114,10 @@ The reset is idempotent. It rejects a non-active run, a scenario other than `onb
 - `resetIdentityBaseline` sequence: lease → mark resetting → reset Clerk → restore DB baseline → mark ready → issue a fresh Clerk sign-in ticket. On failure, revoke the ticket/session, mark failure, and return a redacted error.
 - Extend `cleanupRun` to release the lease only after DB cleanup and ensure an expired run cannot retain an active session.
 
-- [ ] **RED:** Route/service tests for production 404 before dynamic imports, grant action/scenario mismatch, expired run, duplicate lease, failed Clerk reset, and idempotent cleanup.
-- [ ] **VERIFY RED:** `pnpm client:test __tests__/lib/domains/testing/test-control.service.test.ts __tests__/api/internal/test-control.route.test.ts`.
-- [ ] **GREEN:** Implement the service orchestration and thin route dispatch.
-- [ ] **VERIFY GREEN:** Focused tests, `pnpm -C apps/client run check-types`, and `pnpm run client:check-security-drift`.
+- [x] **RED:** Route/service tests for production 404 before dynamic imports, grant action/scenario mismatch, expired run, duplicate lease, failed Clerk reset, and idempotent cleanup.
+- [x] **VERIFY RED:** `pnpm client:test __tests__/lib/domains/testing/test-control.service.test.ts __tests__/api/internal/test-control.route.test.ts`.
+- [x] **GREEN:** Implement the service orchestration and thin route dispatch.
+- [x] **VERIFY GREEN:** Focused tests, `pnpm -C apps/client run check-types`, and `pnpm run client:check-security-drift`.
 
 ### 5. Build authentic onboarding and verification staging scenarios
 
@@ -134,10 +134,10 @@ The reset is idempotent. It rejects a non-active run, a scenario other than `onb
 - Verification scenario: reset a distinct professional slot, execute the real verification decision through the approved staff/worker boundary, poll the public directory/projection until the expected verified signal appears, and assert that direct contact data remains subject to the existing disclosure rule.
 - Each spec captures only redacted projection/JUnit data; screenshots must not include test email, documents, Clerk ticket URLs, or headers.
 
-- [ ] **RED:** Cypress command unit tests for refusing browser-side secrets and a spec assertion that initial/reset state is not public.
-- [ ] **VERIFY RED:** `pnpm client:test cypress/plugins/staging-test-control.test.ts`.
-- [ ] **GREEN:** Implement task/command and two authentic staging specs.
-- [ ] **VERIFY GREEN:** In the protected environment, run each spec twice: `pnpm -C apps/client exec cypress run --spec <spec> --env STAGING_RELEASE_E2E=true`.
+- [x] **RED:** Cypress command unit tests for refusing browser-side secrets and a spec assertion that initial/reset state is not public.
+- [x] **VERIFY RED:** `pnpm client:test cypress/plugins/staging-test-control.test.ts`.
+- [x] **GREEN:** Implement task/command and two authentic staging specs.
+- [x] **VERIFY GREEN:** In the protected environment, run each spec twice: `pnpm -C apps/client exec cypress run --spec <spec> --env STAGING_RELEASE_E2E=true`.
 
 ### 6. Operational evidence, alerting, and rollback
 
@@ -156,10 +156,10 @@ The reset is idempotent. It rejects a non-active run, a scenario other than `onb
 - In `always()`, run cleanup and report per-run `leaseState`, `resetResult`, `cleanupResult`, hashed run ID, commit SHA, and scenario result in the existing release evidence manifest.
 - Add an alert/runbook action for `FAILED` leases: disable staging E2E concurrency, rotate the affected slot manually, attach the redacted failure artifact, and do not rerun against that slot until reset evidence is attached.
 
-- [ ] **RED:** Node tests for workflow scenario mapping and evidence manifest fields; static checks that no repository/PR secret is used.
-- [ ] **VERIFY RED:** `node --test scripts/__tests__/generate-release-evidence.test.mjs`.
-- [ ] **GREEN:** Update workflow, evidence generator, runbook, scorecard, and changelogs.
-- [ ] **VERIFY GREEN:** Protected staging dry run with artifact digest review.
+- [x] **RED:** Node tests for workflow scenario mapping and evidence manifest fields; static checks that no repository/PR secret is used.
+- [x] **VERIFY RED:** `node --test scripts/__tests__/generate-release-evidence.test.mjs`.
+- [x] **GREEN:** Update workflow, evidence generator, runbook, scorecard, and changelogs.
+- [x] **VERIFY GREEN:** Protected staging dry run with artifact digest review.
 
 ## Verification Plan
 

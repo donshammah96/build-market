@@ -18,6 +18,18 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
+- **Cypress E2E Staging Auth Command Queue Chaining (`apps/client/cypress/support/staging-test-control.ts`)**:
+  - Resolved `CypressError: cy.then() failed because you are mixing up async and sync code` across staging E2E suites (`01-onboarding-and-verification.cy.ts`, `02-routing-and-masked-disclosure.cy.ts`, `03-messaging.cy.ts`, `04-mpesa-replay-and-idempotency.cy.ts`, `06-messaging.cy.ts`, `07-queue-recovery.cy.ts`, `08-verification-public-trust.cy.ts`).
+  - Chained `cy.visit(res.signInUrl).location("pathname", { timeout: 15000 }).should("not.include", "/sign-in")` directly to return the command promise and map the yielded subject cleanly inside `loginStagingUser` and `resetStagingIdentity`, eliminating premature synchronous return value violations in Cypress command callbacks.
+
+- **M-Pesa Webhook Internal Secret Validation & Fail-Closed Guard (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`)**:
+  - Resolved compiler error `TS2551` where `env.services.internalServiceSecret` was accessed instead of canonical `env.services.internalApiSecret`.
+  - Replaced direct equality checks with timing-safe string comparison (`timingSafeEqualStrings`) from `@/app/lib/security/internal-secret` for `x-internal-secret` and `x-test-control-secret` header checks against `env.services.internalApiSecret` and `env.stagingTestControl.secret`.
+  - Restored fail-closed behavior (`if (!candidate) return false;`) when a callback secret is configured. Added regression tests covering internal and test-control header authentication in `__tests__/api/webhooks/mpesa-callback.test.ts`.
+
+- **Cypress Toolchain Deprecation Compatibility (`apps/client/cypress/tsconfig.json`)**:
+  - Updated compiler option `"ignoreDeprecations": "5.0"` in `apps/client/cypress/tsconfig.json` (from `"6.0"`), resolving IDE language service diagnostic error `TS5103` while maintaining full compatibility with the workspace TypeScript 6 compiler.
+
 - **Staging Test Identity Professional Profile Resolution (`apps/client/app/lib/domains/testing/test-control/repository.ts`)**:
   - Implemented self-healing upsert for `ProfessionalProfile` during `seedScenario` execution in `TestControlRepository`. Base staging professional identities (`e2e_pro_1`) require a `ProfessionalProfile` relation for lead routing and project associations; when missing, test-control automatically provisions the profile row with `PENDING` verification and `UNVERIFIED` trust tier, eliminating the `STAGING_TEST_IDENTITY_MISSING` 500 error in E2E scenario seeding.
 

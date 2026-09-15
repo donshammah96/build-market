@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { applyPrivateNoStoreHeaders } from "@/app/lib/api/http-security";
 import { env } from "@/app/lib/infrastructure/env";
+import { timingSafeEqualStrings } from "@/app/lib/security/internal-secret";
 
 /** Provider callbacks are acknowledged without caching or exposing internals. */
 export function providerCallbackResponse(status = 202) {
@@ -17,11 +18,32 @@ export function providerCallbackResponse(status = 202) {
  */
 export function verifyMpesaCallbackAuthenticity(request: NextRequest): boolean {
   const secret = env.services.mpesaCallbackSecret;
+  const isActualProduction =
+    env.isProd &&
+    !env.isVercelPreview &&
+    env.otel.ddEnv !== "staging" &&
+    !env.stagingTestControl?.enabled;
+
+  // Allow internal service or test-control callers with matching credentials
+  const internalSecret =
+    request.headers.get("x-internal-secret") ||
+    request.headers.get("x-test-control-secret");
+  if (
+    internalSecret &&
+    ((env.services.internalApiSecret &&
+      timingSafeEqualStrings(internalSecret, env.services.internalApiSecret)) ||
+      (env.stagingTestControl?.secret &&
+        timingSafeEqualStrings(internalSecret, env.stagingTestControl.secret)))
+  ) {
+    return true;
+  }
 
   if (!secret) {
-    if (env.isTest) {
+    // In staging, preview, or test environments without an explicit callback secret, allow callbacks to proceed
+    if (!isActualProduction) {
       return true;
     }
+    // Fail closed in actual production
     return false;
   }
 

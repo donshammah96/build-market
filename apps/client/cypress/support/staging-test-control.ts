@@ -96,15 +96,12 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
         throw new Error(`Failed to mint Clerk session for role ${role}`);
       }
 
-      // Visit the Clerk ticket URL to set official session cookies
-      cy.visit(res.signInUrl);
-      // Allow Clerk authentication redirection to settle
-      cy.location("pathname", { timeout: 15000 }).should(
-        "not.include",
-        "/sign-in",
-      );
-
-      return res;
+      // Visit the Clerk ticket URL to set official session cookies and settle
+      return cy
+        .visit(res.signInUrl)
+        .location("pathname", { timeout: 15000 })
+        .should("not.include", "/sign-in")
+        .then(() => res);
     });
 });
 
@@ -120,21 +117,18 @@ Cypress.Commands.add(
           );
         }
 
-        // Visit the Clerk ticket URL to establish session cookies
-        cy.visit(res.signInUrl);
-        // Allow Clerk authentication redirection to settle
-        cy.location("pathname", { timeout: 15000 }).should(
-          "not.include",
-          "/sign-in",
-        );
-
-        return {
-          leaseId: res.leaseId,
-          slot: res.slot,
-          userId: res.userId,
-          role: res.role,
-          state: res.state,
-        };
+        // Visit the Clerk ticket URL to establish session cookies and settle
+        return cy
+          .visit(res.signInUrl)
+          .location("pathname", { timeout: 15000 })
+          .should("not.include", "/sign-in")
+          .then(() => ({
+            leaseId: res.leaseId,
+            slot: res.slot,
+            userId: res.userId,
+            role: res.role,
+            state: res.state,
+          }));
       });
   },
 );

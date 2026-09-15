@@ -42,9 +42,24 @@ export async function addNotificationRetryJob(
   data: NotificationRetryJobData,
   opts?: JobsOptions,
 ) {
-  const queue = getNotificationRetryQueue();
-  return queue.add("retry-notification", data, {
-    jobId: `retry-${data.result.entityId}-${Date.now()}`,
-    ...opts,
-  });
+  let queue = getNotificationRetryQueue();
+  try {
+    return await queue.add("retry-notification", data, {
+      jobId: `retry-${data.result.entityId}-${Date.now()}`,
+      ...opts,
+    });
+  } catch (err: any) {
+    if (err?.message?.includes("Connection is closed")) {
+      try {
+        await notificationQueueInstance?.close();
+      } catch {}
+      notificationQueueInstance = null;
+      queue = getNotificationRetryQueue();
+      return await queue.add("retry-notification", data, {
+        jobId: `retry-${data.result.entityId}-${Date.now()}`,
+        ...opts,
+      });
+    }
+    throw err;
+  }
 }

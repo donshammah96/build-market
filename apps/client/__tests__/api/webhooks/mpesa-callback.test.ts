@@ -71,4 +71,52 @@ describe("M-Pesa Webhook Authenticity Verification", () => {
 
     expect(verifyMpesaCallbackAuthenticity(req)).toBe(false);
   });
+
+  it("authenticates callback with matching x-internal-secret header", () => {
+    (env.services as any).mpesaCallbackSecret = "my-test-secret-123456";
+    (env.services as any).internalApiSecret = "internal-secret-token";
+
+    const req = new NextRequest(
+      "https://example.com/api/webhooks/mpesa/stk-callback",
+      {
+        headers: {
+          "x-internal-secret": "internal-secret-token",
+        },
+      },
+    );
+
+    expect(verifyMpesaCallbackAuthenticity(req)).toBe(true);
+  });
+
+  it("authenticates callback with matching x-test-control-secret header", () => {
+    (env.services as any).mpesaCallbackSecret = "my-test-secret-123456";
+    (env as any).stagingTestControl = { secret: "test-control-token" };
+
+    const req = new NextRequest(
+      "https://example.com/api/webhooks/mpesa/stk-callback",
+      {
+        headers: {
+          "x-test-control-secret": "test-control-token",
+        },
+      },
+    );
+
+    expect(verifyMpesaCallbackAuthenticity(req)).toBe(true);
+  });
+
+  it("rejects callback with mismatched x-internal-secret header", () => {
+    (env.services as any).mpesaCallbackSecret = "my-test-secret-123456";
+    (env.services as any).internalApiSecret = "internal-secret-token";
+
+    const req = new NextRequest(
+      "https://example.com/api/webhooks/mpesa/stk-callback",
+      {
+        headers: {
+          "x-internal-secret": "wrong-internal-secret",
+        },
+      },
+    );
+
+    expect(verifyMpesaCallbackAuthenticity(req)).toBe(false);
+  });
 });
