@@ -46,6 +46,15 @@ declare global {
         merchantRequestId: string;
       }>;
 
+      /**
+       * Dispatches an M-Pesa STK callback via authenticated node task,
+       * preserving secret boundary and mirroring asynchronous provider delivery.
+       */
+      postStagingMpesaCallback(payload: Record<string, unknown>): Chainable<{
+        status: number;
+        body: any;
+      }>;
+
       /** Creates a run-owned cross-service fixture and returns opaque IDs only. */
       seedStagingScenario(
         scenario: string,
@@ -89,25 +98,39 @@ Cypress.Commands.add(
 );
 
 Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
+  let sessionResult: { userId: string; email: string };
+
   return cy
     .task("stagingTestControl:issueSession", { role })
     .then((res: any) => {
       if (!res || !res.signInUrl) {
         throw new Error(`Failed to mint Clerk session for role ${role}`);
       }
+      sessionResult = res;
 
       // Visit the Clerk ticket URL to set official session cookies and settle
-      return cy
-        .visit(res.signInUrl)
-        .location("pathname", { timeout: 15000 })
-        .should("not.include", "/sign-in")
-        .then(() => res);
+      cy.visit(res.signInUrl);
+      cy.location("pathname", { timeout: 15000 }).should(
+        "not.include",
+        "/sign-in",
+      );
+    })
+    .then(() => {
+      return sessionResult;
     });
 });
 
 Cypress.Commands.add(
   "resetStagingIdentity",
   (role: "CLIENT" | "PROFESSIONAL") => {
+    let identityResult: {
+      leaseId: string;
+      slot: string;
+      userId: string;
+      role: "CLIENT" | "PROFESSIONAL";
+      state: string;
+    };
+
     return cy
       .task("stagingTestControl:resetIdentityBaseline", { role })
       .then((res: any) => {
@@ -116,19 +139,37 @@ Cypress.Commands.add(
             `Failed to reset staging identity baseline for role ${role}`,
           );
         }
+        identityResult = {
+          leaseId: res.leaseId,
+          slot: res.slot,
+          userId: res.userId,
+          role: res.role,
+          state: res.state,
+        };
 
         // Visit the Clerk ticket URL to establish session cookies and settle
-        return cy
-          .visit(res.signInUrl)
-          .location("pathname", { timeout: 15000 })
-          .should("not.include", "/sign-in")
-          .then(() => ({
-            leaseId: res.leaseId,
-            slot: res.slot,
-            userId: res.userId,
-            role: res.role,
-            state: res.state,
-          }));
+        cy.visit(res.signInUrl);
+        cy.location("pathname", { timeout: 15000 }).should(
+          "not.include",
+          "/sign-in",
+        );
+      })
+      .then(() => {
+        return identityResult;
+      });
+  },
+);
+
+Cypress.Commands.add(
+  "postStagingMpesaCallback",
+  (payload: Record<string, unknown>) => {
+    return cy
+      .task<{ status: number; body: any }>(
+        "stagingTestControl:postMpesaWebhook",
+        { payload },
+      )
+      .then((res) => {
+        return res;
       });
   },
 );

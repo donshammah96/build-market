@@ -18,9 +18,11 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
-- **Cypress E2E Staging Auth Command Queue Chaining (`apps/client/cypress/support/staging-test-control.ts`)**:
-  - Resolved `CypressError: cy.then() failed because you are mixing up async and sync code` across staging E2E suites (`01-onboarding-and-verification.cy.ts`, `02-routing-and-masked-disclosure.cy.ts`, `03-messaging.cy.ts`, `04-mpesa-replay-and-idempotency.cy.ts`, `06-messaging.cy.ts`, `07-queue-recovery.cy.ts`, `08-verification-public-trust.cy.ts`).
-  - Chained `cy.visit(res.signInUrl).location("pathname", { timeout: 15000 }).should("not.include", "/sign-in")` directly to return the command promise and map the yielded subject cleanly inside `loginStagingUser` and `resetStagingIdentity`, eliminating premature synchronous return value violations in Cypress command callbacks.
+- **Cypress E2E Staging Auth Command Queue Chaining & Webhook Dispatch (`apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress.config.ts`, `apps/client/cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts`, `apps/client/cypress/plugins/staging-test-control.test.ts`)**:
+  - Resolved runtime `CypressError: cy.then() failed because you are mixing up async and sync code` across staging E2E suites (`01-onboarding-and-verification.cy.ts`, `02-routing-and-masked-disclosure.cy.ts`, `03-messaging.cy.ts`, `06-messaging.cy.ts`, `08-verification-public-trust.cy.ts`).
+  - Decoupled Cypress command enqueuing (`cy.visit(...)`, `cy.location(...)`, `cy.should(...)`) from subject yielding by eliminating synchronous `return cy.visit(...)` inside `.then()` callbacks in `loginStagingUser` and `resetStagingIdentity`, chaining a dedicated parameter-less `.then(() => result)` to yield typed subjects cleanly.
+  - Implemented Node-level `stagingTestControl:postMpesaWebhook` task in `cypress.config.ts` and exposed `cy.postStagingMpesaCallback(payload)` in `staging-test-control.ts` to dispatch authenticated STK callbacks using `getTestControlHeaders()`, preserving the boundary invariant that internal secrets never cross into browser memory while testing fail-closed webhook authenticity in `04-mpesa-replay-and-idempotency.cy.ts`.
+  - Added Vitest boundary and contract test suite in `apps/client/cypress/plugins/staging-test-control.test.ts` to enforce callback isolation and command availability.
 
 - **M-Pesa Webhook Internal Secret Validation & Fail-Closed Guard (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`)**:
   - Resolved compiler error `TS2551` where `env.services.internalServiceSecret` was accessed instead of canonical `env.services.internalApiSecret`.

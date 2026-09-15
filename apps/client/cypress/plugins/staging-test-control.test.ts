@@ -45,4 +45,47 @@ describe("staging test control Cypress task & credential boundaries", () => {
     expect(initialProjection.trustTier).toBe("UNVERIFIED");
     expect(initialProjection.onboardingState).toBe("NOT_STARTED");
   });
+
+  it("enforces that staging-test-control commands do not return cy chainables from inside .then() callbacks", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const content = fs.readFileSync(
+      path.resolve(__dirname, "../support/staging-test-control.ts"),
+      "utf8",
+    );
+
+    // Any `return cy.` inside a `.then(` callback causes Cypress to throw:
+    // "CypressError: cy.then() failed because you are mixing up async and sync code.
+    //  In your callback function you invoked 1 or more cy commands but then returned a synchronous value."
+    const thenBlockRegex = /\.then\s*\([^)]*\)\s*=>\s*\{([^}]*)\}/g;
+    const violations: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = thenBlockRegex.exec(content)) !== null) {
+      const blockBody = match[1] ?? "";
+      if (/return\s+cy\./.test(blockBody)) {
+        violations.push(blockBody.trim());
+      }
+    }
+
+    expect(
+      violations,
+      "Expected no `.then(() => { ... return cy. ... })` callback blocks in staging-test-control.ts",
+    ).toHaveLength(0);
+  });
+
+  it("requires postStagingMpesaCallback command and stagingTestControl:postMpesaWebhook task contract", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const supportContent = fs.readFileSync(
+      path.resolve(__dirname, "../support/staging-test-control.ts"),
+      "utf8",
+    );
+    const configContent = fs.readFileSync(
+      path.resolve(__dirname, "../../cypress.config.ts"),
+      "utf8",
+    );
+
+    expect(supportContent).toContain("postStagingMpesaCallback");
+    expect(configContent).toContain("stagingTestControl:postMpesaWebhook");
+  });
 });

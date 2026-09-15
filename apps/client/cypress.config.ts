@@ -231,6 +231,31 @@ export default defineConfig({
           return res.json();
         },
 
+        async "stagingTestControl:postMpesaWebhook"(params: {
+          payload: Record<string, unknown>;
+        }) {
+          assertControlCredentials();
+          const res = await fetch(
+            `${baseUrl}/api/webhooks/mpesa/stk-callback`,
+            {
+              method: "POST",
+              headers: getTestControlHeaders(),
+              body: JSON.stringify(params.payload),
+            },
+          );
+          const text = await res.text();
+          let body: unknown = null;
+          try {
+            body = JSON.parse(text);
+          } catch {
+            body = text;
+          }
+          return {
+            status: res.status,
+            body,
+          };
+        },
+
         async "stagingTestControl:seedScenario"(params: {
           scenario: string;
           payload?: Record<string, unknown>;

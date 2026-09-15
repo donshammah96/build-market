@@ -39,22 +39,12 @@ describe("Staging E2E: M-Pesa STK Replay and Idempotency Flow", () => {
       };
 
       // 2. Post callback first time (initial settlement processing)
-      cy.request({
-        method: "POST",
-        url: "/api/webhooks/mpesa/stk-callback",
-        body: callbackPayload,
-        failOnStatusCode: false,
-      }).then((firstRes) => {
+      cy.postStagingMpesaCallback(callbackPayload).then((firstRes) => {
         expect([200, 202]).to.include(firstRes.status);
       });
 
       // 3. Post duplicate callback (idempotent replay)
-      cy.request({
-        method: "POST",
-        url: "/api/webhooks/mpesa/stk-callback",
-        body: callbackPayload,
-        failOnStatusCode: false,
-      }).then((replayRes) => {
+      cy.postStagingMpesaCallback(callbackPayload).then((replayRes) => {
         expect(replayRes.status).to.eq(202);
       });
 
