@@ -24,6 +24,10 @@ This format is based on Keep a Changelog and uses semantic categories:
   - Implemented Node-level `stagingTestControl:postMpesaWebhook` task in `cypress.config.ts` and exposed `cy.postStagingMpesaCallback(payload)` in `staging-test-control.ts` to dispatch authenticated STK callbacks using `getTestControlHeaders()`, preserving the boundary invariant that internal secrets never cross into browser memory while testing fail-closed webhook authenticity in `04-mpesa-replay-and-idempotency.cy.ts`.
   - Added Vitest boundary and contract test suite in `apps/client/cypress/plugins/staging-test-control.test.ts` to enforce callback isolation and command availability.
 
+- **Staging Test Control Single-Use Clerk Sign-In URL Fallback (`apps/client/app/lib/domains/testing/test-control/service.ts`)**:
+  - Bound `signInUrl` generation in `issueBrowserSessionHandoff` and `resetIdentityBaseline` to the application origin (`${appOrigin}/sign-in?__clerk_ticket=${token}`) with fallback to Clerk's default `ticketResponse.url`.
+  - Resolves Cypress `getaddrinfo ENOTFOUND accounts.staging.buildmarket.app` network failure when automated E2E browser runs consume single-use Clerk authentication tickets, routing tickets directly through the application's embedded `<SignIn />` route at `/sign-in`.
+
 - **M-Pesa Webhook Internal Secret Validation & Fail-Closed Guard (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`)**:
   - Resolved compiler error `TS2551` where `env.services.internalServiceSecret` was accessed instead of canonical `env.services.internalApiSecret`.
   - Replaced direct equality checks with timing-safe string comparison (`timingSafeEqualStrings`) from `@/app/lib/security/internal-secret` for `x-internal-secret` and `x-test-control-secret` header checks against `env.services.internalApiSecret` and `env.stagingTestControl.secret`.
