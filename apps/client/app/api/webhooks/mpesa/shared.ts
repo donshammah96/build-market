@@ -24,16 +24,31 @@ export function verifyMpesaCallbackAuthenticity(request: NextRequest): boolean {
     env.otel.ddEnv !== "staging" &&
     !env.stagingTestControl?.enabled;
 
-  // Allow internal service or test-control callers with matching credentials
-  const internalSecret =
-    request.headers.get("x-internal-secret") ||
-    request.headers.get("x-test-control-secret");
+  // Allow internal service callers with matching internal API secret
+  const internalSecret = request.headers.get("x-internal-secret");
   if (
     internalSecret &&
-    ((env.services.internalApiSecret &&
-      timingSafeEqualStrings(internalSecret, env.services.internalApiSecret)) ||
-      (env.stagingTestControl?.secret &&
-        timingSafeEqualStrings(internalSecret, env.stagingTestControl.secret)))
+    env.services.internalApiSecret &&
+    timingSafeEqualStrings(internalSecret, env.services.internalApiSecret)
+  ) {
+    return true;
+  }
+
+  // Allow staging test-control callers with matching test control secret
+  const testControlSecret = request.headers.get("x-test-control-secret");
+  if (
+    testControlSecret &&
+    env.stagingTestControl?.secret &&
+    timingSafeEqualStrings(testControlSecret, env.stagingTestControl.secret)
+  ) {
+    return true;
+  }
+
+  // Allow internal secret matching staging test control secret as fallback
+  if (
+    internalSecret &&
+    env.stagingTestControl?.secret &&
+    timingSafeEqualStrings(internalSecret, env.stagingTestControl.secret)
   ) {
     return true;
   }

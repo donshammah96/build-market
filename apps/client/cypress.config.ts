@@ -73,7 +73,7 @@ export default defineConfig({
       function getTestControlHeaders(additional?: Record<string, string>) {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
-          "x-internal-secret": internalSecret || "",
+          ...(internalSecret ? { "x-internal-secret": internalSecret } : {}),
           ...(testSecret ? { "x-test-control-secret": testSecret } : {}),
           ...(stagingAuthSecret
             ? { "x-staging-secret": stagingAuthSecret }

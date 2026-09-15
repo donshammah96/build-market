@@ -1,6 +1,6 @@
 "use client";
 
-import { SignIn, useUser } from "@clerk/nextjs";
+import { SignIn, useUser, useClerk } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -16,10 +16,15 @@ export default function ClerkSignInWidget({
 }: ClerkSignInWidgetProps = {}) {
   const [mounted, setMounted] = useState(false);
   const { isLoaded, isSignedIn } = useUser();
+  const clerk = useClerk();
   const searchParams = useSearchParams();
 
   const rawRedirectUrl = initialRedirectUrl ?? searchParams.get("redirect_url");
   const safeTargetUrl = getSafeRedirectUrl(rawRedirectUrl);
+  const ticket =
+    searchParams.get("__clerk_ticket") || searchParams.get("ticket");
+  const [ticketError, setTicketError] = useState<string | null>(null);
+  const [isProcessingTicket, setIsProcessingTicket] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -32,7 +37,74 @@ export default function ClerkSignInWidget({
     }
   }, [isLoaded, isSignedIn, safeTargetUrl]);
 
-  if (!mounted || (isLoaded && isSignedIn)) {
+  // Handle single-use ticket consumption (e.g. from E2E test-control or invitation links)
+  useEffect(() => {
+    if (
+      !clerk.loaded ||
+      !ticket ||
+      isSignedIn ||
+      isProcessingTicket ||
+      ticketError
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+    setIsProcessingTicket(true);
+
+    async function processTicket() {
+      try {
+        const attempt = await clerk.client.signIn.create({
+          strategy: "ticket",
+          ticket: ticket!,
+        });
+
+        if (isCancelled) return;
+
+        if (attempt.status === "complete") {
+          await clerk.setActive({ session: attempt.createdSessionId });
+          const target = safeTargetUrl || ROUTES.authCallback;
+          window.location.href = target;
+        } else {
+          console.warn(
+            "[ClerkSignInWidget] Ticket sign-in not complete:",
+            attempt.status,
+          );
+          setIsProcessingTicket(false);
+        }
+      } catch (err: any) {
+        if (!isCancelled) {
+          console.error(
+            "[ClerkSignInWidget] Failed to authenticate ticket:",
+            err,
+          );
+          setTicketError(
+            err?.message || "Failed to authenticate single-use ticket",
+          );
+          setIsProcessingTicket(false);
+        }
+      }
+    }
+
+    processTicket();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    clerk,
+    ticket,
+    isSignedIn,
+    safeTargetUrl,
+    isProcessingTicket,
+    ticketError,
+  ]);
+
+  if (
+    !mounted ||
+    (isLoaded && isSignedIn) ||
+    (Boolean(ticket) && !ticketError)
+  ) {
     return <AuthPageSkeleton variant="sign-in" />;
   }
 

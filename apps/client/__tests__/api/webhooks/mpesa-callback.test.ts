@@ -119,4 +119,22 @@ describe("M-Pesa Webhook Authenticity Verification", () => {
 
     expect(verifyMpesaCallbackAuthenticity(req)).toBe(false);
   });
+
+  it("authenticates callback when x-internal-secret mismatches but x-test-control-secret matches", () => {
+    (env.services as any).mpesaCallbackSecret = "my-test-secret-123456";
+    (env.services as any).internalApiSecret = "internal-secret-token";
+    (env as any).stagingTestControl = { secret: "test-control-token" };
+
+    const req = new NextRequest(
+      "https://example.com/api/webhooks/mpesa/stk-callback",
+      {
+        headers: {
+          "x-internal-secret": "wrong-internal-secret",
+          "x-test-control-secret": "test-control-token",
+        },
+      },
+    );
+
+    expect(verifyMpesaCallbackAuthenticity(req)).toBe(true);
+  });
 });
