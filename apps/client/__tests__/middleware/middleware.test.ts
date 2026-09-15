@@ -220,6 +220,39 @@ describe("middleware — API route classification order", () => {
     expect(eventsLogged()).toContain("mw_allow_public_api");
   });
 
+  it("REPRODUCTION: allows public v1 directory/professional API routes without authentication", async () => {
+    const res = await middleware(
+      createMockRequest("/api/v1/professionals/pro_123"),
+    );
+    expect(res.status).toBe(200);
+    expect(eventsLogged()).toContain("mw_allow_public_api");
+  });
+
+  it("REPRODUCTION: allows authenticated requests to domain API routes (leads, reviews, messaging)", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "user_123",
+      sessionClaims: { metadata: {} },
+    });
+    mockParseMiddlewareSessionMetadata.mockReturnValue({});
+
+    for (const path of [
+      "/api/leads/qualification/routing",
+      "/api/reviews",
+      "/api/messaging/messages",
+    ]) {
+      vi.clearAllMocks();
+      mockAuth.mockResolvedValue({
+        userId: "user_123",
+        sessionClaims: { metadata: {} },
+      });
+      mockParseMiddlewareSessionMetadata.mockReturnValue({});
+
+      const res = await middleware(createMockRequest(path));
+      expect(res.status).toBe(200);
+      expect(eventsLogged()).toContain("mw_allow_protected_api");
+    }
+  });
+
   it("denies unauthenticated requests to protected API routes with a JSON 401, not a redirect", async () => {
     mockAuth.mockResolvedValue({ userId: null, sessionClaims: null });
 

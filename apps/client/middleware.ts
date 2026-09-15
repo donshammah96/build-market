@@ -525,6 +525,17 @@ const middleware = async (
   const nonce = generateCspNonce();
   const cspValue = buildRequestCsp(nonce);
 
+  // Deferred MVP verticals are server-enforced capability boundaries, not
+  // navigation hints. Evaluate them before auth, fast-path, and API route
+  // classification so deep links and direct requests share the same denial.
+  const capabilityDenial = capabilityBoundaryForPath(req.nextUrl.pathname);
+  if (capabilityDenial) {
+    logMiddlewareDecision(req, "mw_deny_disabled_capability");
+    return NextResponse.json(capabilityDenial.body, {
+      status: capabilityDenial.status,
+    });
+  }
+
   // --- DEV AUTH BYPASS ---
   if (env.auth.bypassEnabled && (env.isDev || env.isCI)) {
     logMiddlewareDecision(req, "mw_dev_bypass");

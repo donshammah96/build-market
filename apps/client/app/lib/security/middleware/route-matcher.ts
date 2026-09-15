@@ -65,10 +65,17 @@ export const isSettingsExemptRoute = createRouteMatcher([
 const PUBLIC_API_ROUTES = [
   "/api/health(.*)",
   "/api/settings/public(.*)",
-  "/api/newsletter/confirm(.*)",
+  "/api/newsletter/(.*)",
   "/api/webhooks/(.*)",
   "/api/clerk-webhook",
   "/api/csp-reports(.*)",
+  "/api/professionals(.*)",
+  "/api/stores(.*)",
+  "/api/properties(.*)",
+  "/api/services(.*)",
+  "/api/search(.*)",
+  "/api/advice(.*)",
+  "/api/v1(.*)",
 ] as const;
 
 const INTERNAL_API_ROUTES = ["/api/internal(.*)", "/api/metrics(.*)"] as const;
@@ -79,6 +86,16 @@ export const isProtectedApiRoute = createRouteMatcher([
   "/api/user(.*)",
   "/api/onboarding(.*)",
   "/api/professional-portal(.*)",
+  "/api/leads(.*)",
+  "/api/messaging(.*)",
+  "/api/reviews(.*)",
+  "/api/quotes(.*)",
+  "/api/projects(.*)",
+  "/api/client(.*)",
+  "/api/uploads(.*)",
+  "/api/notifications(.*)",
+  "/api/analytics(.*)",
+  "/api/idea-books(.*)",
 ]);
 
 // Generic API matcher used ONLY by middleware to detect API paths that

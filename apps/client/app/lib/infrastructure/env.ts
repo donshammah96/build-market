@@ -1252,7 +1252,6 @@ function buildEnvConfig() {
   // clear it so Clerk SDK does not prepend "clerk." and override publishableKey frontendApi.
   if (!clerk.isSatellite && process.env.NEXT_PUBLIC_CLERK_DOMAIN) {
     delete process.env.NEXT_PUBLIC_CLERK_DOMAIN;
-    delete process.env.CLERK_DOMAIN;
   }
 
   const satelliteIssues = validateSatelliteInvariants({
