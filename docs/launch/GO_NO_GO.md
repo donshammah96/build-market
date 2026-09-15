@@ -1,6 +1,6 @@
 # MVP Launch Go / No-Go Scorecard
 
-Status: No-go for public consumer acquisition until every required evidence item is complete, current, and approved by its named owner.
+Status: No-go for public consumer acquisition until every required evidence item is complete, current, and approved by Don Shammah.
 Scope: Kenya-first marketplace MVP public-launch decision; this scorecard does not authorize adjacent verticals, platform custody, or paid M-Pesa activation.
 Evidence date: 2026-09-03
 Git SHA: 38e18958c2eebb62fecdf260427c04e8974eaa18
