@@ -125,7 +125,17 @@ export default async function RootLayout({
   }
 
   return (
-    <ClerkProvider nonce={nonce}>
+    <ClerkProvider
+      publishableKey={env.clerk.publishableKey}
+      nonce={nonce}
+      {...(env.clerk.isSatellite
+        ? {
+            isSatellite: true,
+            domain: env.clerk.domain,
+            signInUrl: env.clerk.primarySignInUrl,
+          }
+        : {})}
+    >
       <html lang="en" className={dmSans.variable}>
         <head>
           {/* Preconnect to Clerk FAPI dynamically configured by env */}

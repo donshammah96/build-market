@@ -1196,9 +1196,48 @@ function buildEnvConfig() {
   // (it's a no-op when isSatellite is false) so a future misconfiguration
   // doesn't rely on someone remembering to add this check when satellite
   // mode is first turned on here.
+  const rawPublishableKey = getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+  const configuredFrontendApi = getOptionalStringEnv(
+    "NEXT_PUBLIC_CLERK_FRONTEND_API",
+  );
+  const isStagingEnv =
+    getOptionalStringEnv("DD_ENV") === "staging" ||
+    (typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
+      process.env.NEXT_PUBLIC_APP_URL.includes("staging.buildmarket.app"));
+
+  const frontendApi =
+    configuredFrontendApi ||
+    (isStagingEnv ? "https://clerk.staging.buildmarket.app" : undefined);
+
+  // Derive publishable key matching frontend API if provided (e.g. clerk.staging.buildmarket.app).
+  // In staging environments, Clerk FAPI is clerk.staging.buildmarket.app which requires its matching
+  // publishable key (pk_live_Y2xlcmsuc3RhZ2luZy5idWlsZG1hcmtldC5hcHAk). If NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+  // was inherited or configured with the production key (clerk.buildmarket.app), reconcile it so client
+  // components and Clerk SDK resolve to the matching staging instance without 403 subdomain errors.
+  let publishableKey = rawPublishableKey;
+  if (frontendApi) {
+    try {
+      const fapiHost = new URL(frontendApi).host;
+      if (fapiHost) {
+        const encodedHost = (
+          typeof Buffer !== "undefined"
+            ? Buffer.from(`${fapiHost}$`).toString("base64")
+            : btoa(`${fapiHost}$`)
+        ).replace(/=+$/, "");
+        if (!rawPublishableKey.includes(encodedHost)) {
+          const isDev = rawPublishableKey.startsWith("pk_test_");
+          publishableKey = `${isDev ? "pk_test_" : "pk_live_"}${encodedHost}`;
+          process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = publishableKey;
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+  }
+
   const clerk = {
-    publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-    frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
+    publishableKey,
+    frontendApi,
     secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
     webhookSecret:
       getOptionalStringEnv("CLERK_WEBHOOK_SECRET") ||

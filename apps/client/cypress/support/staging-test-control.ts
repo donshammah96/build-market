@@ -110,10 +110,13 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
 
       // Visit the Clerk ticket URL to set official session cookies and settle
       cy.visit(res.signInUrl);
-      cy.location("pathname", { timeout: 15000 }).should(
-        "not.include",
-        "/sign-in",
-      );
+      cy.location("pathname", { timeout: 15000 }).should((pathname) => {
+        expect(pathname).not.to.include("/sign-in");
+        expect(pathname).not.to.include("/auth-callback");
+      });
+      cy.getCookies().should((cookies) => {
+        expect(cookies.some((c) => c.name.startsWith("__session"))).to.be.true;
+      });
     })
     .then(() => {
       return sessionResult;
@@ -149,10 +152,14 @@ Cypress.Commands.add(
 
         // Visit the Clerk ticket URL to establish session cookies and settle
         cy.visit(res.signInUrl);
-        cy.location("pathname", { timeout: 15000 }).should(
-          "not.include",
-          "/sign-in",
-        );
+        cy.location("pathname", { timeout: 15000 }).should((pathname) => {
+          expect(pathname).not.to.include("/sign-in");
+          expect(pathname).not.to.include("/auth-callback");
+        });
+        cy.getCookies().should((cookies) => {
+          expect(cookies.some((c) => c.name.startsWith("__session"))).to.be
+            .true;
+        });
       })
       .then(() => {
         return identityResult;
