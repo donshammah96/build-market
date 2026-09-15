@@ -97,7 +97,9 @@ describe("TestControlService", () => {
     if (result.ok) {
       expect(result.data.userId).toBe("user_clerk_staging_pro_1");
       expect(result.data.ticket).toBe("ticket_mock_123");
-      expect(result.data.signInUrl).toContain("ticket_mock_123");
+      expect(result.data.signInUrl).toBe(
+        "http://localhost:3500/sign-in?__clerk_ticket=ticket_mock_123",
+      );
     }
   });
 
@@ -241,6 +243,9 @@ describe("TestControlService", () => {
         expect(result.data.leaseId).toBe("lease-1");
         expect(result.data.slot).toBe("pro-1");
         expect(result.data.ticket).toBe("ticket_mock_123");
+        expect(result.data.signInUrl).toBe(
+          "http://localhost:3500/sign-in?__clerk_ticket=ticket_mock_123",
+        );
         expect(result.data.projection).toEqual(mockProjection);
       }
     });

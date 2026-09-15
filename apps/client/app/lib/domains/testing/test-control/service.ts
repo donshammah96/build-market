@@ -139,7 +139,10 @@ export class TestControlService {
         userId: user.id,
         email,
         ticket: ticketResponse.token,
-        signInUrl: ticketResponse.url,
+        signInUrl: this.resolveTestingSignInUrl(
+          ticketResponse.token,
+          ticketResponse.url,
+        ),
       });
     } catch (e: any) {
       return err({
@@ -148,6 +151,18 @@ export class TestControlService {
         status: 502,
       });
     }
+  }
+
+  /**
+   * Resolves the application embedded sign-in URL for test tickets.
+   * Prevents unhosted accounts.* portal 403 Forbidden errors by routing through /sign-in.
+   */
+  private resolveTestingSignInUrl(ticket: string, fallbackUrl: string): string {
+    const base = env.appUrl ? env.appUrl.replace(/\/+$/, "") : null;
+    if (base) {
+      return `${base}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`;
+    }
+    return fallbackUrl;
   }
 
   /**
@@ -239,7 +254,10 @@ export class TestControlService {
         userId: lease.userId,
         role: lease.role,
         ticket: ticketResponse.token,
-        signInUrl: ticketResponse.url,
+        signInUrl: this.resolveTestingSignInUrl(
+          ticketResponse.token,
+          ticketResponse.url,
+        ),
         projection,
       });
     } catch (e: any) {

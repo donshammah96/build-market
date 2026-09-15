@@ -88,4 +88,16 @@ describe("staging test control Cypress task & credential boundaries", () => {
     expect(supportContent).toContain("postStagingMpesaCallback");
     expect(configContent).toContain("stagingTestControl:postMpesaWebhook");
   });
+
+  it("ensures cypress.config.ts normalizes unhosted Clerk accounts portal URLs to baseUrl /sign-in", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const configContent = fs.readFileSync(
+      path.resolve(__dirname, "../../cypress.config.ts"),
+      "utf8",
+    );
+
+    expect(configContent).toContain("normalizeSignInUrl");
+    expect(configContent).toContain("/sign-in?__clerk_ticket=");
+  });
 });

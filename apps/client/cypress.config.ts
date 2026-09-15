@@ -100,6 +100,22 @@ export default defineConfig({
         return `status ${status}${denial ? ` [denial: ${denial}]` : ""}: ${bodyText}`;
       }
 
+      function normalizeSignInUrl(url: string, origin: string): string {
+        if (!url) return url;
+        try {
+          const parsed = new URL(url, origin);
+          const ticket =
+            parsed.searchParams.get("__clerk_ticket") ||
+            parsed.searchParams.get("ticket");
+          if (ticket && parsed.hostname.startsWith("accounts.")) {
+            return `${origin.replace(/\/+$/, "")}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`;
+          }
+          return url;
+        } catch {
+          return url;
+        }
+      }
+
       on("task", {
         log(message: string) {
           console.log(message);
@@ -161,7 +177,11 @@ export default defineConfig({
               `issueSession failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
-          return res.json();
+          const body = await res.json();
+          if (body?.signInUrl) {
+            body.signInUrl = normalizeSignInUrl(body.signInUrl, baseUrl);
+          }
+          return body;
         },
 
         async "stagingTestControl:resetIdentityBaseline"(params: {
@@ -194,7 +214,7 @@ export default defineConfig({
             slot: body.slot,
             userId: body.userId,
             role: body.role,
-            signInUrl: body.signInUrl,
+            signInUrl: normalizeSignInUrl(body.signInUrl, baseUrl),
             state: body.projection?.onboardingState || "NOT_STARTED",
           };
         },
