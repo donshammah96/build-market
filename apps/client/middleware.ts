@@ -31,6 +31,7 @@ import { resolveSystemSettings } from "@/app/lib/security/middleware/system-sett
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 import { env } from "@/app/lib/infrastructure/env";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
 import {
   buildCspWithNonce,
   generateCspNonce,
@@ -73,13 +74,21 @@ const applyDocumentCspHeaders = (
     requestHeaders.set("x-bm-edge-user", options.edgeUserId ?? "");
   }
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  const cspHeaderName = env.cspReportOnly
+  const isCspReportOnly = edgeEnv.cspReportOnly || env.cspReportOnly;
+  const cspHeaderName = isCspReportOnly
     ? "Content-Security-Policy-Report-Only"
     : "Content-Security-Policy";
   response.headers.set(cspHeaderName, cspValue);
 
   // Diagnostic response headers in staging/preview/dev (P-2)
-  if (env.otel?.ddEnv === "staging" || env.isVercelPreview || env.isDev) {
+  const isDiagnosticEnv =
+    edgeEnv.ddEnv === "staging" ||
+    env.otel?.ddEnv === "staging" ||
+    edgeEnv.isVercelPreview ||
+    env.isVercelPreview ||
+    edgeEnv.isDev ||
+    env.isDev;
+  if (isDiagnosticEnv) {
     if (options?.decision) {
       response.headers.set("x-bm-mw-decision", options.decision);
     }
@@ -109,20 +118,32 @@ const applyDocumentCspHeaders = (
 // reaching a satellite's FAPI, or vice versa.
 //
 const getClerkSatelliteOrigins = (): string[] =>
-  (env.clerk?.satelliteOrigins ?? [])
+  (edgeEnv.clerkSatelliteOrigins.length > 0
+    ? edgeEnv.clerkSatelliteOrigins
+    : (env.clerk?.satelliteOrigins ?? [])
+  )
     .map((value) => toOrigin(value.trim()))
     .filter((value): value is string => Boolean(value));
 
 const buildRequestCsp = (nonce: string): string =>
   buildCspWithNonce({
     nonce,
-    appOrigin: toOrigin(env.appUrl) ?? "http://localhost:3500",
+    appOrigin:
+      toOrigin(edgeEnv.appUrl) ??
+      toOrigin(env.appUrl) ??
+      "http://localhost:3500",
     apiOrigin:
-      toOrigin(env.apiUrl) ?? toOrigin(env.appUrl) ?? "http://localhost:3500",
-    clerkFrontendApiOrigin: toOrigin(env.clerk?.frontendApi),
-    analyticsOrigin: toOrigin(env.analytics?.posthogHost),
-    isDev: Boolean(env.isDev),
-    allowUnsafeEval: env.allowCspUnsafeEval,
+      toOrigin(edgeEnv.apiUrl) ??
+      toOrigin(env.apiUrl) ??
+      toOrigin(edgeEnv.appUrl) ??
+      toOrigin(env.appUrl) ??
+      "http://localhost:3500",
+    clerkFrontendApiOrigin:
+      toOrigin(edgeEnv.clerkFrontendApi) ?? toOrigin(env.clerk?.frontendApi),
+    analyticsOrigin:
+      toOrigin(edgeEnv.posthogHost) ?? toOrigin(env.analytics?.posthogHost),
+    isDev: Boolean(edgeEnv.isDev || env.isDev),
+    allowUnsafeEval: edgeEnv.allowCspUnsafeEval || env.allowCspUnsafeEval,
     clerkSatelliteOrigins: getClerkSatelliteOrigins(),
     clerkChallengeOrigins: [
       "https://challenges.cloudflare.com",
@@ -163,10 +184,15 @@ const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
 // a misconfigured env var degrades this satellite's auth instead of taking
 // the whole app down — matching the "fail open + log" contract documented
 // in env.ts's satellite config comments.
-const satelliteDomain = env.clerk.domain?.trim() || undefined;
-const isSatelliteConfigured = Boolean(env.clerk.isSatellite && satelliteDomain);
+const satelliteDomain =
+  (edgeEnv.clerkDomain || env.clerk.domain)?.trim() || undefined;
+const isSatellite =
+  edgeEnv.clerkIsSatellite !== undefined
+    ? edgeEnv.clerkIsSatellite
+    : Boolean(env.clerk.isSatellite);
+const isSatelliteConfigured = Boolean(isSatellite && satelliteDomain);
 
-if (env.clerk.isSatellite && !satelliteDomain) {
+if (isSatellite && !satelliteDomain) {
   console.error(
     "[middleware] NEXT_PUBLIC_CLERK_IS_SATELLITE=true but " +
       "NEXT_PUBLIC_CLERK_DOMAIN is unset/empty. Falling back to non-satellite " +
@@ -177,8 +203,11 @@ if (env.clerk.isSatellite && !satelliteDomain) {
   );
 }
 
+const clerkPublishableKey =
+  edgeEnv.clerkPublishableKey || env.clerk.publishableKey;
+
 const clerkMiddlewareOptions = {
-  publishableKey: env.clerk.publishableKey,
+  publishableKey: clerkPublishableKey,
   ...(isSatelliteConfigured
     ? { isSatellite: true as const, domain: satelliteDomain as string }
     : {}),

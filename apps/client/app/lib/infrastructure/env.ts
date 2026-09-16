@@ -1227,7 +1227,6 @@ function buildEnvConfig() {
         if (!rawPublishableKey.includes(encodedHost)) {
           const isDev = rawPublishableKey.startsWith("pk_test_");
           publishableKey = `${isDev ? "pk_test_" : "pk_live_"}${encodedHost}`;
-          process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = publishableKey;
         }
       }
     } catch {

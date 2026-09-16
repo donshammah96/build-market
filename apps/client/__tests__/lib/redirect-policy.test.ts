@@ -8,11 +8,9 @@ import {
   AUTH_BOUNCE_COOKIE,
   readBounce,
   clearAuthBounce,
-  authLoopDiagnostic,
 } from "@/app/lib/security/middleware/redirect-policy";
 import { fingerprintPublishableKey } from "@/app/lib/security/clerk-fingerprint";
 import { ROUTES } from "@/lib/routes";
-import { env } from "@/app/lib/infrastructure/env";
 
 const BASE_URL = "http://localhost:3500";
 

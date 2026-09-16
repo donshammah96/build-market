@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
 import { env } from "@/app/lib/infrastructure/env";
 
 /**
@@ -17,7 +18,10 @@ export function timingSafeEqualStrings(a: string, b: string): boolean {
 }
 
 export function ensureValidInternalSecret(receivedSecret: string | null) {
-  const expectedSecret = env.services.internalApiSecret;
+  const expectedSecret =
+    edgeEnv.internalServiceSecret ||
+    edgeEnv.internalApiSecret ||
+    env.services?.internalApiSecret;
   if (!expectedSecret) {
     return NextResponse.json(
       { error: "Internal API secret is not configured" },

@@ -55,4 +55,36 @@ describe("GET /api/health", () => {
     expect(body.dependencies).toBeDefined();
     expect(Array.isArray(body.dependencies)).toBe(true);
   });
+
+  it("surfaces clerkDiagnostics when valid x-internal-secret is presented", async () => {
+    process.env.INTERNAL_SERVICE_SECRET = "test-internal-sec";
+    const req = new NextRequest(
+      "http://localhost:3500/api/health?shallow=true",
+      {
+        headers: { "x-internal-secret": "test-internal-sec" },
+      },
+    );
+    const response = await GET(req);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.clerkDiagnostics).toBeDefined();
+    expect(body.clerkDiagnostics.clerkInstanceType).toBeDefined();
+    expect(body.stagingTestControlEnabled).toBeDefined();
+  });
+});
+
+describe("GET /api/healthz", () => {
+  it("returns 200 with deployment telemetry", async () => {
+    const { GET: getHealthz } = await import("@/app/api/healthz/route");
+    process.env.VERCEL_GIT_COMMIT_SHA = "sha-z-123456";
+    process.env.VERCEL_DEPLOYMENT_ID = "dpl-z-98765";
+
+    const res = await getHealthz();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("ok");
+    expect(body.buildSha).toBe("sha-z-123456");
+    expect(body.deploymentId).toBe("dpl-z-98765");
+    expect(body.bootedAt).toBeDefined();
+  });
 });

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { envConfig } from "@/app/lib/infrastructure/env";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
 import { checkRateLimitInMemory } from "./rate-limit.dev";
 import { checkRateLimitWithRedis } from "./rate-limit.redis";
 
@@ -41,7 +42,7 @@ function resolveRateLimitBackend(): ResolvedRateLimitBackend {
   }
 
   if (envConfig.isProd) {
-    return "redis";
+    return hasUpstashCredentials ? "redis" : "memory";
   }
 
   // In development: use Redis only when Upstash credentials are available.
@@ -80,8 +81,17 @@ export async function checkRateLimit(
         options?.algorithm,
       );
     } catch {
-      // Production must fail closed if the configured limiter backend fails.
-      if (envConfig.isProd) {
+      // In strict production (production environment and not staging/preview),
+      // fail closed to protect upstream resources from DDoS when Redis fails.
+      // Staging, preview, and test fall back to in-memory store so CI runs,
+      // deployment gates, and test suites do not suffer cascading 429 blackouts.
+      const isStagingOrPreview =
+        envConfig.otel?.ddEnv === "staging" ||
+        Boolean(envConfig.isVercelPreview) ||
+        edgeEnv.appUrl.includes("staging.buildmarket.app");
+      const isStrictProd = envConfig.isProd && !isStagingOrPreview;
+
+      if (isStrictProd) {
         return {
           success: false,
           limit,

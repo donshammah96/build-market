@@ -92,11 +92,20 @@ export function isStagingProtectionExempt(req: NextRequest): boolean {
  * - Uses constant-time string comparison (`timingSafeEqualStrings`) to eliminate timing attacks.
  * - Returns 401 with WWW-Authenticate header when unauthorized.
  */
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
+
 export function handleStagingProtection(req: NextRequest): NextResponse | null {
-  const stagingAuth = env.stagingAuth;
-  if (!stagingAuth?.isEnabled) {
+  const isEnabled =
+    edgeEnv.isStagingAuthEnabled || Boolean(env.stagingAuth?.isEnabled);
+  if (!isEnabled) {
     return null;
   }
+
+  const stagingSecret = edgeEnv.stagingAuthSecret || env.stagingAuth?.secret;
+  const stagingUser =
+    edgeEnv.stagingAuthUser || env.stagingAuth?.user || "buildmarket";
+  const stagingPassword =
+    edgeEnv.stagingAuthPassword || env.stagingAuth?.password;
 
   if (isStagingProtectionExempt(req)) {
     return null;
@@ -105,9 +114,9 @@ export function handleStagingProtection(req: NextRequest): NextResponse | null {
   // 1. Check Shared Secret Header
   const secretHeader = req.headers.get("x-staging-secret");
   if (
-    stagingAuth.secret &&
+    stagingSecret &&
     secretHeader &&
-    timingSafeEqualStrings(secretHeader, stagingAuth.secret)
+    timingSafeEqualStrings(secretHeader, stagingSecret)
   ) {
     return null;
   }
@@ -115,9 +124,9 @@ export function handleStagingProtection(req: NextRequest): NextResponse | null {
   // 2. Check Shared Secret Cookie
   const secretCookie = req.cookies.get("bm_staging_auth")?.value;
   if (
-    stagingAuth.secret &&
+    stagingSecret &&
     secretCookie &&
-    timingSafeEqualStrings(secretCookie, stagingAuth.secret)
+    timingSafeEqualStrings(secretCookie, stagingSecret)
   ) {
     return null;
   }
@@ -128,12 +137,9 @@ export function handleStagingProtection(req: NextRequest): NextResponse | null {
     const credentials = parseBasicAuthHeader(authHeader);
     if (
       credentials &&
-      timingSafeEqualStrings(
-        credentials.user,
-        stagingAuth.user ?? "buildmarket",
-      ) &&
-      stagingAuth.password &&
-      timingSafeEqualStrings(credentials.pass, stagingAuth.password)
+      timingSafeEqualStrings(credentials.user, stagingUser) &&
+      stagingPassword &&
+      timingSafeEqualStrings(credentials.pass, stagingPassword)
     ) {
       return null;
     }

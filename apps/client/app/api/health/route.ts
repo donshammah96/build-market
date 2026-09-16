@@ -10,6 +10,12 @@ import {
   getRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
 import { env } from "@/app/lib/infrastructure/env";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
+import {
+  ensureValidInternalSecret,
+  timingSafeEqualStrings,
+} from "@/app/lib/security/internal-secret";
+import { fingerprintPublishableKey } from "@/app/lib/security/clerk-fingerprint";
 
 // ─── Boot timestamp (set once when module loads) ─────────────────────────────
 const BOOT_TIME = Date.now();
@@ -48,6 +54,13 @@ interface HealthResponse {
   buildSha: string | null;
   deploymentId: string | null;
   bootedAt: string;
+  clerkDiagnostics?: {
+    clerkPublishableKeyFingerprint: string | null;
+    clerkInstanceType: "development" | "production" | "unknown";
+    clerkFrontendApi: string | null;
+    clerkIsSatellite: boolean;
+  };
+  stagingTestControlEnabled?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -217,49 +230,78 @@ async function checkClerkAuth(): Promise<DependencyResult> {
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(request);
 
-  // Rate limit health checks to prevent abuse
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `health:${identifier}`,
-    60, // 60 requests
-    60000, // per minute
+  const internalSecret = request.headers.get("x-internal-secret");
+  const hasValidInternalSecret = Boolean(
+    internalSecret && ensureValidInternalSecret(internalSecret) === null,
   );
-  if (!rateLimitResult.success) {
-    return NextResponse.json(
-      { status: "rate_limited", message: "Too many health check requests" },
-      { status: 429 },
+
+  const stagingSecret = request.headers.get("x-staging-secret");
+  const expectedStagingSecret =
+    edgeEnv.stagingAuthSecret || env.stagingAuth?.secret;
+  const hasValidStagingSecret = Boolean(
+    stagingSecret &&
+    expectedStagingSecret &&
+    timingSafeEqualStrings(stagingSecret, expectedStagingSecret),
+  );
+
+  const isAuthorizedMonitor = hasValidInternalSecret || hasValidStagingSecret;
+  const shallow = request.nextUrl.searchParams.get("shallow") === "true";
+
+  // Rate limit health checks to prevent abuse from unauthenticated public callers.
+  // Authorized internal/staging monitors and shallow checks bypass rate limiting.
+  if (!isAuthorizedMonitor && !shallow) {
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = await checkRateLimit(
+      `health:${identifier}`,
+      60, // 60 requests
+      60000, // per minute
     );
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { status: "rate_limited", message: "Too many health check requests" },
+        { status: 429 },
+      );
+    }
   }
 
   // ── Shallow mode (for k8s liveness probes / fast LB checks) ──────────
-  const shallow = request.nextUrl.searchParams.get("shallow") === "true";
-
   if (shallow) {
+    const shallowPayload: Record<string, unknown> = {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      version: env.appVersion,
+      buildSha: edgeEnv.buildSha,
+      deploymentId: edgeEnv.deploymentId,
+      bootedAt: new Date(BOOT_TIME).toISOString(),
+    };
+    if (hasValidInternalSecret) {
+      const pubKey = env.clerk?.publishableKey;
+      shallowPayload.clerkDiagnostics = {
+        clerkPublishableKeyFingerprint: fingerprintPublishableKey(pubKey),
+        clerkInstanceType: pubKey?.startsWith("pk_test_")
+          ? "development"
+          : pubKey?.startsWith("pk_live_")
+            ? "production"
+            : "unknown",
+        clerkFrontendApi: env.clerk?.frontendApi ?? null,
+        clerkIsSatellite: Boolean(env.clerk?.isSatellite),
+      };
+      shallowPayload.stagingTestControlEnabled = Boolean(
+        env.stagingTestControl?.enabled,
+      );
+    }
     try {
       await prisma.$queryRaw`SELECT 1`;
-      return NextResponse.json(
-        {
-          status: "healthy",
-          timestamp: new Date().toISOString(),
-          version: env.appVersion,
-          buildSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-          deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
-          bootedAt: new Date(BOOT_TIME).toISOString(),
-        },
-        { status: 200, headers: { "Cache-Control": "no-store" } },
-      );
+      return NextResponse.json(shallowPayload, {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      });
     } catch {
-      return NextResponse.json(
-        {
-          status: "unhealthy",
-          timestamp: new Date().toISOString(),
-          version: env.appVersion,
-          buildSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-          deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
-          bootedAt: new Date(BOOT_TIME).toISOString(),
-        },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      );
+      shallowPayload.status = "unhealthy";
+      return NextResponse.json(shallowPayload, {
+        status: 503,
+        headers: { "Cache-Control": "no-store" },
+      });
     }
   }
 
@@ -319,9 +361,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     circuitBreakers,
     caches,
-    buildSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-    deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
+    buildSha: edgeEnv.buildSha,
+    deploymentId: edgeEnv.deploymentId,
     bootedAt: new Date(BOOT_TIME).toISOString(),
+    ...(hasValidInternalSecret
+      ? {
+          clerkDiagnostics: {
+            clerkPublishableKeyFingerprint: fingerprintPublishableKey(
+              env.clerk?.publishableKey,
+            ),
+            clerkInstanceType: env.clerk?.publishableKey?.startsWith("pk_test_")
+              ? ("development" as const)
+              : env.clerk?.publishableKey?.startsWith("pk_live_")
+                ? ("production" as const)
+                : ("unknown" as const),
+            clerkFrontendApi: env.clerk?.frontendApi ?? null,
+            clerkIsSatellite: Boolean(env.clerk?.isSatellite),
+          },
+          stagingTestControlEnabled: Boolean(env.stagingTestControl?.enabled),
+        }
+      : {}),
   };
 
   // ── Log unhealthy dependencies ───────────────────────────────────────

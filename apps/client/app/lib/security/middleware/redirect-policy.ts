@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { AppRole } from "@/app/lib/security/roles";
 import { env } from "@/app/lib/infrastructure/env";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
 import {
   CLIENT_ROUTES,
   PROFESSIONAL_ROUTES,
@@ -30,6 +31,17 @@ export function authLoopDiagnostic(
   count: number,
 ): NextResponse {
   const cookieNames = req.cookies.getAll().map((c) => c.name);
+  const publishableKey =
+    edgeEnv.clerkPublishableKey || env.clerk?.publishableKey;
+  const isSatellite = Boolean(
+    edgeEnv.clerkIsSatellite !== undefined
+      ? edgeEnv.clerkIsSatellite
+      : env.clerk?.isSatellite,
+  );
+  const domain = edgeEnv.clerkDomain || env.clerk?.domain || null;
+  const frontendApi =
+    edgeEnv.clerkFrontendApi || env.clerk?.frontendApi || null;
+
   const body = {
     error: "AUTH_REDIRECT_LOOP_BROKEN",
     message:
@@ -40,13 +52,11 @@ export function authLoopDiagnostic(
     hasSessionCookie: cookieNames.some((n) => n.startsWith("__session")),
     hasClientUatCookie: cookieNames.some((n) => n.startsWith("__client_uat")),
     hasHandshakeCookie: cookieNames.some((n) => n.includes("clerk_handshake")),
-    clerkPublishableKeyFingerprint: fingerprintPublishableKey(
-      env.clerk?.publishableKey,
-    ),
-    clerkIsSatellite: Boolean(env.clerk?.isSatellite),
-    clerkDomain: env.clerk?.domain ?? null,
-    clerkFrontendApi: env.clerk?.frontendApi ?? null,
-    secretKeyPresent: Boolean(process.env.CLERK_SECRET_KEY),
+    clerkPublishableKeyFingerprint: fingerprintPublishableKey(publishableKey),
+    clerkIsSatellite: isSatellite,
+    clerkDomain: domain,
+    clerkFrontendApi: frontendApi,
+    secretKeyPresent: edgeEnv.hasClerkSecretKey,
     docs: "docs/STAGING-E2E-STAFF-AUTOPSY-V2.md#4-the-edgenode-auth-asymmetry",
   };
   const res = NextResponse.json(body, { status: 503 });
@@ -90,9 +100,15 @@ export function authLoopDiagnostic(
  * function derive the full absolute URL from `req` automatically.
  */
 function resolvePrimaryOrigin(): string {
-  const isSatellite = Boolean(env.clerk?.isSatellite);
+  const isSatellite = Boolean(
+    edgeEnv.clerkIsSatellite !== undefined
+      ? edgeEnv.clerkIsSatellite
+      : env.clerk?.isSatellite,
+  );
 
-  const primarySource = isSatellite ? env.clerk?.primarySignInUrl : env.appUrl;
+  const primarySource = isSatellite
+    ? edgeEnv.clerkPrimarySignInUrl || env.clerk?.primarySignInUrl
+    : edgeEnv.appUrl || env.appUrl;
 
   if (!primarySource) {
     // FAIL FAST, NOT SILENT: a missing/misconfigured value here previously

@@ -62,6 +62,11 @@ const expectedSha = (
   .trim()
   .toLowerCase();
 
+const internalSecret = (
+  process.env.INTERNAL_SERVICE_SECRET ||
+  process.env.INTERNAL_API_SECRET ||
+  ""
+).trim();
 const stagingAuthSecret = (process.env.STAGING_AUTH_SECRET || "").trim();
 const stagingAuthUser = (process.env.STAGING_AUTH_USER || "").trim();
 const stagingAuthPassword = (process.env.STAGING_AUTH_PASSWORD || "").trim();
@@ -73,6 +78,9 @@ function getHeaders() {
   const headers = {
     Accept: "application/json",
   };
+  if (internalSecret) {
+    headers["x-internal-secret"] = internalSecret;
+  }
   if (stagingAuthSecret) {
     headers["x-staging-secret"] = stagingAuthSecret;
   } else if (stagingAuthUser && stagingAuthPassword) {
@@ -88,34 +96,44 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function checkDeployment() {
-  const healthUrl = `${baseUrl}/api/health`;
-  try {
-    const res = await fetch(healthUrl, {
-      method: "GET",
-      headers: getHeaders(),
-      signal: AbortSignal.timeout(10000),
-    });
+async function probeUrl(url) {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: getHeaders(),
+    signal: AbortSignal.timeout(10000),
+  });
 
-    const status = res.status;
-    const bodyText = await res.text();
-    let data = null;
-    try {
-      data = JSON.parse(bodyText);
-    } catch {
-      // Non-JSON response (e.g. proxy error or perimeter block)
+  const status = res.status;
+  const bodyText = await res.text();
+  let data = null;
+  try {
+    data = JSON.parse(bodyText);
+  } catch {
+    // Non-JSON response (e.g. proxy error or perimeter block)
+  }
+
+  return {
+    ok: res.ok || status === 200 || status === 207,
+    status,
+    buildSha: data?.buildSha
+      ? String(data.buildSha).trim().toLowerCase()
+      : null,
+    deploymentId: data?.deploymentId ?? null,
+    version: data?.version ?? null,
+    errorText: data ? null : bodyText.slice(0, 200),
+  };
+}
+
+async function checkDeployment() {
+  try {
+    // Probe 1: Zero-dependency /api/healthz liveness probe (exempt from middleware & rate limits)
+    const healthzResult = await probeUrl(`${baseUrl}/api/healthz`);
+    if (healthzResult.buildSha) {
+      return healthzResult;
     }
 
-    return {
-      ok: res.ok || status === 200 || status === 207,
-      status,
-      buildSha: data?.buildSha
-        ? String(data.buildSha).trim().toLowerCase()
-        : null,
-      deploymentId: data?.deploymentId ?? null,
-      version: data?.version ?? null,
-      errorText: data ? null : bodyText.slice(0, 200),
-    };
+    // Probe 2: /api/health?shallow=true (authenticated with perimeter & internal secrets)
+    return await probeUrl(`${baseUrl}/api/health?shallow=true`);
   } catch (err) {
     return {
       ok: false,
