@@ -4,6 +4,14 @@
 
 ### Security & Fixed — Monorepo Architectural Hardening, Concurrency & Security Alignment
 
+- **Worker BullMQ v5 Backend Guard & Diagnostic Remediation Logging (`apps/workers/src/worker-options.ts`, `apps/workers/src/index.ts`, `apps/workers/__tests__/worker-options.test.ts`, `docs/runbooks/queue-postgres-migration.md`, `apps/workers/docs/runbooks/queue-postgres-migration.md`)**:
+  - Extracted worker options resolution into dedicated `resolveWorkerOptions` helper module with structured diagnostic error handling and fail-closed validation.
+  - Resolved unhandled startup crash loop on Render where configuring `QUEUE_BACKEND=postgres` or queue-specific overrides (`QUEUE_BACKEND_MAINTENANCE_JOBS=postgres`) failed without actionable operator instructions.
+  - Emitted structured diagnostic error metadata (`queueName`, `backend`, `envVarName`, `remediation`) directing operators to set `QUEUE_BACKEND=redis` and remove queue-specific overrides, citing `adr-bullmq-nats-queue-split.md`.
+  - Wrapped `initializeBullMqWorkers()` at the top level of `apps/workers/src/index.ts` with explicit try/catch logging before terminating the process with exit code 1 for clean orchestrator handling.
+  - Quarantined `queue-postgres-migration.md` with top-level operational caution alerts in both monorepo documentation locations, clarifying that BullMQ v5 (`^5.76.8`) is exclusively Redis-driven and that PostgreSQL queue migration is deferred until BullMQ v6 is adopted.
+  - Added unit test suite in `apps/workers/__tests__/worker-options.test.ts` (2 tests, 100% passing) verifying both valid Redis worker options resolution and structured diagnostic error emission when PostgreSQL backends are requested.
+
 - **Staging Test Identity Lease Expiration Sweep & Optimistic Concurrency Fallback (`apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/__tests__/lib/domains/testing/test-control.identity-repository.test.ts`)**:
   - Resolved `PrismaClientKnownRequestError` HTTP 500 (`Unique constraint failed on the constraint: staging_test_identity_leases_active_slot_idx`) during `POST /api/internal/test-control` (`resetIdentityBaseline`).
   - Previously, `IdentityRepository.leaseIdentity` excluded expired leases from active slot calculations (`leaseExpiresAt: { gt: now }`), but did not update their state in the database. Because the PostgreSQL partial unique index `staging_test_identity_leases_active_slot_idx` enforces uniqueness on `slot` where `state IN ('LEASED', 'RESETTING', 'READY')` regardless of expiration timestamp, subsequent runs selected the expired slot and collided with the stale active row.

@@ -4,6 +4,7 @@ import { validateWorkerEnv } from "./env.js";
 import { initOtel, shutdownOtel } from "./otel.js";
 import { initTracer } from "./tracer.js";
 import { startHealthServer } from "./health.js";
+import { resolveWorkerOptions } from "./worker-options.js";
 import { processMaintenanceJob } from "./processors/maintenance.processor.js";
 import { processNotificationRetryJob } from "./processors/notification.processor.js";
 import { processDataExportJob } from "./processors/export.processor.js";
@@ -25,7 +26,6 @@ import {
 } from "./processors/mpesa-stk.processor.js";
 import { processMpesaReconciliationJob } from "./processors/mpesa-reconciliation.processor.js";
 import {
-  getQueueConnectionOptions,
   getQueueBackendType,
   type MaintenanceJobData,
   type NotificationRetryJobData,
@@ -125,22 +125,7 @@ function initializeBullMqWorkers() {
     concurrency: number = 5,
     limiter?: { max: number; duration: number },
   ) {
-    const backend = getQueueBackendType(queueName);
-    logger.info(
-      `[Worker:${queueName}] Initializing worker with backend: ${backend}`,
-      {
-        queueName,
-        backend,
-        concurrency,
-      },
-    );
-    return {
-      connection: getQueueConnectionOptions(queueName) as any,
-      stalledInterval: 300_000,
-      drainDelay: 30,
-      concurrency,
-      ...(limiter ? { limiter } : {}),
-    };
+    return resolveWorkerOptions(queueName, concurrency, limiter, logger);
   }
 
   // Maintenance & GDPR Queues Worker
@@ -653,5 +638,13 @@ process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Start services
-initializeBullMqWorkers();
+try {
+  initializeBullMqWorkers();
+} catch (err) {
+  logger.error(
+    "[Fatal] BullMQ worker initialization failed on startup. Terminating process for orchestrator restart.",
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  process.exit(1);
+}
 void initializeNatsConsumer();

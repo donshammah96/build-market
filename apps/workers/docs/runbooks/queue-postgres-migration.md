@@ -2,6 +2,21 @@
 
 ## Overview
 
+> [!CAUTION]
+> **OPERATIONAL HOLD / INCOMPATIBLE WITH BULLMQ V5 (DO NOT ENABLE POSTGRES BACKEND)**
+>
+> The monorepo currently standardizes on **BullMQ v5** (`^5.76.8`), which is exclusively Redis-driven via `ioredis` and does **not** support PostgreSQL as a queue runner backend.
+>
+> Configuring `QUEUE_BACKEND=postgres` or any granular `QUEUE_BACKEND_<QUEUE_NAME>=postgres` in production or staging (e.g. Render Dashboard) triggers an intentional fail-closed assertion in `@build/queue-server`:
+>
+> ```text
+> [BullMQ] PostgreSQL queue backend is not supported... BullMQ requires Redis connection options. Please configure QUEUE_BACKEND=redis.
+> ```
+>
+> This causes the worker daemon container to crash immediately on boot.
+>
+> Per [adr-bullmq-nats-queue-split.md](../adr/adr-bullmq-nats-queue-split.md#L40), PostgreSQL queue runner migration is deferred to BullMQ v6's `IQueueBackend` abstraction. Until BullMQ v6 is adopted, all queues must remain on `QUEUE_BACKEND=redis`.
+
 This runbook specifies the operational sequence for canary rollout, soak monitoring, and emergency rollback of BullMQ queues from Redis to PostgreSQL (`bullmq` schema) as specified in `apps/workers/docs/adr/adr-bullmq-nats-queue-split.md`.
 
 ---

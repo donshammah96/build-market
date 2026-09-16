@@ -4,6 +4,17 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Fixed & Hardened — BullMQ v5 Backend Guard & Diagnostic Remediation Logging
+
+- **Worker Options Resolution & Actionable Diagnostic Context (`src/worker-options.ts`, `src/index.ts`, `__tests__/worker-options.test.ts`)**:
+  - Extracted worker options configuration into `resolveWorkerOptions` helper module with structured diagnostic error handling and fail-closed validation.
+  - Eliminated unhandled startup crash loops on Render when `QUEUE_BACKEND=postgres` or queue-specific overrides (`QUEUE_BACKEND_MAINTENANCE_JOBS=postgres`) are configured.
+  - Emitted structured diagnostic error metadata (`queueName`, `backend`, `envVarName`, `remediation`) directing operators to set `QUEUE_BACKEND=redis` and remove queue-specific overrides, citing `adr-bullmq-nats-queue-split.md`.
+  - Wrapped `initializeBullMqWorkers()` at the top level of `src/index.ts` with explicit try/catch logging before terminating the process with exit code 1 for clean orchestrator restart.
+  - Added unit test suite in `__tests__/worker-options.test.ts` (2 tests, 100% passing) verifying both valid Redis worker options resolution and structured diagnostic error emission when PostgreSQL backends are requested.
+- **Operational Runbook Quarantine (`docs/runbooks/queue-postgres-migration.md`)**:
+  - Quarantined `queue-postgres-migration.md` with top-level operational caution alerts, clarifying that BullMQ v5 (`^5.76.8`) is exclusively Redis-driven and that PostgreSQL queue migration is deferred until BullMQ v6 is adopted.
+
 ### Added — P0 worker operations evidence and recovery contract
 
 - Reconciled the worker README with the implemented maintenance, notification, BullMQ, and NATS consumers.
