@@ -108,7 +108,11 @@ export default defineConfig({
             parsed.searchParams.get("__clerk_ticket") ||
             parsed.searchParams.get("ticket");
           if (ticket && parsed.hostname.startsWith("accounts.")) {
-            return `${origin.replace(/\/+$/, "")}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`;
+            const redirectUrl = parsed.searchParams.get("redirect_url");
+            const redirectParam = redirectUrl
+              ? `&redirect_url=${encodeURIComponent(redirectUrl)}`
+              : "";
+            return `${origin.replace(/\/+$/, "")}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}${redirectParam}`;
           }
           return url;
         } catch {

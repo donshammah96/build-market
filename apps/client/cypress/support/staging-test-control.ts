@@ -67,6 +67,15 @@ declare global {
       getStagingProjection(): Chainable<any>;
 
       /**
+       * Polls the staging entity projection until the predicate succeeds or timeout is reached.
+       * Essential for observing asynchronous background workers (e.g. BullMQ retries, webhooks).
+       */
+      pollStagingProjection(
+        predicate: (projection: any) => boolean | void,
+        options?: { timeoutMs?: number; intervalMs?: number },
+      ): Chainable<any>;
+
+      /**
        * Triggers clean dependency-ordered deletion of all fixtures owned by the staging run.
        */
       cleanupStagingRun(): Chainable<{ cleaned: true }>;
@@ -206,6 +215,51 @@ Cypress.Commands.add("getStagingProjection", () => {
     return res;
   });
 });
+
+Cypress.Commands.add(
+  "pollStagingProjection",
+  (
+    predicate: (projection: any) => boolean | void,
+    options: { timeoutMs?: number; intervalMs?: number } = {},
+  ) => {
+    const timeoutMs = options.timeoutMs ?? 15000;
+    const intervalMs = options.intervalMs ?? 500;
+    const startTime = Date.now();
+
+    function poll(): Cypress.Chainable<any> {
+      return cy
+        .task("stagingTestControl:getProjection")
+        .then((projection: any) => {
+          let passed = false;
+          let lastError: unknown = null;
+          try {
+            const res = predicate(projection);
+            if (res !== false) {
+              passed = true;
+            }
+          } catch (err) {
+            lastError = err;
+          }
+
+          if (passed) {
+            return projection;
+          }
+
+          if (Date.now() - startTime >= timeoutMs) {
+            if (lastError) throw lastError;
+            throw new Error(
+              `Timed out after ${timeoutMs}ms waiting for staging projection predicate`,
+            );
+          }
+
+          cy.wait(intervalMs, { log: false });
+          return poll();
+        });
+    }
+
+    return poll();
+  },
+);
 
 Cypress.Commands.add("cleanupStagingRun", () => {
   return cy.task("stagingTestControl:cleanup").then((res: any) => {

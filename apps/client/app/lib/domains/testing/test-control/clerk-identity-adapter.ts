@@ -86,10 +86,12 @@ export async function restoreClerkIdentityBaseline(
       });
     }
 
-    // 2. Set metadata strictly to documented baseline
+    // 2. Set metadata strictly to documented baseline (staging-test-identity-lifecycle.md)
     await clerk.users.updateUserMetadata(lease.clerkId, {
       publicMetadata: {
         role: lease.role,
+        isOnboarded: false,
+        isProfileComplete: false,
         onboardingComplete: false,
       },
       unsafeMetadata: {},

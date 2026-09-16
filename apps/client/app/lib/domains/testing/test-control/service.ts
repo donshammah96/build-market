@@ -142,6 +142,9 @@ export class TestControlService {
         signInUrl: this.resolveTestingSignInUrl(
           ticketResponse.token,
           ticketResponse.url,
+          params.role === "PROFESSIONAL"
+            ? "/professional-portal/dashboard"
+            : "/homeowner-dashboard",
         ),
       });
     } catch (e: any) {
@@ -157,10 +160,17 @@ export class TestControlService {
    * Resolves the application embedded sign-in URL for test tickets.
    * Prevents unhosted accounts.* portal 403 Forbidden errors by routing through /sign-in.
    */
-  private resolveTestingSignInUrl(ticket: string, fallbackUrl: string): string {
+  private resolveTestingSignInUrl(
+    ticket: string,
+    fallbackUrl: string,
+    redirectUrl?: string,
+  ): string {
     const base = env.appUrl ? env.appUrl.replace(/\/+$/, "") : null;
     if (base) {
-      return `${base}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}`;
+      const redirectParam = redirectUrl
+        ? `&redirect_url=${encodeURIComponent(redirectUrl)}`
+        : "";
+      return `${base}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}${redirectParam}`;
     }
     return fallbackUrl;
   }
@@ -257,6 +267,7 @@ export class TestControlService {
         signInUrl: this.resolveTestingSignInUrl(
           ticketResponse.token,
           ticketResponse.url,
+          "/onboarding",
         ),
         projection,
       });

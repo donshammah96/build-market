@@ -79,6 +79,8 @@ describe("clerk-identity-adapter", () => {
     expect(mockUpdateUserMetadata).toHaveBeenCalledWith("clerk_pro_1", {
       publicMetadata: {
         role: "PROFESSIONAL",
+        isOnboarded: false,
+        isProfileComplete: false,
         onboardingComplete: false,
       },
       unsafeMetadata: {},

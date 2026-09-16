@@ -50,7 +50,7 @@ describe("Staging E2E: M-Pesa STK Replay and Idempotency Flow", () => {
 
       // 4. Verify projection: the event is owned by this run and replay did
       // not create a second durable callback record.
-      cy.getStagingProjection().then((proj) => {
+      cy.pollStagingProjection((proj) => {
         expect(proj.fixtures.mpesaTransactions).to.have.length(1);
         expect(proj.fixtures.mpesaCallbackEvents).to.have.length(1);
         expect(
