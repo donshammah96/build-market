@@ -94,11 +94,19 @@ export async function POST(request: NextRequest) {
 
   if (!event) return acceptedResponse(503);
   if (!event.processedAt) {
-    await addMpesaStkCallbackJob({
-      callbackEventId: event.id,
-      transactionId: transaction.id,
-      correlationId: providerEventKey,
-    });
+    try {
+      await addMpesaStkCallbackJob({
+        callbackEventId: event.id,
+        transactionId: transaction.id,
+        correlationId: providerEventKey,
+      });
+    } catch (error) {
+      console.error(
+        "[MpesaStkCallback] Failed to enqueue background job:",
+        error,
+      );
+      return acceptedResponse(503);
+    }
   }
 
   return acceptedResponse();

@@ -157,9 +157,12 @@ if (env.clerk.isSatellite && !satelliteDomain) {
   );
 }
 
-const clerkMiddlewareOptions = isSatelliteConfigured
-  ? { isSatellite: true as const, domain: satelliteDomain as string }
-  : undefined;
+const clerkMiddlewareOptions = {
+  publishableKey: env.clerk.publishableKey,
+  ...(isSatelliteConfigured
+    ? { isSatellite: true as const, domain: satelliteDomain as string }
+    : {}),
+};
 
 const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const nextReq = req;
