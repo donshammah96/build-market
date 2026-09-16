@@ -100,15 +100,14 @@ export function authLoopDiagnostic(
  * function derive the full absolute URL from `req` automatically.
  */
 function resolvePrimaryOrigin(): string {
-  const isSatellite = Boolean(
-    edgeEnv.clerkIsSatellite !== undefined
-      ? edgeEnv.clerkIsSatellite
-      : env.clerk?.isSatellite,
-  );
+  const isSatellite =
+    typeof env.clerk?.isSatellite === "boolean"
+      ? env.clerk.isSatellite
+      : edgeEnv.clerkIsSatellite;
 
   const primarySource = isSatellite
-    ? edgeEnv.clerkPrimarySignInUrl || env.clerk?.primarySignInUrl
-    : edgeEnv.appUrl || env.appUrl;
+    ? env.clerk?.primarySignInUrl || edgeEnv.clerkPrimarySignInUrl
+    : env.appUrl || edgeEnv.appUrl;
 
   if (!primarySource) {
     // FAIL FAST, NOT SILENT: a missing/misconfigured value here previously

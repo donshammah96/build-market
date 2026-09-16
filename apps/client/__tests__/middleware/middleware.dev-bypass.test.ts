@@ -40,6 +40,7 @@ vi.mock("@/app/lib/security/middleware/onboarding-resolver", () => ({
   resolveOnboardingStatus: vi.fn(),
 }));
 vi.mock("@/app/lib/security/middleware/redirect-policy", () => ({
+  clearAuthBounce: vi.fn((res) => res),
   redirectToDashboardForRole: vi.fn(),
   redirectToMaintenance: vi.fn(),
   redirectToOnboarding: vi.fn(),

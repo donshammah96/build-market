@@ -46,6 +46,7 @@ vi.mock("@/app/lib/security/middleware/csp-nonce", () => ({
 }));
 
 vi.mock("@/app/lib/security/middleware/redirect-policy", () => ({
+  clearAuthBounce: (res: NextResponse) => res,
   redirectToSignIn: (req: NextRequest, pathname: string) =>
     NextResponse.redirect(
       new URL(`/sign-in?redirect_url=${encodeURIComponent(pathname)}`, req.url),

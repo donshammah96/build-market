@@ -37,6 +37,7 @@ vi.mock("@/app/lib/security/middleware/onboarding-resolver", () => ({
 }));
 
 vi.mock("@/app/lib/security/middleware/redirect-policy", () => ({
+  clearAuthBounce: (res: any) => res,
   redirectToDashboardForRole: () => new Response("redirect", { status: 307 }),
   redirectToMaintenance: () => new Response("redirect", { status: 307 }),
   redirectToOnboarding: () => new Response("redirect", { status: 307 }),
