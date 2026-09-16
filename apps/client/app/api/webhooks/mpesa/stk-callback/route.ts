@@ -101,11 +101,10 @@ export async function POST(request: NextRequest) {
         correlationId: providerEventKey,
       });
     } catch (error) {
-      console.error(
-        "[MpesaStkCallback] Failed to enqueue background job:",
+      console.warn(
+        "[MpesaStkCallback] Background enqueue failed; queued for reconciliation:",
         error,
       );
-      return acceptedResponse(503);
     }
   }
 

@@ -87,6 +87,7 @@ docs/*
 !docs/CLOUDFLARE_WORKERS_RUNBOOK.md
 !docs/CHANGELOG.md
 !docs/build-market-mpesa-implementation-plan.md
+!docs/STAGING_E2E_STAFF_AUTOPSY.md
 !docs/plans/
 !docs/plans/**
 !docs/specs/
