@@ -18,6 +18,10 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
+- **Edge Middleware Resilience & Internal API Fast-Path (`apps/client/middleware.ts`)**:
+  - Reverted passing undefined `secretKey` in `clerkMiddlewareOptions`, resolving `MIDDLEWARE_INVOCATION_FAILED` (HTTP 500 `@clerk/nextjs: Missing secretKey`) thrown by Clerk's `assertKey` in Vercel Edge Runtime when `CLERK_SECRET_KEY` is not bound to Edge env.
+  - Added fast-path evaluation for service-to-service internal API routes (`/api/internal/*`, `/api/metrics/*`) in outer `middleware.ts` before delegating to `clerkMiddleware`. Validates `x-internal-secret` via constant-time comparison (`ensureValidInternalSecret`), decoupling internal test-control and monitoring probes from Clerk runtime dependencies.
+
 - **Staging E2E Redirect Loop Remediation, Clerk Metadata Alignment & Asynchronous Projection Polling (`apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/sign-in/[[...sign-in]]/page.tsx`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress.config.ts`, `apps/client/cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts`, `apps/client/cypress/e2e/staging/07-queue-recovery.cy.ts`, `apps/client/__tests__/lib/domains/testing/test-control.clerk-identity-adapter.test.ts`, `apps/client/__tests__/lib/domains/testing/test-control.service.test.ts`)**:
   - Resolved Cypress error `The application redirected to https://staging.buildmarket.app/sign-in?redirect_url=%2Fonboarding more than 20 times` across specs `01`, `02`, `03`, `06`, and `08`.
   - Harmonized Clerk public metadata schema in `restoreClerkIdentityBaseline` to include canonical `isOnboarded: false` and `isProfileComplete: false` alongside `role`, matching `staging-test-identity-lifecycle.md` and enabling `hasRoutableAuthClaims` to resolve immediately without 5 repeated timeouts.

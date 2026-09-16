@@ -157,13 +157,9 @@ if (env.clerk.isSatellite && !satelliteDomain) {
   );
 }
 
-const clerkMiddlewareOptions = {
-  publishableKey: env.clerk.publishableKey,
-  secretKey: env.clerk.secretKey,
-  ...(isSatelliteConfigured
-    ? { isSatellite: true as const, domain: satelliteDomain as string }
-    : {}),
-};
+const clerkMiddlewareOptions = isSatelliteConfigured
+  ? { isSatellite: true as const, domain: satelliteDomain as string }
+  : undefined;
 
 const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const nextReq = req;
@@ -559,7 +555,26 @@ const middleware = async (
     return applyDocumentCspHeaders(req, nonce, cspValue);
   }
 
-  // Delegate all authenticated, internal, and protected routes to clerkMiddleware
+  // --- INTERNAL API FAST PATH (Service-to-service, protected by x-internal-secret) ---
+  // Service-to-service internal API calls (/api/internal/*, /api/metrics/*) do not use Clerk session auth;
+  // they authenticate exclusively via constant-time x-internal-secret comparison. Evaluating them before
+  // clerkMiddleware avoids blocking test runners or health probes on remote Clerk API errors.
+  if (isInternalApiRoute(req)) {
+    const secret = req.headers.get("x-internal-secret");
+    const secretError = ensureValidInternalSecret(secret);
+
+    if (secretError) {
+      logMiddlewareDecision(req, "mw_deny_internal_api_unauthorized", {
+        status: secretError.status,
+      });
+      return secretError;
+    }
+
+    logMiddlewareDecision(req, "mw_allow_internal_api");
+    return applyDocumentCspHeaders(req, nonce, cspValue);
+  }
+
+  // Delegate all authenticated, user-facing, and protected routes to clerkMiddleware
   return (clerkHandler as any)(req, event);
 };
 
