@@ -104,17 +104,20 @@ export default defineConfig({
         if (!url) return url;
         try {
           const parsed = new URL(url, origin);
+          const base = new URL(origin);
           const ticket =
             parsed.searchParams.get("__clerk_ticket") ||
             parsed.searchParams.get("ticket");
-          if (ticket && parsed.hostname.startsWith("accounts.")) {
+          if (ticket) {
             const redirectUrl = parsed.searchParams.get("redirect_url");
             const redirectParam = redirectUrl
               ? `&redirect_url=${encodeURIComponent(redirectUrl)}`
               : "";
-            return `${origin.replace(/\/+$/, "")}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}${redirectParam}`;
+            return `${base.origin}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}${redirectParam}`;
           }
-          return url;
+          parsed.protocol = base.protocol;
+          parsed.host = base.host;
+          return parsed.toString();
         } catch {
           return url;
         }

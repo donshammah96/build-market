@@ -85,14 +85,18 @@ export class TestControlRepository {
           email: "e2e_client_1@staging.buildmarket.app",
           role: "CLIENT",
         },
-        select: { id: true },
+        select: { id: true, email: true },
       }),
       prisma.user.findFirst({
         where: {
           email: "e2e_pro_1@staging.buildmarket.app",
           role: "PROFESSIONAL",
         },
-        select: { id: true, professionalProfile: { select: { userId: true } } },
+        select: {
+          id: true,
+          email: true,
+          professionalProfile: { select: { userId: true } },
+        },
       }),
     ]);
 
@@ -129,6 +133,8 @@ export class TestControlRepository {
           return {
             marketplaceLeadId: existing.id,
             routingEventId: existing.routingEvents[0].id,
+            clientEmail: client.email,
+            proEmail: professional.email,
           };
         }
         const lead = await prisma.marketplaceLead.create({
@@ -156,6 +162,8 @@ export class TestControlRepository {
         return {
           marketplaceLeadId: lead.id,
           routingEventId: lead.routingEvents[0]!.id,
+          clientEmail: client.email,
+          proEmail: professional.email,
         };
       }
       case "messaging": {

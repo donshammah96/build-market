@@ -24,18 +24,18 @@ export default function ClerkSignInWidget({
   const ticket =
     searchParams.get("__clerk_ticket") || searchParams.get("ticket");
   const [ticketError, setTicketError] = useState<string | null>(null);
-  const ticketConsumedRef = useRef(false);
+  const lastAttemptedTicketRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (isLoaded && isSignedIn && !ticket) {
       const target = safeTargetUrl || ROUTES.authCallback;
       window.location.href = target;
     }
-  }, [isLoaded, isSignedIn, safeTargetUrl]);
+  }, [isLoaded, isSignedIn, safeTargetUrl, ticket]);
 
   // Handle single-use ticket consumption (e.g. from E2E test-control or invitation links)
   useEffect(() => {
@@ -43,17 +43,23 @@ export default function ClerkSignInWidget({
       !clerk.loaded ||
       !clerk.client ||
       !ticket ||
-      isSignedIn ||
-      ticketConsumedRef.current
+      ticket === lastAttemptedTicketRef.current
     ) {
       return;
     }
 
-    ticketConsumedRef.current = true;
+    lastAttemptedTicketRef.current = ticket;
     let isMounted = true;
 
     async function processTicket() {
       try {
+        // If mounting with an active ticket while signed in to an ambient session,
+        // sign out first to ensure ticket exchange establishes the correct identity (C-1)
+        if (isSignedIn) {
+          await clerk.signOut({ redirectUrl: undefined });
+          if (!isMounted) return;
+        }
+
         const attempt = await clerk.client.signIn.create({
           strategy: "ticket",
           ticket: ticket!,
@@ -103,7 +109,7 @@ export default function ClerkSignInWidget({
 
   if (
     !mounted ||
-    (isLoaded && isSignedIn) ||
+    (isLoaded && isSignedIn && !ticket) ||
     (Boolean(ticket) && !ticketError)
   ) {
     return <AuthPageSkeleton variant="sign-in" />;

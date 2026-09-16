@@ -117,6 +117,9 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
       }
       sessionResult = res;
 
+      // Clear existing cookies before exchanging a single-use ticket
+      cy.clearCookies();
+
       // Visit the Clerk ticket URL to set official session cookies and settle
       cy.visit(res.signInUrl, { failOnStatusCode: false });
       cy.document().then((doc) => {
@@ -133,7 +136,18 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
         expect(pathname).not.to.include("/auth-callback");
       });
       cy.getCookies().should((cookies) => {
-        expect(cookies.some((c) => c.name.startsWith("__session"))).to.be.true;
+        const hasSession = cookies.some((c) => c.name.startsWith("__session"));
+        const hasClientUat = cookies.some((c) =>
+          c.name.startsWith("__client_uat"),
+        );
+        expect(
+          hasSession,
+          "Missing Clerk __session cookie after ticket sign-in",
+        ).to.be.true;
+        expect(
+          hasClientUat,
+          "Missing Clerk __client_uat cookie after ticket sign-in",
+        ).to.be.true;
       });
     })
     .then(() => {
@@ -168,6 +182,9 @@ Cypress.Commands.add(
           state: res.state,
         };
 
+        // Clear existing cookies before exchanging a single-use ticket
+        cy.clearCookies();
+
         // Visit the Clerk ticket URL to establish session cookies and settle
         cy.visit(res.signInUrl, { failOnStatusCode: false });
         cy.document().then((doc) => {
@@ -184,8 +201,20 @@ Cypress.Commands.add(
           expect(pathname).not.to.include("/auth-callback");
         });
         cy.getCookies().should((cookies) => {
-          expect(cookies.some((c) => c.name.startsWith("__session"))).to.be
-            .true;
+          const hasSession = cookies.some((c) =>
+            c.name.startsWith("__session"),
+          );
+          const hasClientUat = cookies.some((c) =>
+            c.name.startsWith("__client_uat"),
+          );
+          expect(
+            hasSession,
+            "Missing Clerk __session cookie after ticket sign-in",
+          ).to.be.true;
+          expect(
+            hasClientUat,
+            "Missing Clerk __client_uat cookie after ticket sign-in",
+          ).to.be.true;
         });
       })
       .then(() => {

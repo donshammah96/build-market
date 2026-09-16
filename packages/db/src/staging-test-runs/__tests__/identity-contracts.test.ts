@@ -30,12 +30,15 @@ describe("staging identity lease contracts", () => {
       expect(canLeaseIdentity(undefined, now)).toBe(true);
     });
 
-    it("blocks leasing for active states: LEASED, RESETTING, READY", () => {
+    it("blocks leasing for active states: LEASED, RESETTING, READY, BORROWED", () => {
       expect(canLeaseIdentity(activeLease, now)).toBe(false);
       expect(
         canLeaseIdentity({ ...activeLease, state: "RESETTING" }, now),
       ).toBe(false);
       expect(canLeaseIdentity({ ...activeLease, state: "READY" }, now)).toBe(
+        false,
+      );
+      expect(canLeaseIdentity({ ...activeLease, state: "BORROWED" }, now)).toBe(
         false,
       );
     });
@@ -60,12 +63,30 @@ describe("staging identity lease contracts", () => {
   });
 
   describe("scenario and role validation", () => {
-    it("allows only onboarding and verification scenarios for identity lease and reset", () => {
+    it("allows only onboarding and verification scenarios for RESETTABLE identity lease and reset", () => {
       expect(isAllowedScenarioForIdentityLease("onboarding")).toBe(true);
       expect(isAllowedScenarioForIdentityLease("verification")).toBe(true);
       expect(isAllowedScenarioForIdentityLease("messaging")).toBe(false);
       expect(isAllowedScenarioForIdentityLease("lead-routing")).toBe(false);
       expect(isAllowedScenarioForIdentityLease("mpesa-replay")).toBe(false);
+    });
+
+    it("allows all valid staging scenarios for BORROWED identity leases", () => {
+      expect(isAllowedScenarioForIdentityLease("onboarding", "BORROWED")).toBe(
+        true,
+      );
+      expect(
+        isAllowedScenarioForIdentityLease("lead-routing", "BORROWED"),
+      ).toBe(true);
+      expect(isAllowedScenarioForIdentityLease("messaging", "BORROWED")).toBe(
+        true,
+      );
+      expect(
+        isAllowedScenarioForIdentityLease("mpesa-replay", "BORROWED"),
+      ).toBe(true);
+      expect(
+        isAllowedScenarioForIdentityLease("non-existent-scenario", "BORROWED"),
+      ).toBe(false);
     });
 
     it("allows reset only for a live lease belonging to the caller run and allowed scenario", () => {
@@ -96,7 +117,7 @@ describe("staging identity lease contracts", () => {
       ).toBe(false);
     });
 
-    it("rejects reset for RELEASED or FAILED leases", () => {
+    it("rejects reset for RELEASED, FAILED, or BORROWED leases", () => {
       expect(
         canResetIdentity(
           { ...activeLease, state: "RELEASED" },
@@ -108,6 +129,14 @@ describe("staging identity lease contracts", () => {
       expect(
         canResetIdentity(
           { ...activeLease, state: "FAILED" },
+          "run_1",
+          "onboarding",
+          now,
+        ),
+      ).toBe(false);
+      expect(
+        canResetIdentity(
+          { ...activeLease, state: "BORROWED" },
           "run_1",
           "onboarding",
           now,

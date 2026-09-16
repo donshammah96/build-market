@@ -9,6 +9,7 @@ import { signStagingGrant, resolveStagingControlSecret } from "./contracts";
 import { testControlRepository, type CreateRunParams } from "./repository";
 import {
   identityRepository,
+  resolveConfiguredSlots,
   type IdentityResetProjection,
 } from "./identity-repository";
 import { restoreClerkIdentityBaseline } from "./clerk-identity-adapter";
@@ -108,35 +109,35 @@ export class TestControlService {
       });
     }
 
-    const email =
-      params.role === "PROFESSIONAL"
-        ? "e2e_pro_1@staging.buildmarket.app"
-        : "e2e_client_1@staging.buildmarket.app";
+    const lease = await identityRepository.leaseIdentity({
+      runId: params.runId,
+      scenario: run.scenario,
+      role: params.role,
+      kind: "BORROWED",
+    });
+
+    if (!lease) {
+      return err({
+        error: "IDENTITY_LEASE_EXHAUSTED",
+        message: `All staging identity slots for role "${params.role}" are currently leased`,
+        status: 409,
+      });
+    }
 
     try {
       const clerk = await clerkClient();
-      const usersResponse = await (clerk as any).users.getUserList({
-        emailAddress: [email],
-      });
-
-      const user = usersResponse.data?.[0];
-      if (!user) {
-        return err({
-          error: "STAGING_TEST_USER_MISSING",
-          message: `Pre-provisioned Clerk user ${email} was not found in staging pool`,
-          status: 404,
-        });
-      }
-
       const ticketResponse = await (
         clerk as any
       ).signInTokens.createSignInToken({
-        userId: user.id,
+        userId: lease.clerkId,
         expiresInSeconds: 300,
       });
 
+      const slot = resolveConfiguredSlots().find((s) => s.slot === lease.slot);
+      const email = lease.email ?? slot?.email ?? "";
+
       return ok({
-        userId: user.id,
+        userId: lease.userId,
         email,
         ticket: ticketResponse.token,
         signInUrl: this.resolveTestingSignInUrl(

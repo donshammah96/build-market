@@ -79,6 +79,7 @@ export async function restoreClerkIdentityBaseline(
 
     if (!isPoolUser) {
       // Hard stop: refuse to touch users outside the staging pool
+      await markLeaseFailed(lease.id);
       return err({
         error: "NON_POOL_CLERK_USER",
         message: `Clerk user ${lease.clerkId} does not belong to the approved staging identity pool`,

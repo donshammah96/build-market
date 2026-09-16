@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { STAGING_SCENARIOS } from "./contracts.js";
 
 export const STAGING_IDENTITY_LEASE_STATES = [
   "LEASED",
   "RESETTING",
   "READY",
+  "BORROWED",
   "RELEASED",
   "FAILED",
 ] as const;
@@ -15,7 +17,11 @@ export const ACTIVE_LEASE_STATES: readonly StagingIdentityLeaseState[] = [
   "LEASED",
   "RESETTING",
   "READY",
+  "BORROWED",
 ];
+
+export const IDENTITY_LEASE_KINDS = ["RESETTABLE", "BORROWED"] as const;
+export type IdentityLeaseKind = (typeof IDENTITY_LEASE_KINDS)[number];
 
 export const ALLOWED_IDENTITY_LEASE_SCENARIOS = [
   "onboarding",
@@ -27,7 +33,11 @@ export type AllowedIdentityLeaseScenario =
 
 export function isAllowedScenarioForIdentityLease(
   scenario: string,
-): scenario is AllowedIdentityLeaseScenario {
+  kind: IdentityLeaseKind = "RESETTABLE",
+): boolean {
+  if (kind === "BORROWED") {
+    return (STAGING_SCENARIOS as readonly string[]).includes(scenario);
+  }
   return (ALLOWED_IDENTITY_LEASE_SCENARIOS as readonly string[]).includes(
     scenario,
   );
@@ -64,8 +74,14 @@ export function canResetIdentity(
   now = new Date(),
 ): boolean {
   if (lease.stagingTestRunId !== runId) return false;
-  if (!isAllowedScenarioForIdentityLease(scenario)) return false;
-  if (lease.state === "RELEASED" || lease.state === "FAILED") return false;
+  if (!isAllowedScenarioForIdentityLease(scenario, "RESETTABLE")) return false;
+  if (
+    lease.state === "RELEASED" ||
+    lease.state === "FAILED" ||
+    lease.state === "BORROWED"
+  ) {
+    return false;
+  }
   return new Date(lease.leaseExpiresAt).getTime() > now.getTime();
 }
 

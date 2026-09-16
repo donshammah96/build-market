@@ -114,6 +114,7 @@ function findBannedLogKeyInSegment(segment) {
 
 const ENV_ALLOWLIST_FILES = new Set([
   "app/lib/infrastructure/env.ts",
+  "app/lib/infrastructure/edge-env.ts",
   "next.config.ts",
   "instrumentation.ts",
   "sentry.client.config.ts",

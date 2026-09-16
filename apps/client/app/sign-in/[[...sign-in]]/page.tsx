@@ -34,8 +34,16 @@ export default async function SignInPage({
 
   const safeRedirectUrl = getSafeRedirectUrl(rawRedirectUrl);
 
+  const firstParam = (v: string | string[] | undefined): string | null =>
+    typeof v === "string" ? v : Array.isArray(v) ? (v[0] ?? null) : null;
+
+  const ticket =
+    firstParam(resolvedParams?.__clerk_ticket) ??
+    firstParam(resolvedParams?.ticket);
+
   const { userId } = await auth();
-  if (userId) {
+  // Ticket outranks ambient session: do not redirect away if ticket is present (C-1)
+  if (userId && !ticket) {
     redirect(safeRedirectUrl ?? "/auth-callback");
   }
 

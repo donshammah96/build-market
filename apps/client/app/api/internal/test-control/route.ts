@@ -16,10 +16,11 @@ function notFoundResponse(reason?: string) {
 }
 
 function deny(reason: string, meta: Record<string, unknown> = {}) {
+  const detail = meta.error ? String(meta.error) : undefined;
   console.warn("test_control_denied", {
     reason,
     path: "/api/internal/test-control",
-    ...meta,
+    detail,
   });
   return notFoundResponse(reason);
 }

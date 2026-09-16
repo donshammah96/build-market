@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { STAGING_SCENARIOS } from "@build/db/staging-test-runs";
+import {
+  STAGING_SCENARIOS,
+  type IdentityLeaseKind,
+  IDENTITY_LEASE_KINDS,
+} from "@build/db/staging-test-runs";
+
+export { type IdentityLeaseKind, IDENTITY_LEASE_KINDS };
 
 export const STAGING_GRANT_AUDIENCE = "buildmarket-staging-test-control";
 export const MAX_GRANT_LIFETIME_SECONDS = 300; // 5 minutes

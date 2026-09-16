@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { testControlService } from "@/app/lib/domains/testing/test-control/service";
 import { testControlRepository } from "@/app/lib/domains/testing/test-control/repository";
+import { identityRepository } from "@/app/lib/domains/testing/test-control/identity-repository";
 import { verifyStagingGrant } from "@/app/lib/domains/testing/test-control/contracts";
 import { ok } from "@/app/lib/errors/result";
 
@@ -88,6 +89,18 @@ describe("TestControlService", () => {
       mockRun as any,
     );
 
+    vi.spyOn(identityRepository, "leaseIdentity").mockResolvedValue({
+      id: "lease-uuid-1",
+      stagingTestRunId: "run-uuid-1",
+      slot: "pro-1",
+      role: "PROFESSIONAL",
+      userId: "user_pro_1",
+      clerkId: "user_clerk_staging_pro_1",
+      email: "e2e_pro_1@staging.buildmarket.app",
+      state: "BORROWED",
+      leaseExpiresAt: new Date(Date.now() + 300000),
+    });
+
     const result = await testControlService.issueBrowserSessionHandoff({
       runId: "run-uuid-1",
       role: "PROFESSIONAL",
@@ -95,11 +108,38 @@ describe("TestControlService", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.userId).toBe("user_clerk_staging_pro_1");
+      expect(result.data.userId).toBe("user_pro_1");
+      expect(result.data.email).toBe("e2e_pro_1@staging.buildmarket.app");
       expect(result.data.ticket).toBe("ticket_mock_123");
       expect(result.data.signInUrl).toBe(
         "http://localhost:3500/sign-in?__clerk_ticket=ticket_mock_123&redirect_url=%2Fprofessional-portal%2Fdashboard",
       );
+    }
+  });
+
+  it("returns IDENTITY_LEASE_EXHAUSTED if all identity slots are occupied", async () => {
+    const mockRun = {
+      id: "run-uuid-1",
+      scenario: "lead-routing",
+      state: "ACTIVE",
+      expiresAt: new Date(Date.now() + 300000),
+    };
+
+    vi.spyOn(testControlRepository, "findRunById").mockResolvedValue(
+      mockRun as any,
+    );
+
+    vi.spyOn(identityRepository, "leaseIdentity").mockResolvedValue(null);
+
+    const result = await testControlService.issueBrowserSessionHandoff({
+      runId: "run-uuid-1",
+      role: "PROFESSIONAL",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("IDENTITY_LEASE_EXHAUSTED");
+      expect(result.status).toBe(409);
     }
   });
 

@@ -4,6 +4,7 @@ import {
   parseStagingIdentitySlots,
   findAvailableSlotForRole,
   type StagingSlotConfig,
+  type IdentityLeaseKind,
 } from "@build/db/staging-test-runs";
 import { env } from "@/app/lib/infrastructure/env";
 
@@ -14,6 +15,7 @@ export interface IdentityLease {
   role: "CLIENT" | "PROFESSIONAL";
   userId: string;
   clerkId: string;
+  email?: string;
   state: string;
   leaseExpiresAt: Date;
   resetAt?: Date | null;
@@ -67,7 +69,7 @@ const DEFAULT_STAGING_SLOTS: readonly StagingSlotConfig[] = [
   },
 ];
 
-function resolveConfiguredSlots(): readonly StagingSlotConfig[] {
+export function resolveConfiguredSlots(): readonly StagingSlotConfig[] {
   const envSlots = env.stagingTestControl?.identitySlots;
   if (!envSlots) {
     return DEFAULT_STAGING_SLOTS;
@@ -90,15 +92,17 @@ export class IdentityRepository {
    */
   async leaseIdentity(input: {
     runId: string;
-    scenario: "onboarding" | "verification";
+    scenario: string;
     role: "CLIENT" | "PROFESSIONAL";
+    kind?: IdentityLeaseKind;
     now?: Date;
   }): Promise<IdentityLease | null> {
     const now = input.now ?? new Date();
+    const kind = input.kind ?? "RESETTABLE";
 
-    if (!isAllowedScenarioForIdentityLease(input.scenario)) {
+    if (!isAllowedScenarioForIdentityLease(input.scenario, kind)) {
       throw new Error(
-        `Disallowed scenario "${input.scenario}" for identity lease. Only onboarding and verification are permitted.`,
+        `Disallowed scenario "${input.scenario}" for identity lease kind "${kind}".`,
       );
     }
 
@@ -127,20 +131,25 @@ export class IdentityRepository {
       where: {
         stagingTestRunId: input.runId,
         role: input.role,
-        state: { in: ["LEASED", "RESETTING", "READY"] },
+        state: { in: ["LEASED", "RESETTING", "READY", "BORROWED"] },
         leaseExpiresAt: { gt: now },
       },
     });
 
     if (existingRunLease) {
-      return existingRunLease as unknown as IdentityLease;
+      const slots = resolveConfiguredSlots();
+      const slotConfig = slots.find((s) => s.slot === existingRunLease.slot);
+      return {
+        ...existingRunLease,
+        email: slotConfig?.email,
+      } as unknown as IdentityLease;
     }
 
     // 1. Eagerly transition expired leases to RELEASED so the partial unique index
     // "staging_test_identity_leases_active_slot_idx" does not block re-leasing slots
     await prisma.stagingTestIdentityLease.updateMany({
       where: {
-        state: { in: ["LEASED", "RESETTING", "READY"] },
+        state: { in: ["LEASED", "RESETTING", "READY", "BORROWED"] },
         leaseExpiresAt: { lte: now },
       },
       data: {
@@ -154,7 +163,7 @@ export class IdentityRepository {
     // 2. Query currently active leases across all runs
     const activeLeases = await prisma.stagingTestIdentityLease.findMany({
       where: {
-        state: { in: ["LEASED", "RESETTING", "READY"] },
+        state: { in: ["LEASED", "RESETTING", "READY", "BORROWED"] },
         leaseExpiresAt: { gt: now },
       },
       select: { slot: true },
@@ -198,7 +207,11 @@ export class IdentityRepository {
           },
         });
 
-        return created as unknown as IdentityLease;
+        return {
+          ...created,
+          email: availableSlot.email,
+          kind,
+        } as unknown as IdentityLease;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err ?? "");
         const isUniqueConstraintViolation =
