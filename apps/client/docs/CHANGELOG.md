@@ -18,6 +18,13 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
+- **Staging Test Identity Lease Expiration Sweep & Optimistic Concurrency Fallback (`apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/__tests__/lib/domains/testing/test-control.identity-repository.test.ts`)**:
+  - Resolved `PrismaClientKnownRequestError` HTTP 500 (`Unique constraint failed on the constraint: staging_test_identity_leases_active_slot_idx`) during `POST /api/internal/test-control` (`resetIdentityBaseline`).
+  - Previously, `IdentityRepository.leaseIdentity` excluded expired leases from active slot calculations (`leaseExpiresAt: { gt: now }`), but did not update their state in the database. Because the PostgreSQL partial unique index `staging_test_identity_leases_active_slot_idx` enforces uniqueness on `slot` where `state IN ('LEASED', 'RESETTING', 'READY')` regardless of expiration timestamp, subsequent runs selected the expired slot and collided with the stale active row.
+  - Implemented eager in-band reclamation in `leaseIdentity` to update expired leases (`state IN ('LEASED', 'RESETTING', 'READY') AND leaseExpiresAt <= now`) to `RELEASED` before evaluating available pool slots.
+  - Added optimistic collision handling in the lease creation loop to catch `P2002` / `staging_test_identity_leases_active_slot_idx` conflicts from concurrent runners, trying subsequent pool slots or returning `null` (mapping cleanly to HTTP 409 `IDENTITY_LEASE_EXHAUSTED` instead of HTTP 500).
+  - Added regression test suite simulating PostgreSQL partial unique index constraints, verifying automatic reclamation and multi-worker race recovery.
+
 - **Edge Middleware Resilience & Internal API Fast-Path (`apps/client/middleware.ts`)**:
   - Reverted passing undefined `secretKey` in `clerkMiddlewareOptions`, resolving `MIDDLEWARE_INVOCATION_FAILED` (HTTP 500 `@clerk/nextjs: Missing secretKey`) thrown by Clerk's `assertKey` in Vercel Edge Runtime when `CLERK_SECRET_KEY` is not bound to Edge env.
   - Added fast-path evaluation for service-to-service internal API routes (`/api/internal/*`, `/api/metrics/*`) in outer `middleware.ts` before delegating to `clerkMiddleware`. Validates `x-internal-secret` via constant-time comparison (`ensureValidInternalSecret`), decoupling internal test-control and monitoring probes from Clerk runtime dependencies.

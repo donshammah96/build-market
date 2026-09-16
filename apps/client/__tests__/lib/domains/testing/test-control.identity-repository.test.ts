@@ -166,6 +166,158 @@ describe("TestControl IdentityRepository", () => {
       expect(lease3).toBeNull();
     });
 
+    it("reclaims expired leases so active_slot_idx unique constraint is not violated", async () => {
+      const mockRun = {
+        id: "run-new",
+        scenario: "onboarding",
+        state: "ACTIVE",
+        expiresAt,
+      };
+
+      mockPrisma.stagingTestRun.findUnique.mockResolvedValue(mockRun);
+      mockPrisma.stagingTestIdentityLease.findFirst.mockResolvedValue(null);
+
+      // Existing lease in DB is expired (leaseExpiresAt < now) but still has state 'LEASED'
+      const expiredLease = {
+        id: "lease-old",
+        stagingTestRunId: "run-old",
+        slot: "pro-1",
+        role: "PROFESSIONAL",
+        userId: "user_pro_1",
+        clerkId: "clerk_pro_1",
+        state: "LEASED",
+        leaseExpiresAt: new Date(now.getTime() - 60_000), // expired 1 minute ago
+      };
+
+      const dbLeases = [expiredLease];
+
+      mockPrisma.stagingTestIdentityLease.updateMany.mockImplementation(
+        async ({ where, data }: any) => {
+          let count = 0;
+          for (const l of dbLeases) {
+            let match = true;
+            if (where?.state?.in && !where.state.in.includes(l.state))
+              match = false;
+            if (
+              where?.leaseExpiresAt?.lte &&
+              !(l.leaseExpiresAt <= where.leaseExpiresAt.lte)
+            )
+              match = false;
+            if (match) {
+              Object.assign(l, data);
+              count++;
+            }
+          }
+          return { count };
+        },
+      );
+
+      // findMany respects the WHERE clause passed by the repository
+      mockPrisma.stagingTestIdentityLease.findMany.mockImplementation(
+        async ({ where }: any) => {
+          return dbLeases.filter((l) => {
+            if (where?.state?.in && !where.state.in.includes(l.state))
+              return false;
+            if (
+              where?.leaseExpiresAt?.gt &&
+              !(l.leaseExpiresAt > where.leaseExpiresAt.gt)
+            )
+              return false;
+            return true;
+          });
+        },
+      );
+
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: "user_pro_1",
+        clerkId: "clerk_pro_1",
+        email: "e2e_pro_1@staging.buildmarket.app",
+        role: "PROFESSIONAL",
+      });
+
+      // PostgreSQL partial unique index:
+      // CREATE UNIQUE INDEX "staging_test_identity_leases_active_slot_idx"
+      // ON "staging_test_identity_leases"("slot") WHERE "state" IN ('LEASED', 'RESETTING', 'READY');
+      mockPrisma.stagingTestIdentityLease.create.mockImplementation(
+        async ({ data }: any) => {
+          const activeConflict = dbLeases.find(
+            (l) =>
+              l.slot === data.slot &&
+              ["LEASED", "RESETTING", "READY"].includes(l.state),
+          );
+          if (activeConflict) {
+            throw new Error(
+              "Unique constraint failed on the constraint: `staging_test_identity_leases_active_slot_idx`",
+            );
+          }
+          const created = { id: `lease-${data.slot}`, ...data };
+          dbLeases.push(created);
+          return created;
+        },
+      );
+
+      // Calling leaseIdentity should successfully lease pro-1 by releasing/reclaiming the expired lease first
+      const lease = await identityRepository.leaseIdentity({
+        runId: "run-new",
+        scenario: "onboarding",
+        role: "PROFESSIONAL",
+        now,
+      });
+
+      expect(lease).not.toBeNull();
+      expect(lease?.slot).toBe("pro-1");
+      expect(lease?.state).toBe("LEASED");
+    });
+
+    it("handles concurrent race condition by falling back to next available slot on unique constraint conflict", async () => {
+      const mockRun = {
+        id: "run-race",
+        scenario: "onboarding",
+        state: "ACTIVE",
+        expiresAt,
+      };
+
+      mockPrisma.stagingTestRun.findUnique.mockResolvedValue(mockRun);
+      mockPrisma.stagingTestIdentityLease.findFirst.mockResolvedValue(null);
+      mockPrisma.stagingTestIdentityLease.findMany.mockResolvedValue([]);
+      mockPrisma.stagingTestIdentityLease.updateMany.mockResolvedValue({
+        count: 0,
+      });
+
+      mockPrisma.user.findFirst.mockImplementation(async ({ where }: any) => {
+        return {
+          id: `user_${where.email}`,
+          clerkId: `clerk_${where.email}`,
+          email: where.email,
+          role: where.role,
+        };
+      });
+
+      // Simulate pro-1 colliding concurrently on create with another process
+      mockPrisma.stagingTestIdentityLease.create.mockImplementation(
+        async ({ data }: any) => {
+          if (data.slot === "pro-1") {
+            const err = new Error(
+              "Unique constraint failed on the constraint: `staging_test_identity_leases_active_slot_idx`",
+            );
+            (err as any).code = "P2002";
+            throw err;
+          }
+          return { id: `lease-${data.slot}`, ...data };
+        },
+      );
+
+      const lease = await identityRepository.leaseIdentity({
+        runId: "run-race",
+        scenario: "onboarding",
+        role: "PROFESSIONAL",
+        now,
+      });
+
+      expect(lease).not.toBeNull();
+      expect(lease?.slot).toBe("pro-2");
+    });
+
     it("rejects lease requests for disallowed scenarios", async () => {
       const mockRun = {
         id: "run-msg",

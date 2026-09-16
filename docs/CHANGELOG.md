@@ -4,6 +4,13 @@
 
 ### Security & Fixed — Monorepo Architectural Hardening, Concurrency & Security Alignment
 
+- **Staging Test Identity Lease Expiration Sweep & Optimistic Concurrency Fallback (`apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/__tests__/lib/domains/testing/test-control.identity-repository.test.ts`)**:
+  - Resolved `PrismaClientKnownRequestError` HTTP 500 (`Unique constraint failed on the constraint: staging_test_identity_leases_active_slot_idx`) during `POST /api/internal/test-control` (`resetIdentityBaseline`).
+  - Previously, `IdentityRepository.leaseIdentity` excluded expired leases from active slot calculations (`leaseExpiresAt: { gt: now }`), but did not update their state in the database. Because the PostgreSQL partial unique index `staging_test_identity_leases_active_slot_idx` enforces uniqueness on `slot` where `state IN ('LEASED', 'RESETTING', 'READY')` regardless of expiration timestamp, subsequent runs selected the expired slot and collided with the stale active row.
+  - Implemented eager in-band reclamation in `leaseIdentity` to update expired leases (`state IN ('LEASED', 'RESETTING', 'READY') AND leaseExpiresAt <= now`) to `RELEASED` before evaluating available pool slots.
+  - Added optimistic collision handling in the lease creation loop to catch `P2002` / `staging_test_identity_leases_active_slot_idx` conflicts from concurrent runners, trying subsequent pool slots or returning `null` (mapping cleanly to HTTP 409 `IDENTITY_LEASE_EXHAUSTED` instead of HTTP 500).
+  - Added regression test suite simulating PostgreSQL partial unique index constraints, verifying automatic reclamation and multi-worker race recovery.
+
 - **Cypress E2E Staging Auth Command Queue Chaining (`apps/client/cypress/support/staging-test-control.ts`)**:
   - Resolved `CypressError: cy.then() failed because you are mixing up async and sync code` across staging E2E suites (`01-onboarding-and-verification.cy.ts`, `02-routing-and-masked-disclosure.cy.ts`, `03-messaging.cy.ts`, `04-mpesa-replay-and-idempotency.cy.ts`, `06-messaging.cy.ts`, `07-queue-recovery.cy.ts`, `08-verification-public-trust.cy.ts`).
   - Chained `cy.visit(res.signInUrl).location("pathname", { timeout: 15000 }).should("not.include", "/sign-in")` directly to return the command promise and map the yielded subject cleanly inside `loginStagingUser` and `resetStagingIdentity`, eliminating premature synchronous return value violations in Cypress command callbacks.

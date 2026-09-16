@@ -136,9 +136,22 @@ export class IdentityRepository {
       return existingRunLease as unknown as IdentityLease;
     }
 
+    // 1. Eagerly transition expired leases to RELEASED so the partial unique index
+    // "staging_test_identity_leases_active_slot_idx" does not block re-leasing slots
+    await prisma.stagingTestIdentityLease.updateMany({
+      where: {
+        state: { in: ["LEASED", "RESETTING", "READY"] },
+        leaseExpiresAt: { lte: now },
+      },
+      data: {
+        state: "RELEASED",
+        releasedAt: now,
+      },
+    });
+
     const slots = resolveConfiguredSlots();
 
-    // Query currently active leases across all runs
+    // 2. Query currently active leases across all runs
     const activeLeases = await prisma.stagingTestIdentityLease.findMany({
       where: {
         state: { in: ["LEASED", "RESETTING", "READY"] },
@@ -147,42 +160,63 @@ export class IdentityRepository {
       select: { slot: true },
     });
 
-    const activeSlotSet = new Set(activeLeases.map((l) => l.slot));
-    const availableSlot = findAvailableSlotForRole(
-      slots,
-      input.role,
-      activeSlotSet,
-    );
+    const attemptedSlots = new Set(activeLeases.map((l) => l.slot));
 
-    if (!availableSlot) {
-      return null;
-    }
-
-    // Resolve user strictly from the server-configured slot email
-    const user = await prisma.user.findFirst({
-      where: { email: availableSlot.email, role: input.role },
-      select: { id: true, clerkId: true },
-    });
-
-    if (!user) {
-      throw new Error(
-        `STAGING_TEST_USER_MISSING: Pre-provisioned user "${availableSlot.email}" was not found in DB`,
+    while (true) {
+      const availableSlot = findAvailableSlotForRole(
+        slots,
+        input.role,
+        attemptedSlots,
       );
+
+      if (!availableSlot) {
+        return null;
+      }
+
+      // Resolve user strictly from the server-configured slot email
+      const user = await prisma.user.findFirst({
+        where: { email: availableSlot.email, role: input.role },
+        select: { id: true, clerkId: true },
+      });
+
+      if (!user) {
+        throw new Error(
+          `STAGING_TEST_USER_MISSING: Pre-provisioned user "${availableSlot.email}" was not found in DB`,
+        );
+      }
+
+      try {
+        const created = await prisma.stagingTestIdentityLease.create({
+          data: {
+            stagingTestRunId: input.runId,
+            slot: availableSlot.slot,
+            role: input.role,
+            userId: user.id,
+            clerkId: user.clerkId,
+            state: "LEASED",
+            leaseExpiresAt: new Date(now.getTime() + 300_000), // 5 minute lease
+          },
+        });
+
+        return created as unknown as IdentityLease;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err ?? "");
+        const isUniqueConstraintViolation =
+          message.includes("staging_test_identity_leases_active_slot_idx") ||
+          (typeof err === "object" &&
+            err !== null &&
+            "code" in err &&
+            (err as any).code === "P2002");
+
+        if (isUniqueConstraintViolation) {
+          // Concurrently claimed by another runner; mark attempted and evaluate remaining pool slots
+          attemptedSlots.add(availableSlot.slot);
+          continue;
+        }
+
+        throw err;
+      }
     }
-
-    const created = await prisma.stagingTestIdentityLease.create({
-      data: {
-        stagingTestRunId: input.runId,
-        slot: availableSlot.slot,
-        role: input.role,
-        userId: user.id,
-        clerkId: user.clerkId,
-        state: "LEASED",
-        leaseExpiresAt: new Date(now.getTime() + 300_000), // 5 minute lease
-      },
-    });
-
-    return created as unknown as IdentityLease;
   }
 
   /**
