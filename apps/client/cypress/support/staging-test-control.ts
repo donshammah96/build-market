@@ -118,7 +118,16 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
       sessionResult = res;
 
       // Visit the Clerk ticket URL to set official session cookies and settle
-      cy.visit(res.signInUrl);
+      cy.visit(res.signInUrl, { failOnStatusCode: false });
+      cy.document().then((doc) => {
+        if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
+          cy.task(
+            "log",
+            `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
+          );
+          throw new Error(`Auth loop broken: ${doc.body.innerText}`);
+        }
+      });
       cy.location("pathname", { timeout: 15000 }).should((pathname) => {
         expect(pathname).not.to.include("/sign-in");
         expect(pathname).not.to.include("/auth-callback");
@@ -160,7 +169,16 @@ Cypress.Commands.add(
         };
 
         // Visit the Clerk ticket URL to establish session cookies and settle
-        cy.visit(res.signInUrl);
+        cy.visit(res.signInUrl, { failOnStatusCode: false });
+        cy.document().then((doc) => {
+          if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
+            cy.task(
+              "log",
+              `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
+            );
+            throw new Error(`Auth loop broken: ${doc.body.innerText}`);
+          }
+        });
         cy.location("pathname", { timeout: 15000 }).should((pathname) => {
           expect(pathname).not.to.include("/sign-in");
           expect(pathname).not.to.include("/auth-callback");

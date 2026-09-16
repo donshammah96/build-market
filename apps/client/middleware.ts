@@ -17,6 +17,7 @@ import {
 } from "@/app/lib/security/middleware/route-matcher";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
 import {
+  clearAuthBounce,
   redirectToDashboardForRole,
   redirectToMaintenance,
   redirectToOnboarding,
@@ -59,15 +60,34 @@ const applyDocumentCspHeaders = (
   req: NextRequest,
   nonce: string,
   cspValue: string,
+  options?: {
+    edgeUserId?: string | null;
+    decision?: string;
+    authReason?: string;
+  },
 ): NextResponse => {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", cspValue);
+  if (options?.edgeUserId !== undefined) {
+    requestHeaders.set("x-bm-edge-user", options.edgeUserId ?? "");
+  }
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   const cspHeaderName = env.cspReportOnly
     ? "Content-Security-Policy-Report-Only"
     : "Content-Security-Policy";
   response.headers.set(cspHeaderName, cspValue);
+
+  // Diagnostic response headers in staging/preview/dev (P-2)
+  if (env.otel?.ddEnv === "staging" || env.isVercelPreview || env.isDev) {
+    if (options?.decision) {
+      response.headers.set("x-bm-mw-decision", options.decision);
+    }
+    if (options?.authReason) {
+      response.headers.set("x-bm-auth-reason", options.authReason);
+    }
+  }
+
   return response;
 };
 
@@ -351,7 +371,10 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       // query params (e.g. ?expectedRole=professional) are silently
       // dropped on same-origin redirects and the post-login handoff
       // loses context.
-      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search);
+      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search, {
+        nonce,
+        cspValue,
+      });
     }
 
     const metadata = parseMiddlewareSessionMetadata(sessionClaims);
@@ -399,7 +422,12 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       source: status.source,
       reason: status.reason,
     });
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+    return clearAuthBounce(
+      applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+        edgeUserId: userId,
+        decision: "mw_allow_onboarding",
+      }),
+    );
   }
 
   // 3. Protected routes - require authentication AND completed onboarding
@@ -421,7 +449,10 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
         routeClass: "protected",
       });
       // See onboarding-route note above: must include the search string.
-      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search);
+      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search, {
+        nonce,
+        cspValue,
+      });
     }
 
     const metadata = parseMiddlewareSessionMetadata(sessionClaims);
@@ -470,7 +501,12 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
           status: status.status,
         },
       );
-      return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+      return clearAuthBounce(
+        applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+          edgeUserId: userId,
+          decision: "mw_allow_professional_pending_verification",
+        }),
+      );
     }
 
     if (isPendingVerificationRoute && status.role === "PROFESSIONAL") {
@@ -506,12 +542,19 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       source: status.source,
       role: status.role,
     });
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+    return clearAuthBounce(
+      applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+        edgeUserId: userId,
+        decision: "mw_allow_protected",
+      }),
+    );
   }
 
   // 4. All other routes - allow access
   logMiddlewareDecision(nextReq, "mw_allow_default");
-  return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+  return applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+    decision: "mw_allow_default",
+  });
 }, clerkMiddlewareOptions);
 
 const middleware = async (

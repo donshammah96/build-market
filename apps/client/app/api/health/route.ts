@@ -45,6 +45,9 @@ interface HealthResponse {
   };
   circuitBreakers: Record<string, unknown>;
   caches: Record<string, unknown>;
+  buildSha: string | null;
+  deploymentId: string | null;
+  bootedAt: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -235,12 +238,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     try {
       await prisma.$queryRaw`SELECT 1`;
       return NextResponse.json(
-        { status: "healthy", timestamp: new Date().toISOString() },
+        {
+          status: "healthy",
+          timestamp: new Date().toISOString(),
+          version: env.appVersion,
+          buildSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+          deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
+          bootedAt: new Date(BOOT_TIME).toISOString(),
+        },
         { status: 200, headers: { "Cache-Control": "no-store" } },
       );
     } catch {
       return NextResponse.json(
-        { status: "unhealthy", timestamp: new Date().toISOString() },
+        {
+          status: "unhealthy",
+          timestamp: new Date().toISOString(),
+          version: env.appVersion,
+          buildSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+          deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
+          bootedAt: new Date(BOOT_TIME).toISOString(),
+        },
         { status: 503, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -302,6 +319,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     circuitBreakers,
     caches,
+    buildSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
+    bootedAt: new Date(BOOT_TIME).toISOString(),
   };
 
   // ── Log unhealthy dependencies ───────────────────────────────────────

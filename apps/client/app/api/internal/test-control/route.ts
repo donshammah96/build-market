@@ -15,6 +15,15 @@ function notFoundResponse(reason?: string) {
   return new NextResponse(null, { status: 404, headers });
 }
 
+function deny(reason: string, meta: Record<string, unknown> = {}) {
+  console.warn("test_control_denied", {
+    reason,
+    path: "/api/internal/test-control",
+    ...meta,
+  });
+  return notFoundResponse(reason);
+}
+
 export async function POST(request: NextRequest) {
   // 1. Hard fail-closed environment gate before dynamic imports
   const isStaging =
@@ -24,14 +33,14 @@ export async function POST(request: NextRequest) {
   const isTest = env.isTest;
 
   if (!isStaging && !isTest) {
-    return notFoundResponse("not_staging_environment");
+    return deny("not_staging_environment");
   }
 
   // 2. Validate internal service secret
   const internalSecretHeader = request.headers.get("x-internal-secret");
   const secretError = ensureValidInternalSecret(internalSecretHeader);
   if (secretError !== null) {
-    return notFoundResponse("internal_secret_rejected");
+    return deny("internal_secret_rejected", { error: secretError });
   }
 
   // 3. A separately rotated control secret is mandatory in staging. Test mode
@@ -39,7 +48,7 @@ export async function POST(request: NextRequest) {
   // deployable secret.
   const configuredTestSecret = env.stagingTestControl?.secret;
   if (!configuredTestSecret && !isTest) {
-    return notFoundResponse("missing_configured_test_control_secret");
+    return deny("missing_configured_test_control_secret");
   }
   if (configuredTestSecret) {
     const testSecretHeader = request.headers.get("x-test-control-secret");
@@ -47,11 +56,19 @@ export async function POST(request: NextRequest) {
       !testSecretHeader ||
       !timingSafeEqualStrings(testSecretHeader, configuredTestSecret)
     ) {
-      return notFoundResponse("test_control_secret_mismatch");
+      return deny("test_control_secret_mismatch");
     }
   }
 
-  // 4. Cap request body size
+  // 4. Cap request body size (check content-length before reading text buffer)
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number.parseInt(contentLengthHeader, 10);
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+  }
+
   const rawBody = await request.text();
   if (Buffer.byteLength(rawBody, "utf-8") > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 });
@@ -86,13 +103,41 @@ export async function POST(request: NextRequest) {
   // 6. Action-specific verification: `create-run` creates the grant; all other actions require the grant
   if (payload.action !== "create-run") {
     const grantHeader = request.headers.get("x-test-control-grant");
-    const secret = resolveStagingControlSecret(configuredTestSecret, isTest);
+    if (!grantHeader) {
+      return deny("grant_missing", {
+        action: payload.action,
+        runId: payload.runId,
+      });
+    }
 
-    const grant = secret
-      ? verifyStagingGrant(grantHeader ?? "", secret, payload.runId)
-      : null;
-    if (!grant || !grant.actions.includes(payload.action)) {
-      return notFoundResponse();
+    const secret = resolveStagingControlSecret(configuredTestSecret, isTest);
+    if (!secret) {
+      return deny("missing_configured_test_control_secret", {
+        action: payload.action,
+      });
+    }
+
+    const grant = verifyStagingGrant(grantHeader, secret, payload.runId);
+    if (!grant) {
+      return deny("grant_invalid_or_expired", {
+        action: payload.action,
+        runId: payload.runId,
+      });
+    }
+
+    if (grant.runId !== payload.runId) {
+      return deny("grant_run_mismatch", {
+        action: payload.action,
+        expected: payload.runId,
+        actual: grant.runId,
+      });
+    }
+
+    if (!grant.actions.includes(payload.action)) {
+      return deny("grant_action_not_permitted", {
+        action: payload.action,
+        permitted: grant.actions,
+      });
     }
 
     if (payload.action === "reset-identity-baseline") {
@@ -100,7 +145,10 @@ export async function POST(request: NextRequest) {
         grant.scenario !== "onboarding" &&
         grant.scenario !== "verification"
       ) {
-        return notFoundResponse();
+        return deny("grant_scenario_not_eligible", {
+          action: payload.action,
+          scenario: grant.scenario,
+        });
       }
     }
   }

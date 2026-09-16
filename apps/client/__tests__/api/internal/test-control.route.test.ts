@@ -37,6 +37,9 @@ describe("POST /api/internal/test-control", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(404);
+    expect(response.headers.get("x-test-control-denial")).toBe(
+      "internal_secret_rejected",
+    );
   });
 
   it("creates a staging run and issues grant on valid create-run action", async () => {
@@ -84,6 +87,7 @@ describe("POST /api/internal/test-control", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(404);
+    expect(response.headers.get("x-test-control-denial")).toBe("grant_missing");
   });
 
   it("processes protected action when valid grant token is provided", async () => {
@@ -246,5 +250,8 @@ describe("POST /api/internal/test-control", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(404);
+    expect(response.headers.get("x-test-control-denial")).toBe(
+      "grant_scenario_not_eligible",
+    );
   });
 });

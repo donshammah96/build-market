@@ -44,6 +44,8 @@ jobs:
       INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET || secrets.INTERNAL_SERVICE_SECRET || vars.INTERNAL_API_SECRET || vars.INTERNAL_SERVICE_SECRET }}
       TEST_CONTROL_SECRET: ${{ secrets.TEST_CONTROL_SECRET || vars.TEST_CONTROL_SECRET }}
       STAGING_AUTH_SECRET: ${{ secrets.STAGING_AUTH_SECRET || vars.STAGING_AUTH_SECRET }}
+      STAGING_AUTH_USER: ${{ secrets.STAGING_AUTH_USER || vars.STAGING_AUTH_USER }}
+      STAGING_AUTH_PASSWORD: ${{ secrets.STAGING_AUTH_PASSWORD || vars.STAGING_AUTH_PASSWORD }}
       DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.STAGING_DATABASE_URL || vars.DATABASE_URL || secrets.SUPABASE_DATABASE_URL }}
 
     steps:
@@ -61,11 +63,31 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
+      - name: Validate required secrets are present
+        run: |
+          missing=()
+          [ -z "$STAGING_E2E_BASE_URL" ] && missing+=("STAGING_E2E_BASE_URL")
+          [ -z "$INTERNAL_SERVICE_SECRET" ] && missing+=("INTERNAL_SERVICE_SECRET")
+          [ -z "$TEST_CONTROL_SECRET" ] && missing+=("TEST_CONTROL_SECRET")
+          if [ -z "$STAGING_AUTH_SECRET" ] && [ -z "$STAGING_AUTH_PASSWORD" ]; then
+            missing+=("STAGING_AUTH_SECRET (or STAGING_AUTH_PASSWORD)")
+          fi
+          [ -z "$DATABASE_URL" ] && missing+=("DATABASE_URL")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets/vars: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build shared packages
         run: pnpm run build --filter="@build/*"
+
+      - name: Wait for staging deployment to promote target commit
+        run: node scripts/wait-for-staging-deployment.mjs
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
 
       - name: Preflight - verify staging deployment can reach its database
         run: node scripts/preflight-staging-db-check.mjs
@@ -77,28 +99,28 @@ jobs:
           else
             case "${{ github.event.inputs.scenario }}" in
               onboarding)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/01-onboarding-and-verification.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/01-onboarding-and-verification.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               verification)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/08-verification-public-trust.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/08-verification-public-trust.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               lead-routing)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               messaging)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/06-messaging.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/06-messaging.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               review-eligibility)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/03-review-eligibility.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/03-review-eligibility.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               mpesa-replay)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               capability-rollback)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/05-capability-rollback.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/05-capability-rollback.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
               queue-recovery)
-                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/07-queue-recovery.cy.ts" --env STAGING_RELEASE_E2E=true
+                pnpm -C apps/client exec cypress run --config-file cypress.staging.config.ts --spec "cypress/e2e/staging/07-queue-recovery.cy.ts" --env STAGING_RELEASE_E2E=true
                 ;;
             esac
           fi
