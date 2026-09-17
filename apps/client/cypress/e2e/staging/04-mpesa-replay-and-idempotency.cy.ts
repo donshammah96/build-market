@@ -40,7 +40,7 @@ describe("Staging E2E: M-Pesa STK Replay and Idempotency Flow", () => {
 
       // 2. Post callback first time (initial settlement processing)
       cy.postStagingMpesaCallback(callbackPayload).then((firstRes) => {
-        expect([200, 202]).to.include(firstRes.status);
+        expect(firstRes.status).to.eq(202);
       });
 
       // 3. Post duplicate callback (idempotent replay)

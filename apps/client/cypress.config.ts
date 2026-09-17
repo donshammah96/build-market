@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { defineConfig } from "cypress";
 
 export default defineConfig({
@@ -25,8 +26,49 @@ export default defineConfig({
       on: Cypress.PluginEvents,
       config: Cypress.PluginConfigOptions,
     ) {
-      let activeRunId: string | null = null;
-      let activeGrantToken: string | null = null;
+      let active: {
+        spec: string;
+        runId: string;
+        grantToken: string;
+      } | null = null;
+
+      function requireActive(spec?: string) {
+        if (!active) {
+          throw new Error("No active staging test run initialized");
+        }
+        if (spec && active.spec !== spec) {
+          throw new Error(
+            `No active staging run for spec "${spec}" (got active run for "${active.spec}")`,
+          );
+        }
+        return active;
+      }
+
+      function hashEmail(email?: string): string {
+        if (!email) return "";
+        return createHash("sha256")
+          .update(email.toLowerCase().trim())
+          .digest("hex")
+          .slice(0, 12);
+      }
+
+      function redactProjection(projection: any) {
+        if (!projection || typeof projection !== "object") return projection;
+        const redacted = { ...projection };
+        if (redacted.fixtures && typeof redacted.fixtures === "object") {
+          const f = { ...redacted.fixtures };
+          if (Array.isArray(f.users)) {
+            f.users = f.users.map((u: any) => ({
+              id: u.id,
+              role: u.role,
+              emailHash: hashEmail(u.email),
+              onboardingState: u.onboardingState,
+            }));
+          }
+          redacted.fixtures = f;
+        }
+        return redacted;
+      }
 
       const baseUrl = (
         config.env.STAGING_E2E_BASE_URL ||
@@ -138,11 +180,29 @@ export default defineConfig({
           };
         },
 
+        async "stagingTestControl:checkQueueHealth"() {
+          try {
+            const res = await fetch(`${baseUrl}/api/internal/queue-health`, {
+              method: "GET",
+              headers: getTestControlHeaders(),
+            });
+            if (!res.ok) {
+              return { connected: false, error: `HTTP ${res.status}` };
+            }
+            return await res.json();
+          } catch (err: any) {
+            return { connected: false, error: err.message };
+          }
+        },
+
         async "stagingTestControl:createRun"(params: {
           scenario: string;
           actorLabel?: string;
+          spec?: string;
+          lifetimeSeconds?: number;
         }) {
           assertControlCredentials();
+          active = null;
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders(),
@@ -150,6 +210,7 @@ export default defineConfig({
               action: "create-run",
               scenario: params.scenario,
               actorLabel: params.actorLabel || "cypress-ci",
+              lifetimeSeconds: params.lifetimeSeconds || 900,
             }),
           });
           if (!res.ok) {
@@ -158,26 +219,28 @@ export default defineConfig({
             );
           }
           const body = await res.json();
-          activeRunId = body.runId;
-          activeGrantToken = body.grantToken;
+          active = {
+            spec: params.spec || "unknown",
+            runId: body.runId,
+            grantToken: body.grantToken,
+          };
           return body;
         },
 
         async "stagingTestControl:issueSession"(params: {
           role: "CLIENT" | "PROFESSIONAL";
+          spec?: string;
         }) {
           assertControlCredentials();
-          if (!activeRunId || !activeGrantToken) {
-            throw new Error("No active staging test run initialized");
-          }
+          const current = requireActive(params?.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
-              "x-test-control-grant": activeGrantToken,
+              "x-test-control-grant": current.grantToken,
             }),
             body: JSON.stringify({
               action: "issue-session-handoff",
-              runId: activeRunId,
+              runId: current.runId,
               role: params.role,
             }),
           });
@@ -195,19 +258,18 @@ export default defineConfig({
 
         async "stagingTestControl:resetIdentityBaseline"(params: {
           role: "CLIENT" | "PROFESSIONAL";
+          spec?: string;
         }) {
           assertControlCredentials();
-          if (!activeRunId || !activeGrantToken) {
-            throw new Error("No active staging test run initialized");
-          }
+          const current = requireActive(params?.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
-              "x-test-control-grant": activeGrantToken,
+              "x-test-control-grant": current.grantToken,
             }),
             body: JSON.stringify({
               action: "reset-identity-baseline",
-              runId: activeRunId,
+              runId: current.runId,
               role: params.role,
             }),
           });
@@ -233,19 +295,18 @@ export default defineConfig({
           phoneNumber: string;
           checkoutRequestId?: string;
           merchantRequestId?: string;
+          spec?: string;
         }) {
           assertControlCredentials();
-          if (!activeRunId || !activeGrantToken) {
-            throw new Error("No active staging test run initialized");
-          }
+          const current = requireActive(params?.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
-              "x-test-control-grant": activeGrantToken,
+              "x-test-control-grant": current.grantToken,
             }),
             body: JSON.stringify({
               action: "seed-mpesa-transaction",
-              runId: activeRunId,
+              runId: current.runId,
               amount: params.amount,
               phoneNumber: params.phoneNumber,
               checkoutRequestId: params.checkoutRequestId,
@@ -288,19 +349,18 @@ export default defineConfig({
         async "stagingTestControl:seedScenario"(params: {
           scenario: string;
           payload?: Record<string, unknown>;
+          spec?: string;
         }) {
           assertControlCredentials();
-          if (!activeRunId || !activeGrantToken) {
-            throw new Error("No active staging test run initialized");
-          }
+          const current = requireActive(params?.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
-              "x-test-control-grant": activeGrantToken,
+              "x-test-control-grant": current.grantToken,
             }),
             body: JSON.stringify({
               action: "seed-scenario",
-              runId: activeRunId,
+              runId: current.runId,
               scenario: params.scenario,
               payload: params.payload || {},
             }),
@@ -313,19 +373,17 @@ export default defineConfig({
           return res.json();
         },
 
-        async "stagingTestControl:getProjection"() {
+        async "stagingTestControl:getProjection"(params?: { spec?: string }) {
           assertControlCredentials();
-          if (!activeRunId || !activeGrantToken) {
-            throw new Error("No active staging test run initialized");
-          }
+          const current = requireActive(params?.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
-              "x-test-control-grant": activeGrantToken,
+              "x-test-control-grant": current.grantToken,
             }),
             body: JSON.stringify({
               action: "get-run-projection",
-              runId: activeRunId,
+              runId: current.runId,
             }),
           });
           if (!res.ok) {
@@ -333,22 +391,28 @@ export default defineConfig({
               `getProjection failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
-          return res.json();
+          const raw = await res.json();
+          return redactProjection(raw);
         },
 
-        async "stagingTestControl:cleanup"() {
+        async "stagingTestControl:cleanup"(params?: { spec?: string }) {
           assertControlCredentials();
-          if (!activeRunId || !activeGrantToken) {
+          if (!active) {
             return { cleaned: true };
           }
+          if (params?.spec && active.spec !== params.spec) {
+            return { cleaned: true };
+          }
+          const { runId, grantToken } = active;
+          active = null;
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
-              "x-test-control-grant": activeGrantToken,
+              "x-test-control-grant": grantToken,
             }),
             body: JSON.stringify({
               action: "cleanup-run",
-              runId: activeRunId,
+              runId,
             }),
           });
           if (!res.ok) {
@@ -356,8 +420,6 @@ export default defineConfig({
               `cleanup failed with ${formatControlError(res.status, res.headers, await res.text())}`,
             );
           }
-          activeRunId = null;
-          activeGrantToken = null;
           return res.json();
         },
       });

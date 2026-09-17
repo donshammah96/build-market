@@ -352,16 +352,13 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   // before this point was ever reached). It now runs here, and
   // actually enforces auth instead of allowing unconditionally.
   if (isProtectedApiRoute(nextReq)) {
-    const authObject = await auth();
-    if (!authObject.userId) {
+    const authObject = (await auth()) as any;
+    const userId = authObject?.userId;
+    if (!userId) {
       const debugData =
-        typeof (authObject as any)?.debug === "function"
-          ? (authObject as any).debug()
-          : null;
+        typeof authObject?.debug === "function" ? authObject.debug() : null;
       const authReason =
-        debugData?.reason ||
-        (authObject as any)?.sessionStatus ||
-        "unauthenticated";
+        debugData?.reason || authObject?.sessionStatus || "unauthenticated";
 
       logMiddlewareDecision(nextReq, "mw_deny_protected_api_unauthenticated", {
         authReason,
@@ -389,7 +386,7 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       );
     }
 
-    const quickMeta = parseMiddlewareSessionMetadata(authObject.sessionClaims);
+    const quickMeta = parseMiddlewareSessionMetadata(authObject?.sessionClaims);
     if (
       quickMeta?.status &&
       BLOCKED_ACCOUNT_STATUSES.includes(quickMeta.status)
@@ -401,10 +398,10 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
     }
 
     logMiddlewareDecision(nextReq, "mw_allow_protected_api", {
-      userId: authObject.userId,
+      userId,
     });
     return applyDocumentCspHeaders(nextReq, nonce, cspValue, {
-      edgeUserId: authObject.userId,
+      edgeUserId: userId,
       decision: "mw_allow_protected_api",
     });
   }

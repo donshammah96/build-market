@@ -162,6 +162,7 @@ export async function POST(request: NextRequest) {
         actorLabel: payload.actorLabel,
         gitSha: payload.gitSha,
         workflowRunId: payload.workflowRunId,
+        lifetimeSeconds: payload.lifetimeSeconds,
       });
       if (!result.ok) {
         return NextResponse.json(

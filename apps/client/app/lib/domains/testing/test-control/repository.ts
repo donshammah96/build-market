@@ -20,7 +20,7 @@ export class TestControlRepository {
   async createRun(params: CreateRunParams) {
     const now = new Date();
     const expiresAt = new Date(
-      now.getTime() + (params.lifetimeSeconds ?? 300) * 1000,
+      now.getTime() + (params.lifetimeSeconds ?? 900) * 1000,
     );
 
     return prisma.stagingTestRun.create({

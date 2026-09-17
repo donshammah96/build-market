@@ -8,7 +8,7 @@ import "./commands";
 import "./staging-test-control";
 
 // Prevent uncaught exceptions from failing tests
-Cypress.on("uncaught:exception", (err) => {
+Cypress.on("uncaught:exception", (err, runnable) => {
   // Returning false prevents Cypress from failing the test
   // Ignore hydration errors and Next.js specific errors
   if (
@@ -18,6 +18,12 @@ Cypress.on("uncaught:exception", (err) => {
   ) {
     return false;
   }
+  // Log unexpected client-side exception with context before failing (S-7)
+  const testTitle = runnable?.title || "unknown test";
+  cy.task(
+    "log",
+    `[CYPRESS UNCAUGHT EXCEPTION in "${testTitle}"]: ${err.message}\n${err.stack || ""}`,
+  );
   return true;
 });
 

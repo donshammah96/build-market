@@ -76,6 +76,19 @@ declare global {
       ): Chainable<any>;
 
       /**
+       * Inspects the health of the background queue backend and active consumers.
+       */
+      checkStagingQueueHealth(): Chainable<{
+        backend: string;
+        connected: boolean;
+        queueName?: string;
+        waiting?: number;
+        active?: number;
+        consumerSeenAt?: string | null;
+        error?: string;
+      }>;
+
+      /**
        * Triggers clean dependency-ordered deletion of all fixtures owned by the staging run.
        */
       cleanupStagingRun(): Chainable<{ cleaned: true }>;
@@ -94,7 +107,11 @@ Cypress.Commands.add(
     });
 
     return cy
-      .task("stagingTestControl:createRun", { scenario, actorLabel })
+      .task("stagingTestControl:createRun", {
+        scenario,
+        actorLabel,
+        spec: Cypress.spec.name,
+      })
       .then((res: any) => {
         if (!res || !res.runId) {
           throw new Error(
@@ -120,6 +137,7 @@ function visitTicketUrlWithStagingAuth(signInUrl: string) {
 
       const visitOptions: Partial<Cypress.VisitOptions> = {
         failOnStatusCode: false,
+        log: false,
       };
 
       // Provide HTTP Basic Auth fallback if configured
@@ -131,6 +149,17 @@ function visitTicketUrlWithStagingAuth(signInUrl: string) {
       }
 
       cy.visit(signInUrl, visitOptions);
+
+      // Immediately scrub the live ticket token from window history and location search (C-11)
+      cy.location("search").then(() => {
+        cy.window().then((w) => {
+          try {
+            w.history.replaceState({}, "", "/onboarding");
+          } catch {
+            // Ignore security errors in test if origin hasn't settled yet
+          }
+        });
+      });
     });
 }
 
@@ -138,7 +167,10 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
   let sessionResult: { userId: string; email: string };
 
   return cy
-    .task("stagingTestControl:issueSession", { role })
+    .task("stagingTestControl:issueSession", {
+      role,
+      spec: Cypress.spec.name,
+    })
     .then((res: any) => {
       if (!res || !res.signInUrl) {
         throw new Error(`Failed to mint Clerk session for role ${role}`);
@@ -192,7 +224,10 @@ Cypress.Commands.add(
     };
 
     return cy
-      .task("stagingTestControl:resetIdentityBaseline", { role })
+      .task("stagingTestControl:resetIdentityBaseline", {
+        role,
+        spec: Cypress.spec.name,
+      })
       .then((res: any) => {
         if (!res || !res.signInUrl) {
           throw new Error(
@@ -260,17 +295,26 @@ Cypress.Commands.add(
 );
 
 Cypress.Commands.add("seedStagingMpesa", (params) => {
-  return cy.task("stagingTestControl:seedMpesa", params).then((res: any) => {
-    if (!res || !res.checkoutRequestId) {
-      throw new Error("Failed to seed pending M-Pesa transaction");
-    }
-    return res;
-  });
+  return cy
+    .task("stagingTestControl:seedMpesa", {
+      ...params,
+      spec: Cypress.spec.name,
+    })
+    .then((res: any) => {
+      if (!res || !res.checkoutRequestId) {
+        throw new Error("Failed to seed pending M-Pesa transaction");
+      }
+      return res;
+    });
 });
 
 Cypress.Commands.add("seedStagingScenario", (scenario, payload = {}) => {
   return cy
-    .task("stagingTestControl:seedScenario", { scenario, payload })
+    .task("stagingTestControl:seedScenario", {
+      scenario,
+      payload,
+      spec: Cypress.spec.name,
+    })
     .then((res: any) => {
       if (!res || typeof res !== "object") {
         throw new Error(`Failed to seed staging scenario ${scenario}`);
@@ -280,9 +324,13 @@ Cypress.Commands.add("seedStagingScenario", (scenario, payload = {}) => {
 });
 
 Cypress.Commands.add("getStagingProjection", () => {
-  return cy.task("stagingTestControl:getProjection").then((res: any) => {
-    return res;
-  });
+  return cy
+    .task("stagingTestControl:getProjection", {
+      spec: Cypress.spec.name,
+    })
+    .then((res: any) => {
+      return res;
+    });
 });
 
 Cypress.Commands.add(
@@ -297,7 +345,9 @@ Cypress.Commands.add(
 
     function poll(): Cypress.Chainable<any> {
       return cy
-        .task("stagingTestControl:getProjection")
+        .task("stagingTestControl:getProjection", {
+          spec: Cypress.spec.name,
+        })
         .then((projection: any) => {
           let passed = false;
           let lastError: unknown = null;
@@ -330,10 +380,18 @@ Cypress.Commands.add(
   },
 );
 
+Cypress.Commands.add("checkStagingQueueHealth", () => {
+  return cy.task("stagingTestControl:checkQueueHealth");
+});
+
 Cypress.Commands.add("cleanupStagingRun", () => {
-  return cy.task("stagingTestControl:cleanup").then((res: any) => {
-    return res;
-  });
+  return cy
+    .task("stagingTestControl:cleanup", {
+      spec: Cypress.spec.name,
+    })
+    .then((res: any) => {
+      return res;
+    });
 });
 
 export {};

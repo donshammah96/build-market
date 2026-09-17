@@ -9,7 +9,7 @@ import {
 export { type IdentityLeaseKind, IDENTITY_LEASE_KINDS };
 
 export const STAGING_GRANT_AUDIENCE = "buildmarket-staging-test-control";
-export const MAX_GRANT_LIFETIME_SECONDS = 300; // 5 minutes
+export const MAX_GRANT_LIFETIME_SECONDS = 900; // 15 minutes
 export const STAGING_GRANT_ACTIONS = [
   "seed-scenario",
   "issue-session-handoff",
@@ -138,6 +138,7 @@ export const CreateRunActionSchema = z.object({
   actorLabel: z.string().min(1).max(100),
   gitSha: z.string().optional(),
   workflowRunId: z.string().optional(),
+  lifetimeSeconds: z.number().int().min(60).max(900).optional(),
 });
 
 export const IssueSessionHandoffActionSchema = z.object({

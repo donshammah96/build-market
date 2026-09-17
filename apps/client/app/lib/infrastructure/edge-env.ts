@@ -160,6 +160,11 @@ export const edgeEnv = {
   get posthogHost(): string {
     return process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "";
   },
+
+  // Queue & Cache Infrastructure
+  get redisUrl(): string {
+    return process.env.REDIS_URL ?? "";
+  },
 };
 
 export type EdgeEnv = typeof edgeEnv;

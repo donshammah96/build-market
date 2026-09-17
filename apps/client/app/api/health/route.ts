@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@build/db";
+import { getPaymentsQueue } from "@build/queue-server";
 import {
   initializeCorrelationId,
   getResilientExecutor,
@@ -151,13 +152,24 @@ async function checkDatabaseReplication(): Promise<DependencyResult> {
 }
 
 async function checkRedis(): Promise<DependencyResult> {
-  return checkDependency("redis", false, 3000, async () => {
-    // Redis availability is verified through the rate limiter itself.
-    // If Redis is down, the in-memory fallback kicks in — so this is non-critical.
-    // Attempt a lightweight rate limit check to verify the path works.
-    const result = await checkRateLimit("health-check-probe", 1000, 60000);
-    if (!result) {
-      throw new Error("Rate limit subsystem unresponsive");
+  const isStaging = env.otel.ddEnv === "staging";
+  return checkDependency("redis", isStaging, 3000, async () => {
+    const redisUrl = edgeEnv.redisUrl?.trim();
+    if (!redisUrl) {
+      if (isStaging) {
+        throw new Error("REDIS_URL is not configured for staging queue");
+      }
+      return;
+    }
+    const queue = getPaymentsQueue();
+    const client = (await queue.client) as any;
+    if (typeof client?.ping === "function") {
+      const pingRes = await client.ping();
+      if (pingRes !== "PONG") {
+        throw new Error(`Unexpected Redis ping response: ${pingRes}`);
+      }
+    } else {
+      await queue.getJobCounts("waiting");
     }
   });
 }

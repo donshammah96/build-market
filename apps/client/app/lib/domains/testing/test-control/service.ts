@@ -55,7 +55,7 @@ export class TestControlService {
           ],
         },
         secret,
-        300,
+        params.lifetimeSeconds ?? 900,
       );
 
       return ok({ runId: run.id, grantToken });
@@ -130,7 +130,7 @@ export class TestControlService {
         clerk as any
       ).signInTokens.createSignInToken({
         userId: lease.clerkId,
-        expiresInSeconds: 300,
+        expiresInSeconds: 60,
       });
 
       const slot = resolveConfiguredSlots().find((s) => s.slot === lease.slot);
@@ -256,7 +256,7 @@ export class TestControlService {
       const clerk = (await clerkClient()) as any;
       const ticketResponse = await clerk.signInTokens.createSignInToken({
         userId: lease.clerkId,
-        expiresInSeconds: 300,
+        expiresInSeconds: 60,
       });
 
       return ok({

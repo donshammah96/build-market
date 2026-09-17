@@ -173,9 +173,32 @@ async function main() {
         `[preflight] Cleanup of probe run ${runId} failed (non-fatal): ${err.message}`,
       );
     }
+    console.log(`[preflight] Probing ${baseUrl}/api/internal/queue-health ...`);
+    try {
+      const qRes = await fetch(`${baseUrl}/api/internal/queue-health`, {
+        method: "GET",
+        headers: headers(),
+      });
+      if (qRes.ok) {
+        const qBody = await qRes.json();
+        console.log(
+          `[preflight] Queue health: backend=${qBody.backend}, connected=${qBody.connected}` +
+            (qBody.consumerSeenAt
+              ? `, consumerSeenAt=${qBody.consumerSeenAt}`
+              : `, no active consumer detected`),
+        );
+      } else {
+        console.warn(
+          `[preflight] Queue health probe returned ${qRes.status} (non-fatal; spec 07 evaluates independently)`,
+        );
+      }
+    } catch (qErr) {
+      console.warn(
+        `[preflight] Queue health probe failed (non-fatal): ${qErr.message}`,
+      );
+    }
+
+    console.log("[preflight] Passed. Proceeding to full Cypress suite.");
   }
-
-  console.log("[preflight] Passed. Proceeding to full Cypress suite.");
 }
-
 main();
