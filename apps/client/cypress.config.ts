@@ -232,7 +232,7 @@ export default defineConfig({
           spec?: string;
         }) {
           assertControlCredentials();
-          const current = requireActive(params?.spec);
+          const current = requireActive(params.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
@@ -261,7 +261,7 @@ export default defineConfig({
           spec?: string;
         }) {
           assertControlCredentials();
-          const current = requireActive(params?.spec);
+          const current = requireActive(params.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
@@ -298,7 +298,7 @@ export default defineConfig({
           spec?: string;
         }) {
           assertControlCredentials();
-          const current = requireActive(params?.spec);
+          const current = requireActive(params.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({
@@ -352,7 +352,7 @@ export default defineConfig({
           spec?: string;
         }) {
           assertControlCredentials();
-          const current = requireActive(params?.spec);
+          const current = requireActive(params.spec);
           const res = await fetch(`${baseUrl}/api/internal/test-control`, {
             method: "POST",
             headers: getTestControlHeaders({

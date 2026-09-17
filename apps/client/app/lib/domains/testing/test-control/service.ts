@@ -145,7 +145,7 @@ export class TestControlService {
           ticketResponse.url,
           params.role === "PROFESSIONAL"
             ? "/professional-portal/dashboard"
-            : "/homeowner-dashboard",
+            : "/onboarding",
         ),
       });
     } catch (e: any) {

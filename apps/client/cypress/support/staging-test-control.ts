@@ -127,8 +127,9 @@ function visitTicketUrlWithStagingAuth(signInUrl: string) {
   return cy
     .task("stagingTestControl:getStagingAuthCookie")
     .then((authInfo: any) => {
-      // Clear existing cookies before exchanging a single-use ticket
+      // Clear existing cookies and local storage before exchanging a single-use ticket
       cy.clearCookies();
+      cy.clearLocalStorage();
 
       // Immediately restore staging protection bypass cookie so edge proxy allows browser navigation
       if (authInfo?.name && authInfo?.value) {
@@ -149,17 +150,6 @@ function visitTicketUrlWithStagingAuth(signInUrl: string) {
       }
 
       cy.visit(signInUrl, visitOptions);
-
-      // Immediately scrub the live ticket token from window history and location search (C-11)
-      cy.location("search").then(() => {
-        cy.window().then((w) => {
-          try {
-            w.history.replaceState({}, "", "/onboarding");
-          } catch {
-            // Ignore security errors in test if origin hasn't settled yet
-          }
-        });
-      });
     });
 }
 
