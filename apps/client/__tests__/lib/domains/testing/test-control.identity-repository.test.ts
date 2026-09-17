@@ -42,6 +42,11 @@ const mockPrisma = {
 
 vi.mock("@build/db", () => ({
   prisma: mockPrisma,
+  Prisma: {
+    TransactionIsolationLevel: {
+      ReadCommitted: "ReadCommitted",
+    },
+  },
 }));
 
 const { identityRepository } =

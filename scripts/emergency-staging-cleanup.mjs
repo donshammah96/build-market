@@ -154,81 +154,144 @@ async function performDatabaseSweep() {
     max: 2,
     connectionTimeoutMillis: 5000,
   });
+
+  const errors = [];
+  let sweptCount = 0;
+
   try {
     console.log(
       "[emergency-cleanup] Sweeping expired or stranded staging test runs directly from DB...",
     );
     const client = await pool.connect();
     try {
-      // Find expired or stranded runs older than 10 minutes
-      const selectRes = await client.query(`
+      // 7b: Table existence preflight check to detect Prisma @@map drift
+      const TABLES = [
+        "MessageThread",
+        "MarketplaceLead",
+        "staging_test_outbound_deliveries",
+        "MpesaCallbackEvent",
+        "MpesaTransaction",
+        "Review",
+        "Lead",
+        "Project",
+        "ProfessionalProfile",
+        "users",
+        "staging_test_identity_leases",
+        "staging_test_runs",
+      ];
+      const check = await client.query(
+        `SELECT t AS name, to_regclass(format('%I', t)) AS oid FROM unnest($1::text[]) AS t`,
+        [TABLES],
+      );
+      const missing = check.rows.filter((r) => !r.oid).map((r) => r.name);
+      if (missing.length) {
+        throw new Error(
+          `[emergency-cleanup] Unknown tables (Prisma @@map drift?): ${missing.join(", ")}`,
+        );
+      }
+
+      // 7a: Find expired or stranded runs older than 1 minute (never touch active runs).
+      // When running in GitHub Actions, scope strictly to this workflow run to avoid touching concurrent jobs.
+      const workflowRunId = process.env.GITHUB_RUN_ID?.trim();
+      let selectQuery = `
         SELECT "id" FROM "staging_test_runs"
         WHERE "state" IN ('ACTIVE', 'CLEANING')
-          AND "expiresAt" < NOW() + INTERVAL '5 minutes'
-      `);
+          AND "expiresAt" < NOW() - INTERVAL '1 minute'
+      `;
+      const selectParams = [];
+      if (workflowRunId) {
+        selectParams.push(workflowRunId);
+        selectQuery += ` AND "workflowRunId" = $${selectParams.length}`;
+      }
 
+      const selectRes = await client.query(selectQuery, selectParams);
+
+      // 7c: Per-run transaction with try/COMMIT/catch/ROLLBACK
       for (const row of selectRes.rows) {
         const runId = row.id;
         console.log(`[emergency-cleanup] Cleaning stranded run: ${runId}`);
 
-        await client.query("BEGIN");
-        await client.query(
-          'DELETE FROM "MessageThread" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "MarketplaceLead" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "staging_test_outbound_deliveries" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "MpesaCallbackEvent" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "MpesaTransaction" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "Review" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query('DELETE FROM "Lead" WHERE "stagingTestRunId" = $1', [
-          runId,
-        ]);
-        await client.query(
-          'DELETE FROM "Project" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "ProfessionalProfile" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'DELETE FROM "users" WHERE "stagingTestRunId" = $1',
-          [runId],
-        );
-        await client.query(
-          'UPDATE "staging_test_identity_leases" SET "state" = \'RELEASED\', "releasedAt" = NOW() WHERE "stagingTestRunId" = $1 AND "state" IN (\'LEASED\', \'RESETTING\', \'READY\')',
-          [runId],
-        );
-        await client.query(
-          'UPDATE "staging_test_runs" SET "state" = \'CLEANED\', "cleanedAt" = NOW() WHERE "id" = $1',
-          [runId],
-        );
-        await client.query("COMMIT");
+        try {
+          await client.query("BEGIN");
+
+          await client.query(
+            'DELETE FROM "MessageThread" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          await client.query(
+            'DELETE FROM "MarketplaceLead" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          await client.query(
+            'DELETE FROM "staging_test_outbound_deliveries" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          await client.query(
+            'DELETE FROM "MpesaCallbackEvent" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          await client.query(
+            'DELETE FROM "MpesaTransaction" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          // Derived review deletion (C-3) before projects are deleted
+          await client.query(
+            `DELETE FROM "Review"
+             WHERE "stagingTestRunId" = $1
+                OR "projectId" IN (SELECT "id" FROM "Project" WHERE "stagingTestRunId" = $1)`,
+            [runId],
+          );
+          await client.query('DELETE FROM "Lead" WHERE "stagingTestRunId" = $1', [
+            runId,
+          ]);
+          await client.query(
+            'DELETE FROM "Project" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          await client.query(
+            'DELETE FROM "ProfessionalProfile" WHERE "stagingTestRunId" = $1',
+            [runId],
+          );
+          // Protect immutable identity pool users (C-5)
+          await client.query(
+            `DELETE FROM "users"
+             WHERE "stagingTestRunId" = $1
+               AND "email" NOT IN (
+                 'e2e_pro_1@staging.buildmarket.app',
+                 'e2e_pro_2@staging.buildmarket.app',
+                 'e2e_client_1@staging.buildmarket.app',
+                 'e2e_client_2@staging.buildmarket.app'
+               )`,
+            [runId],
+          );
+          await client.query(
+            'UPDATE "staging_test_identity_leases" SET "state" = \'RELEASED\', "releasedAt" = NOW() WHERE "stagingTestRunId" = $1 AND "state" IN (\'LEASED\', \'RESETTING\', \'READY\', \'BORROWED\')',
+            [runId],
+          );
+          await client.query(
+            'UPDATE "staging_test_runs" SET "state" = \'CLEANED\', "cleanedAt" = NOW() WHERE "id" = $1',
+            [runId],
+          );
+          await client.query("COMMIT");
+          sweptCount++;
+        } catch (runErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          console.error(
+            `[emergency-cleanup] Failed to clean run ${runId}:`,
+            runErr.message,
+          );
+          errors.push({ runId, error: runErr.message });
+        }
       }
+
       console.log(
-        `[emergency-cleanup] Swept ${selectRes.rows.length} stranded test run(s).`,
+        `[emergency-cleanup] Summary: Swept ${sweptCount} stranded run(s), ${errors.length} failed.`,
       );
 
       const expiredLeases = await client.query(`
         UPDATE "staging_test_identity_leases"
         SET "state" = 'RELEASED', "releasedAt" = NOW()
-        WHERE "state" IN ('LEASED', 'RESETTING', 'READY')
+        WHERE "state" IN ('LEASED', 'RESETTING', 'READY', 'BORROWED')
           AND "leaseExpiresAt" < NOW()
       `);
       if (expiredLeases.rowCount > 0) {
@@ -244,8 +307,16 @@ async function performDatabaseSweep() {
       "[emergency-cleanup] Direct DB sweep encountered an error:",
       e.message,
     );
+    errors.push({ fatal: true, error: e.message });
   } finally {
     await pool.end();
+  }
+
+  // 7d: Emit GitHub Actions warning annotation so cleanup failure is visible without breaking CI
+  if (errors.length > 0) {
+    console.log(
+      `::warning title=Staging cleanup incomplete::${errors.length} error(s) occurred during emergency sweep`,
+    );
   }
 }
 

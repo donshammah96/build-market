@@ -1,10 +1,12 @@
-import { prisma } from "@build/db";
+import { Prisma, prisma } from "@build/db";
 import { addNotificationRetryJob } from "@build/queue-server";
 import {
   assertStagingCleanupOrder,
   STAGING_CLEANUP_DEPENDENCY_ORDER,
+  type StagingCleanupEntity,
   type StagingScenario,
 } from "@build/db/staging-test-runs";
+import { resolveConfiguredSlots } from "./identity-repository";
 
 export interface CreateRunParams {
   scenario: StagingScenario;
@@ -246,12 +248,17 @@ export class TestControlRepository {
   }
 
   async getRunProjection(runId: string) {
+    const projects = await prisma.project.findMany({
+      where: { stagingTestRunId: runId },
+      select: { id: true, status: true, title: true },
+    });
+    const ownedProjectIds = projects.map((p) => p.id);
+
     const [
       run,
       users,
       profiles,
       leads,
-      projects,
       reviews,
       mpesaTransactions,
       mpesaCallbackEvents,
@@ -273,13 +280,16 @@ export class TestControlRepository {
         where: { stagingTestRunId: runId },
         select: { id: true, status: true, title: true },
       }),
-      prisma.project.findMany({
-        where: { stagingTestRunId: runId },
-        select: { id: true, status: true, title: true },
-      }),
       prisma.review.findMany({
-        where: { stagingTestRunId: runId },
-        select: { id: true, rating: true, status: true },
+        where: {
+          OR: [
+            { stagingTestRunId: runId },
+            ownedProjectIds.length
+              ? { projectId: { in: ownedProjectIds } }
+              : { id: { in: [] } },
+          ],
+        },
+        select: { id: true, rating: true, status: true, projectId: true },
       }),
       prisma.mpesaTransaction.findMany({
         where: { stagingTestRunId: runId },
@@ -348,85 +358,156 @@ export class TestControlRepository {
 
   async cleanupRun(runId: string) {
     // Assert canonical dependency order before executing queries
-    assertStagingCleanupOrder([...STAGING_CLEANUP_DEPENDENCY_ORDER]);
+    assertStagingCleanupOrder(STAGING_CLEANUP_DEPENDENCY_ORDER);
 
-    return prisma.$transaction(async (tx) => {
-      // 1. Transition state to CLEANING
-      await tx.stagingTestRun.update({
-        where: { id: runId },
-        data: { state: "CLEANING" },
-      });
+    return prisma.$transaction(
+      async (tx) => {
+        // 1. Transition state to CLEANING
+        await tx.stagingTestRun.update({
+          where: { id: runId },
+          data: { state: "CLEANING" },
+        });
 
-      // 2. Release active identity leases before marking CLEANED (retained for audit evidence)
-      await tx.stagingTestIdentityLease.updateMany({
-        where: { stagingTestRunId: runId, state: { not: "RELEASED" } },
-        data: { state: "RELEASED", releasedAt: new Date() },
-      });
+        // Derive owned project IDs before deletion to clean and verify derived reviews (C-3)
+        const ownedProjects = await tx.project.findMany({
+          where: { stagingTestRunId: runId },
+          select: { id: true },
+        });
+        const ownedProjectIds = ownedProjects.map((p) => p.id);
 
-      // 3. Delete owned outbound deliveries
-      await tx.messageThread.deleteMany({ where: { stagingTestRunId: runId } });
-      await tx.marketplaceLead.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
-      await tx.stagingTestOutboundDelivery.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
+        const DELETERS: Record<
+          StagingCleanupEntity,
+          (txClient: Prisma.TransactionClient, id: string) => Promise<unknown>
+        > = {
+          StagingTestIdentityLease: (txClient, id) =>
+            txClient.stagingTestIdentityLease.updateMany({
+              where: { stagingTestRunId: id, state: { not: "RELEASED" } },
+              data: { state: "RELEASED", releasedAt: new Date() },
+            }),
+          MessageThread: (txClient, id) =>
+            txClient.messageThread.deleteMany({
+              where: { stagingTestRunId: id },
+            }),
+          MarketplaceLead: (txClient, id) =>
+            txClient.marketplaceLead.deleteMany({
+              where: { stagingTestRunId: id },
+            }),
+          staging_test_outbound_deliveries: (txClient, id) =>
+            txClient.stagingTestOutboundDelivery.deleteMany({
+              where: { stagingTestRunId: id },
+            }),
+          MpesaCallbackEvent: (txClient, id) =>
+            txClient.mpesaCallbackEvent.deleteMany({
+              where: { stagingTestRunId: id },
+            }),
+          MpesaTransaction: (txClient, id) =>
+            txClient.mpesaTransaction.deleteMany({
+              where: { stagingTestRunId: id },
+            }),
+          Review: (txClient, id) =>
+            txClient.review.deleteMany({
+              where: {
+                OR: [
+                  { stagingTestRunId: id },
+                  ownedProjectIds.length
+                    ? { projectId: { in: ownedProjectIds } }
+                    : { id: { in: [] } },
+                ],
+              },
+            }),
+          Lead: (txClient, id) =>
+            txClient.lead.deleteMany({ where: { stagingTestRunId: id } }),
+          Project: (txClient, id) =>
+            txClient.project.deleteMany({ where: { stagingTestRunId: id } }),
+          ProfessionalProfile: (txClient, id) =>
+            txClient.professionalProfile.deleteMany({
+              where: { stagingTestRunId: id },
+            }),
+          User: async (txClient, id) => {
+            const poolEmails = resolveConfiguredSlots().map((s) =>
+              s.email.toLowerCase(),
+            );
+            await txClient.user.deleteMany({
+              where: { stagingTestRunId: id, email: { notIn: poolEmails } },
+            });
+            const survivingPool = await txClient.user.count({
+              where: { email: { in: poolEmails } },
+            });
+            if (survivingPool !== poolEmails.length) {
+              throw new Error(
+                `[StagingCleanupFailure] Pool identity count is ${survivingPool}, expected ${poolEmails.length}. Refusing to commit.`,
+              );
+            }
+          },
+          StagingTestRun: (txClient, id) =>
+            txClient.stagingTestRun.update({
+              where: { id },
+              data: {
+                state: "CLEANED",
+                cleanedAt: new Date(),
+              },
+            }),
+        };
 
-      // 3. Delete owned M-Pesa callback events & transactions
-      await tx.mpesaCallbackEvent.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
-      await tx.mpesaTransaction.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
+        let cleanedRun = null;
 
-      // 4. Delete owned reviews
-      await tx.review.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
+        // Drive deletes strictly from canonical dependency order
+        for (const entity of STAGING_CLEANUP_DEPENDENCY_ORDER) {
+          if (entity === "StagingTestRun") {
+            // Step 9: Verify zero owned records remain (including derived review check)
+            const [
+              remainingUsers,
+              remainingLeads,
+              remainingTxs,
+              remainingReviews,
+            ] = await Promise.all([
+              tx.user.count({ where: { stagingTestRunId: runId } }),
+              tx.lead.count({ where: { stagingTestRunId: runId } }),
+              tx.mpesaTransaction.count({ where: { stagingTestRunId: runId } }),
+              tx.review.count({
+                where: {
+                  OR: [
+                    { stagingTestRunId: runId },
+                    ownedProjectIds.length
+                      ? { projectId: { in: ownedProjectIds } }
+                      : { id: { in: [] } },
+                  ],
+                },
+              }),
+            ]);
 
-      // 5. Delete owned leads
-      await tx.lead.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
+            if (
+              remainingUsers > 0 ||
+              remainingLeads > 0 ||
+              remainingTxs > 0 ||
+              remainingReviews > 0
+            ) {
+              throw new Error(
+                `[StagingCleanupFailure] Owned records still remain for run ${runId}`,
+              );
+            }
+          }
 
-      // 6. Delete owned projects
-      await tx.project.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
+          const deleter = DELETERS[entity];
+          if (!deleter) {
+            throw new Error(
+              `[StagingCleanup] No deleter registered for "${entity}"`,
+            );
+          }
+          const result = await deleter(tx, runId);
+          if (entity === "StagingTestRun") {
+            cleanedRun = result;
+          }
+        }
 
-      // 7. Delete owned professional profiles
-      await tx.professionalProfile.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
-
-      // 8. Delete owned users
-      await tx.user.deleteMany({
-        where: { stagingTestRunId: runId },
-      });
-
-      // 9. Verify zero owned records remain
-      const [remainingUsers, remainingLeads, remainingTxs] = await Promise.all([
-        tx.user.count({ where: { stagingTestRunId: runId } }),
-        tx.lead.count({ where: { stagingTestRunId: runId } }),
-        tx.mpesaTransaction.count({ where: { stagingTestRunId: runId } }),
-      ]);
-
-      if (remainingUsers > 0 || remainingLeads > 0 || remainingTxs > 0) {
-        throw new Error(
-          `[StagingCleanupFailure] Owned records still remain for run ${runId}`,
-        );
-      }
-
-      // 10. Mark CLEANED
-      return tx.stagingTestRun.update({
-        where: { id: runId },
-        data: {
-          state: "CLEANED",
-          cleanedAt: new Date(),
-        },
-      });
-    });
+        return cleanedRun;
+      },
+      {
+        timeout: 20_000,
+        maxWait: 8_000,
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      },
+    );
   }
 }
 

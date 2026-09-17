@@ -1,4 +1,4 @@
-import { prisma } from "@build/db";
+import { Prisma, prisma } from "@build/db";
 import {
   isAllowedScenarioForIdentityLease,
   parseStagingIdentitySlots,
@@ -268,115 +268,122 @@ export class IdentityRepository {
       );
     }
 
-    return prisma.$transaction(async (tx) => {
-      // 1. Mark lease RESETTING
-      await tx.stagingTestIdentityLease.update({
-        where: { id: lease.id },
-        data: { state: "RESETTING" },
-      });
+    return prisma.$transaction(
+      async (tx) => {
+        // 1. Mark lease RESETTING
+        await tx.stagingTestIdentityLease.update({
+          where: { id: lease.id },
+          data: { state: "RESETTING" },
+        });
 
-      // 2. Reset base User fields (preserving the base User row)
-      await tx.user.update({
-        where: { id: lease.userId },
-        data: {
-          status: "ONBOARDING",
-          isProfileComplete: false,
-          isEmailVerified: true,
-          role: lease.role as any,
-        },
-      });
-
-      // 3. Upsert OnboardingState to NOT_STARTED
-      await tx.onboardingState.upsert({
-        where: { userId: lease.userId },
-        create: {
-          userId: lease.userId,
-          state: "NOT_STARTED",
-          role: lease.role as any,
-          currentStep: 1,
-          version: 0,
-        },
-        update: {
-          state: "NOT_STARTED",
-          role: lease.role as any,
-          currentStep: 1,
-          completedAt: null,
-          lastErrorCode: null,
-          version: 0,
-        },
-      });
-
-      // 4. Delete existing onboarding transitions
-      await tx.onboardingTransition.deleteMany({
-        where: { userId: lease.userId },
-      });
-
-      let docsDeletedCount = 0;
-      let licensesDeletedCount = 0;
-      let casesDeletedCount = 0;
-
-      // 5. Professional-specific cleanup
-      if (lease.role === "PROFESSIONAL") {
-        await tx.professionalProfile.updateMany({
-          where: { userId: lease.userId },
+        // 2. Reset base User fields (preserving the base User row)
+        await tx.user.update({
+          where: { id: lease.userId },
           data: {
-            verified: false,
-            verificationStatus: "PENDING",
-            trustTier: "UNVERIFIED",
-            verifiedAt: null,
-            verifiedById: null,
-            verificationNotes: null,
+            status: "ONBOARDING",
+            isProfileComplete: false,
+            isEmailVerified: true,
+            role: lease.role as any,
           },
         });
 
-        const docs = await tx.professionalDocument.deleteMany({
-          where: { professionalId: lease.userId },
+        // 3. Upsert OnboardingState to NOT_STARTED
+        await tx.onboardingState.upsert({
+          where: { userId: lease.userId },
+          create: {
+            userId: lease.userId,
+            state: "NOT_STARTED",
+            role: lease.role as any,
+            currentStep: 1,
+            version: 0,
+          },
+          update: {
+            state: "NOT_STARTED",
+            role: lease.role as any,
+            currentStep: 1,
+            completedAt: null,
+            lastErrorCode: null,
+            version: 0,
+          },
         });
-        docsDeletedCount = docs.count;
 
-        const licenses = await tx.professionalLicense.deleteMany({
-          where: { professionalId: lease.userId },
+        // 4. Delete existing onboarding transitions
+        await tx.onboardingTransition.deleteMany({
+          where: { userId: lease.userId },
         });
-        licensesDeletedCount = licenses.count;
 
-        const cases = await tx.regulatorVerificationCase.deleteMany({
-          where: { professionalId: lease.userId },
+        let docsDeletedCount = 0;
+        let licensesDeletedCount = 0;
+        let casesDeletedCount = 0;
+
+        // 5. Professional-specific cleanup
+        if (lease.role === "PROFESSIONAL") {
+          await tx.professionalProfile.updateMany({
+            where: { userId: lease.userId },
+            data: {
+              verified: false,
+              verificationStatus: "PENDING",
+              trustTier: "UNVERIFIED",
+              verifiedAt: null,
+              verifiedById: null,
+              verificationNotes: null,
+            },
+          });
+
+          const docs = await tx.professionalDocument.deleteMany({
+            where: { professionalId: lease.userId },
+          });
+          docsDeletedCount = docs.count;
+
+          const licenses = await tx.professionalLicense.deleteMany({
+            where: { professionalId: lease.userId },
+          });
+          licensesDeletedCount = licenses.count;
+
+          const cases = await tx.regulatorVerificationCase.deleteMany({
+            where: { professionalId: lease.userId },
+          });
+          casesDeletedCount = cases.count;
+        }
+
+        // 6. Delete test notifications for this user
+        const notifs = await tx.notification.deleteMany({
+          where: {
+            userId: lease.userId,
+            createdAt: { gte: lease.createdAt },
+          },
         });
-        casesDeletedCount = cases.count;
-      }
 
-      // 6. Delete test notifications for this user
-      const notifs = await tx.notification.deleteMany({
-        where: {
+        // 7. Transition lease to READY with resetAt
+        await tx.stagingTestIdentityLease.update({
+          where: { id: lease.id },
+          data: {
+            state: "READY",
+            resetAt: now,
+          },
+        });
+
+        return {
+          leaseId: lease.id,
+          runId: input.runId,
+          slot: lease.slot,
           userId: lease.userId,
-          createdAt: { gte: lease.createdAt },
-        },
-      });
-
-      // 7. Transition lease to READY with resetAt
-      await tx.stagingTestIdentityLease.update({
-        where: { id: lease.id },
-        data: {
-          state: "READY",
+          role: lease.role as any,
+          userStatus: "ONBOARDING",
+          onboardingState: "NOT_STARTED",
+          documentsDeletedCount: docsDeletedCount,
+          licensesDeletedCount: licensesDeletedCount,
+          verificationCasesDeletedCount: casesDeletedCount,
+          notificationsDeletedCount: notifs.count,
           resetAt: now,
-        },
-      });
-
-      return {
-        leaseId: lease.id,
-        runId: input.runId,
-        slot: lease.slot,
-        userId: lease.userId,
-        role: lease.role as any,
-        userStatus: "ONBOARDING",
-        onboardingState: "NOT_STARTED",
-        documentsDeletedCount: docsDeletedCount,
-        licensesDeletedCount: licensesDeletedCount,
-        verificationCasesDeletedCount: casesDeletedCount,
-        notificationsDeletedCount: notifs.count,
-        resetAt: now,
-      };
-    });
+        };
+      },
+      {
+        timeout: 20_000,
+        maxWait: 8_000,
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      },
+    );
   }
 
   /**

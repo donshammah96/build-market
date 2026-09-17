@@ -109,7 +109,7 @@ export function isStagingOwnedEntity(
  * Canonical leaf-to-root cleanup dependency order.
  * Deleting parents before children causes FK constraint failures or violates auditability.
  */
-export const STAGING_CLEANUP_DEPENDENCY_ORDER: readonly string[] = [
+export const STAGING_CLEANUP_DEPENDENCY_ORDER = [
   "StagingTestIdentityLease",
   "MessageThread",
   "MarketplaceLead",
@@ -124,14 +124,21 @@ export const STAGING_CLEANUP_DEPENDENCY_ORDER: readonly string[] = [
   "StagingTestRun",
 ] as const;
 
+export type StagingCleanupEntity =
+  (typeof STAGING_CLEANUP_DEPENDENCY_ORDER)[number];
+
 /**
  * Validates that an executed cleanup sequence strictly respects the leaf-to-root dependency order.
  */
-export function assertStagingCleanupOrder(entities: string[]): boolean {
+export function assertStagingCleanupOrder(
+  entities: readonly string[] | string[],
+): boolean {
   let lastObservedIndex = -1;
 
   for (const entity of entities) {
-    const canonicalIndex = STAGING_CLEANUP_DEPENDENCY_ORDER.indexOf(entity);
+    const canonicalIndex = (
+      STAGING_CLEANUP_DEPENDENCY_ORDER as readonly string[]
+    ).indexOf(entity);
     if (canonicalIndex === -1) {
       throw new Error(
         `Dependency order violation: entity "${entity}" is not in the recognized cleanup inventory`,
