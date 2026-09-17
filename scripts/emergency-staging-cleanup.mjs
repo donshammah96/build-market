@@ -155,7 +155,7 @@ async function performDatabaseSweep() {
     connectionTimeoutMillis: 5000,
   });
 
-  const errors = [];
+  let errorCount = 0;
   let sweptCount = 0;
 
   try {
@@ -280,12 +280,12 @@ async function performDatabaseSweep() {
             `[emergency-cleanup] Failed to clean run ${runId}:`,
             runErr.message,
           );
-          errors.push({ runId, error: runErr.message });
+          errorCount++;
         }
       }
 
       console.log(
-        `[emergency-cleanup] Summary: Swept ${sweptCount} stranded run(s), ${errors.length} failed.`,
+        `[emergency-cleanup] Summary: Swept ${sweptCount} stranded run(s), ${errorCount} failed.`,
       );
 
       const expiredLeases = await client.query(`
@@ -307,15 +307,15 @@ async function performDatabaseSweep() {
       "[emergency-cleanup] Direct DB sweep encountered an error:",
       e.message,
     );
-    errors.push({ fatal: true, error: e.message });
+    errorCount++;
   } finally {
     await pool.end();
   }
 
   // 7d: Emit GitHub Actions warning annotation so cleanup failure is visible without breaking CI
-  if (errors.length > 0) {
+  if (errorCount > 0) {
     console.log(
-      `::warning title=Staging cleanup incomplete::${errors.length} error(s) occurred during emergency sweep`,
+      `::warning title=Staging cleanup incomplete::${errorCount} error(s) occurred during emergency sweep`,
     );
   }
 }

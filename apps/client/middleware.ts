@@ -40,6 +40,7 @@ import { PROFESSIONAL_ROUTES } from "@/lib/routes";
 import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 import { handleStagingProtection } from "@/app/lib/security/middleware/staging-auth";
 import { capabilityBoundaryForPath } from "@/app/lib/capabilities/boundary";
+import { fingerprintPublishableKey } from "@/app/lib/security/clerk-fingerprint";
 
 // =============================================================================
 // Middleware
@@ -160,8 +161,21 @@ const BLOCKED_ACCOUNT_STATUSES = [
 
 // API routes are called by fetch/XHR/tRPC clients, not browser navigation,
 // so failures must be JSON responses rather than sign-in redirects.
-const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
-  NextResponse.json({ error: message }, { status: 401 });
+const unauthorizedApiResponse = (
+  message = "Unauthorized",
+  headersInit?: Record<string, string>,
+): NextResponse => {
+  const response = NextResponse.json({ error: message }, { status: 401 });
+  if (headersInit) {
+    for (const [k, v] of Object.entries(headersInit)) {
+      if (v) {
+        const safeVal = v.replace(/[^\x20-\x7E]/g, "");
+        if (safeVal) response.headers.set(k, safeVal);
+      }
+    }
+  }
+  return response;
+};
 
 // =============================================================================
 // Satellite wiring (ROOT CAUSE FIX — see REDIRECT_LOOP_AUTOPSY_AND_FIX.md)
@@ -186,11 +200,22 @@ const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
 // in env.ts's satellite config comments.
 const satelliteDomain =
   (edgeEnv.clerkDomain || env.clerk.domain)?.trim() || undefined;
+
+// apps/client is the PRIMARY application (buildmarket.app / staging.buildmarket.app).
+// It is a standalone instance, NEVER a Clerk satellite (see ADR-001 & STAGING-E2E-STAFF-AUTOPSY-V2 §4 Q4).
+// Defensive guard against satellite env vars leaking into Preview(staging) for client (H-4').
+const isPrimaryDomain =
+  !satelliteDomain ||
+  satelliteDomain.includes("staging.buildmarket.app") ||
+  satelliteDomain.includes("buildmarket.app");
+
 const isSatellite =
   edgeEnv.clerkIsSatellite !== undefined
     ? edgeEnv.clerkIsSatellite
     : Boolean(env.clerk.isSatellite);
-const isSatelliteConfigured = Boolean(isSatellite && satelliteDomain);
+const isSatelliteConfigured = Boolean(
+  isSatellite && satelliteDomain && !isPrimaryDomain,
+);
 
 if (isSatellite && !satelliteDomain) {
   console.error(
@@ -205,9 +230,11 @@ if (isSatellite && !satelliteDomain) {
 
 const clerkPublishableKey =
   edgeEnv.clerkPublishableKey || env.clerk.publishableKey;
+const clerkSecretKey = edgeEnv.clerkSecretKey || env.clerk.secretKey;
 
 const clerkMiddlewareOptions = {
   publishableKey: clerkPublishableKey,
+  ...(clerkSecretKey ? { secretKey: clerkSecretKey } : {}),
   ...(isSatelliteConfigured
     ? { isSatellite: true as const, domain: satelliteDomain as string }
     : {}),
@@ -327,8 +354,39 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   if (isProtectedApiRoute(nextReq)) {
     const authObject = await auth();
     if (!authObject.userId) {
-      logMiddlewareDecision(nextReq, "mw_deny_protected_api_unauthenticated");
-      return unauthorizedApiResponse();
+      const debugData =
+        typeof (authObject as any)?.debug === "function"
+          ? (authObject as any).debug()
+          : null;
+      const authReason =
+        debugData?.reason ||
+        (authObject as any)?.sessionStatus ||
+        "unauthenticated";
+
+      logMiddlewareDecision(nextReq, "mw_deny_protected_api_unauthenticated", {
+        authReason,
+        debug: debugData,
+      });
+
+      const isDiagnosticEnv =
+        edgeEnv.ddEnv === "staging" ||
+        env.otel?.ddEnv === "staging" ||
+        edgeEnv.isVercelPreview ||
+        env.isVercelPreview ||
+        edgeEnv.isDev ||
+        env.isDev;
+
+      return unauthorizedApiResponse(
+        "Unauthorized",
+        isDiagnosticEnv
+          ? {
+              "x-bm-mw-decision": "mw_deny_protected_api_unauthenticated",
+              "x-bm-auth-reason": String(authReason),
+              "x-bm-clerk-pk":
+                fingerprintPublishableKey(clerkPublishableKey) ?? "",
+            }
+          : undefined,
+      );
     }
 
     const quickMeta = parseMiddlewareSessionMetadata(authObject.sessionClaims);
@@ -345,7 +403,10 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
     logMiddlewareDecision(nextReq, "mw_allow_protected_api", {
       userId: authObject.userId,
     });
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+    return applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+      edgeUserId: authObject.userId,
+      decision: "mw_allow_protected_api",
+    });
   }
 
   // 1d. Any other /api path must be explicitly classified above as

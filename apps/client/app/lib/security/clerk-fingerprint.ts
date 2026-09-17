@@ -49,6 +49,9 @@ export function fingerprintPublishableKey(key?: string | null): string | null {
 
     // Clerk key hosts typically terminate with '$', e.g. "clerk.staging.buildmarket.app$"
     const host = decoded.replace(/\$$/, "").trim();
+    if (!/^[\x20-\x7E]+$/.test(host)) {
+      return `${prefix}:non_ascii_payload`;
+    }
     return `${prefix}:${host}`;
   } catch {
     return `${prefix}:malformed_payload`;

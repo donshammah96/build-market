@@ -16,7 +16,41 @@
 export const edgeEnv = {
   // Clerk Authentication
   get clerkPublishableKey(): string {
-    return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+    const rawPublishableKey =
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+    const configuredFrontendApi =
+      process.env.NEXT_PUBLIC_CLERK_FRONTEND_API ?? "";
+    const isStagingEnv =
+      process.env.DD_ENV === "staging" ||
+      (typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
+        process.env.NEXT_PUBLIC_APP_URL.includes("staging.buildmarket.app"));
+
+    const frontendApi =
+      configuredFrontendApi ||
+      (isStagingEnv ? "https://clerk.staging.buildmarket.app" : "");
+
+    if (frontendApi) {
+      try {
+        const fapiHost = new URL(frontendApi).host;
+        if (fapiHost) {
+          const encodedHost = (
+            typeof Buffer !== "undefined"
+              ? Buffer.from(`${fapiHost}$`).toString("base64")
+              : btoa(`${fapiHost}$`)
+          ).replace(/=+$/, "");
+          if (!rawPublishableKey.includes(encodedHost)) {
+            const isDev = rawPublishableKey.startsWith("pk_test_");
+            return `${isDev ? "pk_test_" : "pk_live_"}${encodedHost}`;
+          }
+        }
+      } catch {
+        // safe fallback
+      }
+    }
+    return rawPublishableKey;
+  },
+  get clerkSecretKey(): string {
+    return process.env.CLERK_SECRET_KEY ?? "";
   },
   get clerkFrontendApi(): string {
     return process.env.NEXT_PUBLIC_CLERK_FRONTEND_API ?? "";
