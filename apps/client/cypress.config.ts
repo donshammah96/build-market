@@ -133,6 +133,8 @@ export default defineConfig({
           return {
             name: "bm_staging_auth",
             value: stagingAuthSecret,
+            user: stagingAuthUser || "buildmarket",
+            password: stagingAuthPassword,
           };
         },
 

@@ -106,6 +106,34 @@ Cypress.Commands.add(
   },
 );
 
+function visitTicketUrlWithStagingAuth(signInUrl: string) {
+  return cy
+    .task("stagingTestControl:getStagingAuthCookie")
+    .then((authInfo: any) => {
+      // Clear existing cookies before exchanging a single-use ticket
+      cy.clearCookies();
+
+      // Immediately restore staging protection bypass cookie so edge proxy allows browser navigation
+      if (authInfo?.name && authInfo?.value) {
+        cy.setCookie(authInfo.name, authInfo.value);
+      }
+
+      const visitOptions: Partial<Cypress.VisitOptions> = {
+        failOnStatusCode: false,
+      };
+
+      // Provide HTTP Basic Auth fallback if configured
+      if (authInfo?.user && authInfo?.password) {
+        visitOptions.auth = {
+          username: authInfo.user,
+          password: authInfo.password,
+        };
+      }
+
+      cy.visit(signInUrl, visitOptions);
+    });
+}
+
 Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
   let sessionResult: { userId: string; email: string };
 
@@ -117,11 +145,8 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
       }
       sessionResult = res;
 
-      // Clear existing cookies before exchanging a single-use ticket
-      cy.clearCookies();
-
-      // Visit the Clerk ticket URL to set official session cookies and settle
-      cy.visit(res.signInUrl, { failOnStatusCode: false });
+      // Visit the Clerk ticket URL with staging perimeter authentication restored
+      visitTicketUrlWithStagingAuth(res.signInUrl);
       cy.document().then((doc) => {
         if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
           cy.task(
@@ -182,11 +207,8 @@ Cypress.Commands.add(
           state: res.state,
         };
 
-        // Clear existing cookies before exchanging a single-use ticket
-        cy.clearCookies();
-
-        // Visit the Clerk ticket URL to establish session cookies and settle
-        cy.visit(res.signInUrl, { failOnStatusCode: false });
+        // Visit the Clerk ticket URL with staging perimeter authentication restored
+        visitTicketUrlWithStagingAuth(res.signInUrl);
         cy.document().then((doc) => {
           if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
             cy.task(

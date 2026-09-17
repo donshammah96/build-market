@@ -103,7 +103,7 @@ const mockPrisma = {
       return 0; // Remaining owned users
     }),
   },
-  $transaction: vi.fn(async (cb: any, opts: any) => cb(mockPrisma)),
+  $transaction: vi.fn(async (cb: any) => cb(mockPrisma)),
 };
 
 vi.mock("@build/db", () => ({
