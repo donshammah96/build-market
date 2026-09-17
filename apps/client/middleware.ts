@@ -230,11 +230,15 @@ if (isSatellite && !satelliteDomain) {
 
 const clerkPublishableKey =
   edgeEnv.clerkPublishableKey || env.clerk.publishableKey;
-const clerkSecretKey = edgeEnv.clerkSecretKey || env.clerk.secretKey;
-
+// CRITICAL: Do NOT pass secretKey into clerkMiddlewareOptions.
+// In Clerk v7, passing secretKey activates Dynamic Keys mode, which asserts
+// CLERK_ENCRYPTION_KEY at request time (encryptClerkRequestData). If CLERK_ENCRYPTION_KEY
+// is missing, Clerk throws encryptionKeyMissing ("Clerk: Missing CLERK_ENCRYPTION_KEY.
+// Required for propagating secretKey middleware option"), causing 500 MIDDLEWARE_INVOCATION_FAILED.
+// When secretKey is omitted here, clerkMiddleware safely reads ambient secretKey configuration
+// in standard static mode without requiring CLERK_ENCRYPTION_KEY.
 const clerkMiddlewareOptions = {
   publishableKey: clerkPublishableKey,
-  ...(clerkSecretKey ? { secretKey: clerkSecretKey } : {}),
   ...(isSatelliteConfigured
     ? { isSatellite: true as const, domain: satelliteDomain as string }
     : {}),
@@ -708,7 +712,19 @@ const middleware = async (
   }
 
   // Delegate all authenticated, user-facing, and protected routes to clerkMiddleware
-  return (clerkHandler as any)(req, event);
+  try {
+    return await (clerkHandler as any)(req, event);
+  } catch (error: any) {
+    console.error(
+      "[middleware] Unhandled exception in clerkHandler:",
+      error?.message || error,
+    );
+    // On auth and public routes (/sign-in, /sign-up, etc.), never crash with Vercel 500 MIDDLEWARE_INVOCATION_FAILED
+    if (isAuthRoute(req) || isPublicRoute(req)) {
+      return applyDocumentCspHeaders(req, nonce, cspValue);
+    }
+    throw error;
+  }
 };
 
 export default middleware;

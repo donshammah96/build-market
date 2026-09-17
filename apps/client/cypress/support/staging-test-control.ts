@@ -177,6 +177,15 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
           );
           throw new Error(`Auth loop broken: ${doc.body.innerText}`);
         }
+        if (doc.body?.innerText?.includes("MIDDLEWARE_INVOCATION_FAILED")) {
+          cy.task(
+            "log",
+            `[STAGING DIAGNOSTIC] Middleware invocation failed: ${doc.body.innerText}`,
+          );
+          throw new Error(
+            `Middleware invocation failed on ticket redemption: ${doc.body.innerText}`,
+          );
+        }
       });
       cy.location("pathname", { timeout: 15000 }).should((pathname) => {
         expect(pathname).not.to.include("/sign-in");
@@ -241,6 +250,15 @@ Cypress.Commands.add(
               `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
             );
             throw new Error(`Auth loop broken: ${doc.body.innerText}`);
+          }
+          if (doc.body?.innerText?.includes("MIDDLEWARE_INVOCATION_FAILED")) {
+            cy.task(
+              "log",
+              `[STAGING DIAGNOSTIC] Middleware invocation failed: ${doc.body.innerText}`,
+            );
+            throw new Error(
+              `Middleware invocation failed on ticket redemption: ${doc.body.innerText}`,
+            );
           }
         });
         cy.location("pathname", { timeout: 15000 }).should((pathname) => {
