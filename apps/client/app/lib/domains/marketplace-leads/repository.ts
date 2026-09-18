@@ -7,7 +7,10 @@ import type {
 
 function toCountyEnum(value?: string | null): County | undefined {
   if (!value || typeof value !== "string") return undefined;
-  const normalized = value.trim().toUpperCase().replace(/[-\s]+/g, "_");
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, "_");
   if (Object.values(County).includes(normalized as County)) {
     return normalized as County;
   }

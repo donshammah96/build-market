@@ -1,5 +1,23 @@
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig } from "cypress";
+
+for (const envFile of [
+  ".env.local",
+  "../.env.local",
+  "apps/client/.env.local",
+  ".env",
+  "../.env",
+  "apps/client/.env",
+]) {
+  const resolved = path.resolve(process.cwd(), envFile);
+  if (fs.existsSync(resolved)) {
+    try {
+      process.loadEnvFile?.(resolved);
+    } catch {}
+  }
+}
 
 export default defineConfig({
   e2e: {
@@ -71,13 +89,14 @@ export default defineConfig({
       }
 
       const baseUrl = (
+        config.baseUrl ||
         config.env.STAGING_E2E_BASE_URL ||
         process.env.STAGING_E2E_BASE_URL ||
-        "http://localhost:3500"
+        "https://staging.buildmarket.app"
       ).trim();
       const internalSecret = (
-        process.env.INTERNAL_API_SECRET ||
         process.env.INTERNAL_SERVICE_SECRET ||
+        process.env.INTERNAL_API_SECRET ||
         ""
       ).trim();
       const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
@@ -95,7 +114,9 @@ export default defineConfig({
           );
         }
         const target = new URL(baseUrl);
-        const allowedHosts = (process.env.STAGING_E2E_ALLOWED_HOSTS || "")
+        const allowedHosts = (
+          process.env.STAGING_E2E_ALLOWED_HOSTS || "staging.buildmarket.app"
+        )
           .split(",")
           .map((host) => host.trim())
           .filter(Boolean);

@@ -51,12 +51,10 @@ describe("POST /api/leads/qualification/routing/[id]/accept", () => {
   it("successfully handles valid request", async () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@build/db");
-    const { marketplaceLeadsService } = await import(
-      "@/app/lib/domains/marketplace-leads"
-    );
-    const { POST } = await import(
-      "@/app/api/leads/qualification/routing/[id]/accept/route"
-    );
+    const { marketplaceLeadsService } =
+      await import("@/app/lib/domains/marketplace-leads");
+    const { POST } =
+      await import("@/app/api/leads/qualification/routing/[id]/accept/route");
 
     vi.mocked(auth).mockResolvedValue({
       userId: "user_pro_123",
