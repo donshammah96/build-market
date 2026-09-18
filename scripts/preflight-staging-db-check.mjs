@@ -46,8 +46,8 @@ const baseUrl = (
   ""
 ).trim();
 const internalSecret = (
-  process.env.INTERNAL_API_SECRET ||
   process.env.INTERNAL_SERVICE_SECRET ||
+  process.env.INTERNAL_API_SECRET ||
   ""
 ).trim();
 const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
