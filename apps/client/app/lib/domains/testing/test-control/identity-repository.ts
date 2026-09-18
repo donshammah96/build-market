@@ -3,6 +3,7 @@ import {
   isAllowedScenarioForIdentityLease,
   parseStagingIdentitySlots,
   findAvailableSlotForRole,
+  STAGING_IDENTITY_SLOTS,
   type StagingSlotConfig,
   type IdentityLeaseKind,
 } from "@build/db/staging-test-runs";
@@ -46,33 +47,10 @@ export interface IdentityResetProjection {
   resetAt: Date;
 }
 
-const DEFAULT_STAGING_SLOTS: readonly StagingSlotConfig[] = [
-  {
-    slot: "pro-1",
-    role: "PROFESSIONAL",
-    email: "e2e_pro_1@staging.buildmarket.app",
-  },
-  {
-    slot: "pro-2",
-    role: "PROFESSIONAL",
-    email: "e2e_pro_2@staging.buildmarket.app",
-  },
-  {
-    slot: "client-1",
-    role: "CLIENT",
-    email: "e2e_client_1@staging.buildmarket.app",
-  },
-  {
-    slot: "client-2",
-    role: "CLIENT",
-    email: "e2e_client_2@staging.buildmarket.app",
-  },
-];
-
 export function resolveConfiguredSlots(): readonly StagingSlotConfig[] {
   const envSlots = env.stagingTestControl?.identitySlots;
   if (!envSlots) {
-    return DEFAULT_STAGING_SLOTS;
+    return STAGING_IDENTITY_SLOTS;
   }
   const isActualProduction =
     env.isProd &&
@@ -379,8 +357,8 @@ export class IdentityRepository {
         };
       },
       {
-        timeout: 20_000,
-        maxWait: 8_000,
+        timeout: 30_000,
+        maxWait: 15_000,
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
       },
     );

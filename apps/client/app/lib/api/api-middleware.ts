@@ -242,6 +242,8 @@ export function withAuth<T = any>(
     }
     // --- END DEV AUTH BYPASS ---
 
+    let authResolution: { context: AuthContext; params?: T };
+
     try {
       // Get Clerk user ID
       const authResult = await auth();
@@ -389,7 +391,7 @@ export function withAuth<T = any>(
         );
       }
 
-      return finalizeResponse(await handler(req, context, params));
+      authResolution = { context, params };
     } catch (error) {
       const logger = getClientLogger();
       logger.error(
@@ -401,6 +403,10 @@ export function withAuth<T = any>(
         apiError("Authentication failed", HttpStatus.UNAUTHORIZED),
       );
     }
+
+    return finalizeResponse(
+      await handler(req, authResolution.context, authResolution.params),
+    );
   };
 
   return routeHandler;

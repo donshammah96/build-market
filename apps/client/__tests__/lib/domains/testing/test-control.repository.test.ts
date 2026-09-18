@@ -244,14 +244,14 @@ describe("TestControlRepository (Phase 3 Hardenings)", () => {
   });
 
   describe("C-8: Interactive Transaction Timeout Budget", () => {
-    it("passes raised timeout (20s), maxWait (8s), and ReadCommitted isolation to prisma.$transaction", async () => {
+    it("passes raised timeout (30s), maxWait (15s), and ReadCommitted isolation to prisma.$transaction", async () => {
       await testControlRepository.cleanupRun("run-test-1");
 
       expect(mockPrisma.$transaction).toHaveBeenCalledWith(
         expect.any(Function),
         {
-          timeout: 20_000,
-          maxWait: 8_000,
+          timeout: 30_000,
+          maxWait: 15_000,
           isolationLevel: "ReadCommitted",
         },
       );

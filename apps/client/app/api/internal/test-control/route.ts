@@ -27,13 +27,15 @@ function deny(reason: string, meta: Record<string, unknown> = {}) {
 
 export async function POST(request: NextRequest) {
   // 1. Hard fail-closed environment gate before dynamic imports
-  const isStaging =
-    env.otel.ddEnv === "staging" ||
-    Boolean(env.stagingTestControl?.enabled) ||
-    Boolean(env.stagingAuth?.isEnabled);
   const isTest = env.isTest;
+  const isActualProduction =
+    env.isProd && !env.isVercelPreview && env.otel.ddEnv !== "staging";
+  const testControlEnabled =
+    !isActualProduction &&
+    Boolean(env.stagingTestControl?.enabled) &&
+    (env.otel.ddEnv === "staging" || env.isVercelPreview);
 
-  if (!isStaging && !isTest) {
+  if (!testControlEnabled && !isTest) {
     return deny("not_staging_environment");
   }
 

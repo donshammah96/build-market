@@ -251,17 +251,6 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const nonce = generateCspNonce();
   const cspValue = buildRequestCsp(nonce);
 
-  // Deferred MVP verticals are server-enforced capability boundaries, not
-  // navigation hints. Evaluate them before auth, onboarding, and API route
-  // classification so deep links and direct requests share the same denial.
-  const capabilityDenial = capabilityBoundaryForPath(pathname);
-  if (capabilityDenial) {
-    logMiddlewareDecision(nextReq, "mw_deny_disabled_capability");
-    return NextResponse.json(capabilityDenial.body, {
-      status: capabilityDenial.status,
-    });
-  }
-
   // 0. Maintenance mode and signup blocking (skip for exempt routes)
   if (!isSettingsExemptRoute(nextReq)) {
     const settingsResult = await resolveSystemSettings(baseUrl);
@@ -668,6 +657,19 @@ const middleware = async (
   const capabilityDenial = capabilityBoundaryForPath(req.nextUrl.pathname);
   if (capabilityDenial) {
     logMiddlewareDecision(req, "mw_deny_disabled_capability");
+    const accept = req.headers.get("accept") || "";
+    if (accept.includes("text/html")) {
+      return new NextResponse(
+        "<!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1><p>The requested capability is not available.</p></body></html>",
+        {
+          status: capabilityDenial.status,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
     return NextResponse.json(capabilityDenial.body, {
       status: capabilityDenial.status,
     });

@@ -191,7 +191,12 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
         expect(pathname).not.to.include("/sign-in");
         expect(pathname).not.to.include("/auth-callback");
       });
-      cy.getCookies().should((cookies) => {
+      cy.window({ timeout: 20000 }).should((win: any) => {
+        expect(win.Clerk, "window.Clerk").to.exist;
+        expect(win.Clerk.loaded, "window.Clerk.loaded").to.be.true;
+        expect(win.Clerk.session, "window.Clerk.session").to.exist;
+      });
+      cy.getCookies({ timeout: 15000 }).should((cookies) => {
         const hasSession = cookies.some((c) => c.name.startsWith("__session"));
         const hasClientUat = cookies.some((c) =>
           c.name.startsWith("__client_uat"),
@@ -265,7 +270,12 @@ Cypress.Commands.add(
           expect(pathname).not.to.include("/sign-in");
           expect(pathname).not.to.include("/auth-callback");
         });
-        cy.getCookies().should((cookies) => {
+        cy.window({ timeout: 20000 }).should((win: any) => {
+          expect(win.Clerk, "window.Clerk").to.exist;
+          expect(win.Clerk.loaded, "window.Clerk.loaded").to.be.true;
+          expect(win.Clerk.session, "window.Clerk.session").to.exist;
+        });
+        cy.getCookies({ timeout: 15000 }).should((cookies) => {
           const hasSession = cookies.some((c) =>
             c.name.startsWith("__session"),
           );

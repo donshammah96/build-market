@@ -21,12 +21,34 @@ export interface TestControlError {
 }
 
 export class TestControlService {
+  private assertTestControlPermitted(): Result<true, TestControlError> {
+    const isTest = env.isTest;
+    const isActualProduction =
+      env.isProd && !env.isVercelPreview && env.otel.ddEnv !== "staging";
+    const testControlEnabled =
+      !isActualProduction &&
+      Boolean(env.stagingTestControl?.enabled) &&
+      (env.otel.ddEnv === "staging" || env.isVercelPreview);
+
+    if (!testControlEnabled && !isTest) {
+      return err({
+        error: "NOT_STAGING_ENVIRONMENT",
+        message:
+          "Staging test control is not enabled or permitted in this environment",
+        status: 404,
+      });
+    }
+    return ok(true);
+  }
+
   /**
    * Initializes a new StagingTestRun and issues a signed, short-lived grant token.
    */
   async createRun(
     params: CreateRunParams,
   ): Promise<Result<{ runId: string; grantToken: string }, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
     const secret = resolveStagingControlSecret(
       env.stagingTestControl?.secret,
       env.isTest,
@@ -97,6 +119,9 @@ export class TestControlService {
       TestControlError
     >
   > {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
     const run = await testControlRepository.findRunById(params.runId);
     if (
       !run ||
@@ -197,6 +222,9 @@ export class TestControlService {
       TestControlError
     >
   > {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
     const run = await testControlRepository.findRunById(params.runId);
     if (
       !run ||
@@ -300,6 +328,9 @@ export class TestControlService {
       TestControlError
     >
   > {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
     const run = await testControlRepository.findRunById(params.runId);
     if (
       !run ||
@@ -334,6 +365,9 @@ export class TestControlService {
     scenario: StagingScenario;
     payload: Record<string, unknown>;
   }): Promise<Result<Record<string, string>, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
     const run = await testControlRepository.findRunById(params.runId);
     if (
       !run ||
@@ -364,6 +398,9 @@ export class TestControlService {
   async getRunProjection(
     runId: string,
   ): Promise<Result<any, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
     try {
       const projection = await testControlRepository.getRunProjection(runId);
       if (!projection.run) {
@@ -389,6 +426,9 @@ export class TestControlService {
   async cleanupRun(
     runId: string,
   ): Promise<Result<{ cleaned: true }, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
     const run = await testControlRepository.findRunById(runId);
     if (!run) {
       return err({

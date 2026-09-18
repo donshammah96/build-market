@@ -176,15 +176,19 @@ node scripts/emergency-staging-cleanup.mjs
 
 ## 5. Comprehensive Troubleshooting Matrix
 
-### Issue 1: `The application redirected to /sign-in?redirect_url=%2Fonboarding more than 20 times`
+### Issue 1: `The application redirected to /sign-in?redirect_url=%2Fonboarding more than 20 times` or `500 MIDDLEWARE_INVOCATION_FAILED`
 
 - **Observed In**: Specs `01`, `02`, `03`, `06`, `08`.
-- **Root Cause**: Next.js Edge Middleware on `/onboarding` fails to recognize the user's session token (`auth().userId` is null), redirecting to `/sign-in`. In `/sign-in`, the Node.js server component _does_ recognize the session and redirects back to `/onboarding`, creating an infinite loop.
+- **Root Cause**:
+  1. Next.js Edge Middleware on `/onboarding` fails to recognize the user's session token (`auth().userId` is null), redirecting to `/sign-in`. In `/sign-in`, the Node.js server component _does_ recognize the session and redirects back to `/onboarding`, creating an infinite loop.
+  2. In Clerk v7, passing `secretKey` into `clerkMiddlewareOptions` activates Dynamic Keys mode, which requires `CLERK_ENCRYPTION_KEY`. If missing on Vercel, Clerk throws `encryptionKeyMissing`, causing `500 MIDDLEWARE_INVOCATION_FAILED`.
 - **Diagnostic Steps**:
   1. Inspect the Cypress failure screenshot under `apps/client/cypress/screenshots`.
   2. Verify if `CLERK_SECRET_KEY` is set on Vercel Preview (`staging`).
   3. Check if `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` matches the staging Clerk instance (`pk_live_Y2xlcmsuc3RhZ2luZy5idWlsZG1hcmtldC5hcHAk` or `pk_test_...`).
+  4. Look for `MIDDLEWARE_INVOCATION_FAILED` in Cypress run logs or test-control handoffs.
 - **Remediation**:
+  - In `apps/client/middleware.ts`, ensure `secretKey` is NOT passed into `clerkMiddlewareOptions`; Clerk reads ambient `CLERK_SECRET_KEY` in static mode.
   - In `apps/client/components/auth/ClerkSignInWidget.tsx`, verify session ticket consumption completes and cookies flush before redirecting.
   - In `apps/client/cypress/support/staging-test-control.ts`, assert `__session` and `__client_uat` cookies are present before navigating away from `/sign-in`.
 
@@ -212,7 +216,7 @@ node scripts/emergency-staging-cleanup.mjs
 ### Issue 3: `resetIdentityBaseline failed with status 409: All staging identity slots are currently leased`
 
 - **Observed In**: Preflight or any spec setup.
-- **Root Cause**: All 3 pool slots (`e2e_pro_1`, `e2e_pro_2`, `e2e_pro_3`) are locked in `LEASED`, `RESETTING`, or `READY` states due to aborted test runs or unhandled exceptions.
+- **Root Cause**: All 4 pool slots (`pro-1` / `e2e_pro_1`, `pro-2` / `e2e_pro_2`, `client-1` / `e2e_client_1`, `client-2` / `e2e_client_2`) are locked in `LEASED`, `RESETTING`, or `READY` states due to aborted test runs or unhandled exceptions.
 - **Remediation**:
   1. Trigger manual emergency cleanup:
 
@@ -263,7 +267,8 @@ If the test-control system behaves unexpectedly or a security incident is suspec
    - Set `ENABLE_STAGING_TEST_CONTROL=false`.
    - Clear or rotate `TEST_CONTROL_SECRET` and `INTERNAL_SERVICE_SECRET`.
    - Redeploy immediately.
-   - All calls to `/api/internal/test-control` will immediately fail closed with HTTP 404.
+   - All calls to `/api/internal/test-control` will immediately fail closed with HTTP 404 and header `x-test-control-denial: not_staging_environment`.
+   - With the strict AND-gate implemented in Phase 5, the kill switch is fail-closed regardless of whether `ddEnv === "staging"` or staging basic auth is active. Actual production (`isProd` without `isVercelPreview` and without `ddEnv === "staging"`) is unconditionally excluded.
 
 2. **Purge Stranded Leases and Fixtures**:
 

@@ -2,35 +2,13 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@build/db";
 import {
   parseStagingIdentitySlots,
-  type StagingSlotConfig,
+  STAGING_IDENTITY_SLOTS,
 } from "@build/db/staging-test-runs";
 import { err, ok, type Result } from "@/app/lib/errors/result";
 import { env } from "@/app/lib/infrastructure/env";
 import type { IdentityLease } from "./identity-repository";
 import type { TestControlError } from "./service";
-
-const DEFAULT_STAGING_SLOTS: readonly StagingSlotConfig[] = [
-  {
-    slot: "pro-1",
-    role: "PROFESSIONAL",
-    email: "e2e_pro_1@staging.buildmarket.app",
-  },
-  {
-    slot: "pro-2",
-    role: "PROFESSIONAL",
-    email: "e2e_pro_2@staging.buildmarket.app",
-  },
-  {
-    slot: "client-1",
-    role: "CLIENT",
-    email: "e2e_client_1@staging.buildmarket.app",
-  },
-  {
-    slot: "client-2",
-    role: "CLIENT",
-    email: "e2e_client_2@staging.buildmarket.app",
-  },
-];
+import { clearOnboardingResolverCache } from "@/app/lib/security/middleware/onboarding-resolver";
 
 function resolveAllowedPoolEmails(): Set<string> {
   const envSlots = env.stagingTestControl?.identitySlots;
@@ -44,7 +22,7 @@ function resolveAllowedPoolEmails(): Set<string> {
     ? parseStagingIdentitySlots(envSlots, {
         isProduction: isActualProduction,
       })
-    : DEFAULT_STAGING_SLOTS;
+    : STAGING_IDENTITY_SLOTS;
 
   return new Set(slots.map((s) => s.email.toLowerCase()));
 }
@@ -110,6 +88,7 @@ export async function restoreClerkIdentityBaseline(
       }
     }
 
+    clearOnboardingResolverCache(lease.clerkId);
     return ok(undefined);
   } catch (error: any) {
     await markLeaseFailed(lease.id);

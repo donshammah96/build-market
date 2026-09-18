@@ -1,8 +1,18 @@
 import { prisma, Prisma, type MarketplaceLeadDocumentType } from "@build/db";
+import { County } from "@prisma/client";
 import type {
   CreateMarketplaceLeadInput,
   UpdateMarketplaceLeadQualificationInput,
 } from "./contracts";
+
+function toCountyEnum(value?: string | null): County | undefined {
+  if (!value || typeof value !== "string") return undefined;
+  const normalized = value.trim().toUpperCase().replace(/[-\s]+/g, "_");
+  if (Object.values(County).includes(normalized as County)) {
+    return normalized as County;
+  }
+  return undefined;
+}
 
 export const marketplaceLeadsRepository = {
   createLead(clientId: string, data: CreateMarketplaceLeadInput) {
@@ -248,7 +258,7 @@ export const marketplaceLeadsRepository = {
           description: existing.lead.description,
           status: "NEW",
           source: "PLATFORM_SEARCH",
-          county: (existing.lead.projectCounty as any) || undefined,
+          county: toCountyEnum(existing.lead.projectCounty),
           budgetMin: existing.lead.qualification?.budgetRangeMin
             ? new Prisma.Decimal(existing.lead.qualification.budgetRangeMin)
             : undefined,

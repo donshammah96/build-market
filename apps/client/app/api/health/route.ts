@@ -44,14 +44,14 @@ interface HealthResponse {
   timestamp: string;
   correlationId: string | null;
   dependencies: DependencyResult[];
-  system: {
+  system?: {
     memoryUsageMB: number;
     heapUsedMB: number;
     heapTotalMB: number;
     heapUtilization: number;
   };
-  circuitBreakers: Record<string, unknown>;
-  caches: Record<string, unknown>;
+  circuitBreakers?: Record<string, unknown>;
+  caches?: Record<string, unknown>;
   buildSha: string | null;
   deploymentId: string | null;
   bootedAt: string;
@@ -354,6 +354,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Resilience layer may not be initialized yet
   }
 
+  const sanitizedDependencies = hasValidInternalSecret
+    ? dependencies
+    : dependencies.map(({ message: _message, ...rest }) => rest);
+
   const response: HealthResponse = {
     status: overallStatus,
     version: env.appVersion,
@@ -364,20 +368,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     timestamp: new Date().toISOString(),
     correlationId,
-    dependencies,
-    system: {
-      memoryUsageMB: Math.round(mem.rss / 1024 / 1024),
-      heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
-      heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
-      heapUtilization: Math.round((mem.heapUsed / mem.heapTotal) * 100),
-    },
-    circuitBreakers,
-    caches,
+    dependencies: sanitizedDependencies,
     buildSha: edgeEnv.buildSha,
     deploymentId: edgeEnv.deploymentId,
     bootedAt: new Date(BOOT_TIME).toISOString(),
     ...(hasValidInternalSecret
       ? {
+          system: {
+            memoryUsageMB: Math.round(mem.rss / 1024 / 1024),
+            heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+            heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+            heapUtilization: Math.round((mem.heapUsed / mem.heapTotal) * 100),
+          },
+          circuitBreakers,
+          caches,
           clerkDiagnostics: {
             clerkPublishableKeyFingerprint: fingerprintPublishableKey(
               env.clerk?.publishableKey,

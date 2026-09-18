@@ -503,8 +503,8 @@ export class TestControlRepository {
         return cleanedRun;
       },
       {
-        timeout: 20_000,
-        maxWait: 8_000,
+        timeout: 30_000,
+        maxWait: 15_000,
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
       },
     );

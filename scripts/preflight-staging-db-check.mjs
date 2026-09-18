@@ -95,6 +95,35 @@ async function main() {
     return;
   }
 
+  console.log(
+    `[preflight] Probing ${baseUrl}/api/health for staging test control kill switch ...`,
+  );
+  try {
+    const healthRes = await fetch(`${baseUrl}/api/health`, {
+      method: "GET",
+      headers: headers(),
+    });
+    if (!healthRes.ok) {
+      fail(`Could not query /api/health: status ${healthRes.status}`);
+      return;
+    }
+    const healthBody = await healthRes.json();
+    if (healthBody.stagingTestControlEnabled !== true) {
+      fail(
+        `Deployment has stagingTestControlEnabled: ${healthBody.stagingTestControlEnabled}. ` +
+          `ENABLE_STAGING_TEST_CONTROL=true must be set in Vercel environment variables for Preview/Staging. ` +
+          `Without this variable, all test-control calls will be rejected with 404 under the strict environment kill switch.`,
+      );
+      return;
+    }
+    console.log(
+      `[preflight] OK — stagingTestControlEnabled: true verified on deployment.`,
+    );
+  } catch (err) {
+    fail(`Could not probe /api/health at ${baseUrl}: ${err.message}`);
+    return;
+  }
+
   console.log(`[preflight] Probing ${baseUrl}/api/internal/test-control ...`);
 
   let res;

@@ -104,6 +104,29 @@ export const StagingSlotConfigSchema = z.object({
 
 export type StagingSlotConfig = z.infer<typeof StagingSlotConfigSchema>;
 
+export const STAGING_IDENTITY_SLOTS: readonly StagingSlotConfig[] = [
+  {
+    slot: "pro-1",
+    role: "PROFESSIONAL",
+    email: "e2e_pro_1@staging.buildmarket.app",
+  },
+  {
+    slot: "pro-2",
+    role: "PROFESSIONAL",
+    email: "e2e_pro_2@staging.buildmarket.app",
+  },
+  {
+    slot: "client-1",
+    role: "CLIENT",
+    email: "e2e_client_1@staging.buildmarket.app",
+  },
+  {
+    slot: "client-2",
+    role: "CLIENT",
+    email: "e2e_client_2@staging.buildmarket.app",
+  },
+] as const;
+
 export function parseStagingIdentitySlots(
   rawJson: string,
   options: { isProduction?: boolean } = {},
