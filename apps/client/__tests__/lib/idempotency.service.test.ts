@@ -40,6 +40,7 @@ describe("IdempotencyService replay data policy", () => {
       "escrow",
       "idea-books",
       "lead",
+      "marketplace-leads",
       "messaging",
       "onboarding",
       "portfolio",

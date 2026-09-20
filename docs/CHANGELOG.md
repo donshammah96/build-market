@@ -4,6 +4,10 @@
 
 ### Security & Fixed — Monorepo Architectural Hardening, Concurrency & Security Alignment
 
+- **Marketplace Leads Idempotency Scope Registration & Test Alignment (`apps/client/app/lib/services/idempotency.service.ts`, `apps/client/__tests__/lib/idempotency.service.test.ts`)**:
+  - Registered `"marketplace-leads"` in `IdempotencyReplayScope` and `IDEMPOTENCY_REPLAY_SCOPE_POLICIES` with `allowedDataClasses: CLASS_B_C_AND_D`, resolving uncaught runtime exceptions in `IdempotencyService.checkOrCreate` on lead qualification routing routes (`/api/leads/qualification/routing/[id]/accept`).
+  - Aligned explicit scope expectation checklist in `apps/client/__tests__/lib/idempotency.service.test.ts` to include `"marketplace-leads"`, resolving unit test regression assertion mismatch and restoring 100% test pass rate across all 8 idempotency service tests.
+
 - **Worker BullMQ v5 Backend Guard & Diagnostic Remediation Logging (`apps/workers/src/worker-options.ts`, `apps/workers/src/index.ts`, `apps/workers/__tests__/worker-options.test.ts`, `docs/runbooks/queue-postgres-migration.md`, `apps/workers/docs/runbooks/queue-postgres-migration.md`)**:
   - Extracted worker options resolution into dedicated `resolveWorkerOptions` helper module with structured diagnostic error handling and fail-closed validation.
   - Resolved unhandled startup crash loop on Render where configuring `QUEUE_BACKEND=postgres` or queue-specific overrides (`QUEUE_BACKEND_MAINTENANCE_JOBS=postgres`) failed without actionable operator instructions.
