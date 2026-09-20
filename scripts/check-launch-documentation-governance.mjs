@@ -51,9 +51,14 @@ function findFiles(directory, predicate) {
     const path = join(directory, entry);
     if (statSync(path).isDirectory()) {
       if (
-        ["node_modules", ".git", ".next", ".open-next", ".turbo", ".wrangler"].includes(
-          entry,
-        )
+        [
+          "node_modules",
+          ".git",
+          ".next",
+          ".open-next",
+          ".turbo",
+          ".wrangler",
+        ].includes(entry)
       ) {
         continue;
       }
@@ -71,15 +76,24 @@ function checkAdrMetadata(root, findings, app, prefix, lastNumber) {
 
   for (let number = 1; number <= lastNumber; number += 1) {
     const id = `${prefix}-${String(number).padStart(3, "0")}`;
-    const path = files.find((candidate) => candidate.split(/[\\/]/).at(-1).startsWith(id));
+    const path = files.find((candidate) =>
+      candidate.split(/[\\/]/).at(-1).startsWith(id),
+    );
     if (!path) {
       findings.push(`${toRepoPath(root, directory)}: missing ${id}`);
       continue;
     }
     const content = readText(path, findings, root);
     for (const field of ["Status:", "Owner:", "Next review:"]) {
-      if (!new RegExp(`(^|\\n)${field.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`, "i").test(content)) {
-        findings.push(`${toRepoPath(root, path)}: missing ${field.slice(0, -1)}`);
+      if (
+        !new RegExp(
+          `(^|\\n)${field.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`,
+          "i",
+        ).test(content)
+      ) {
+        findings.push(
+          `${toRepoPath(root, path)}: missing ${field.slice(0, -1)}`,
+        );
       }
     }
   }
@@ -106,8 +120,15 @@ function checkStatusPages(root, findings) {
     const path = join(root, "apps", app, "docs", "STATUS.md");
     const content = readText(path, findings, root);
     for (const field of requiredStatusFields) {
-      if (!new RegExp(`(^|\\n)${field.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`, "i").test(content)) {
-        findings.push(`${toRepoPath(root, path)}: missing ${field.slice(0, -1)}`);
+      if (
+        !new RegExp(
+          `(^|\\n)${field.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`,
+          "i",
+        ).test(content)
+      ) {
+        findings.push(
+          `${toRepoPath(root, path)}: missing ${field.slice(0, -1)}`,
+        );
       }
     }
   }
@@ -121,7 +142,9 @@ function checkScorecard(root, findings) {
       .split(/\r?\n/)
       .find((candidate) => new RegExp(`\\|\\s*${area}\\s*\\|`).test(candidate));
     if (!line || !/ADR-/i.test(line) || !/Control:/i.test(line)) {
-      findings.push(`docs/launch/GO_NO_GO.md: ${area} must name ADR and Control evidence`);
+      findings.push(
+        `docs/launch/GO_NO_GO.md: ${area} must name ADR and Control evidence`,
+      );
     }
   }
 }
@@ -130,14 +153,29 @@ function checkWorkerOperations(root, findings) {
   const readmePath = join(root, "apps", "workers", "README.md");
   const content = readText(readmePath, findings, root);
   if (!content.includes("QUEUE_RECOVERY_RUNBOOK.md")) {
-    findings.push("apps/workers/README.md: missing queue recovery runbook link");
+    findings.push(
+      "apps/workers/README.md: missing queue recovery runbook link",
+    );
   }
-  for (const dependency of ["liveness", "readiness", "Redis", "PostgreSQL", "BullMQ", "NATS"]) {
+  for (const dependency of [
+    "liveness",
+    "readiness",
+    "Redis",
+    "PostgreSQL",
+    "BullMQ",
+    "NATS",
+  ]) {
     if (!content.toLowerCase().includes(dependency.toLowerCase())) {
-      findings.push(`apps/workers/README.md: missing health semantics for ${dependency}`);
+      findings.push(
+        `apps/workers/README.md: missing health semantics for ${dependency}`,
+      );
     }
   }
-  readText(join(root, "apps", "workers", "docs", "QUEUE_RECOVERY_RUNBOOK.md"), findings, root);
+  readText(
+    join(root, "apps", "workers", "docs", "QUEUE_RECOVERY_RUNBOOK.md"),
+    findings,
+    root,
+  );
 }
 
 function checkNodeRuntime(root, findings) {
@@ -162,18 +200,56 @@ function checkNodeRuntime(root, findings) {
     }
   }
 
-  for (const path of findFiles(join(root, "apps"), (candidate) => candidate.endsWith("Dockerfile"))) {
+  for (const path of findFiles(join(root, "apps"), (candidate) =>
+    candidate.endsWith("Dockerfile"),
+  )) {
     const content = readText(path, findings, root);
     if (/^FROM\s+node:(?!24(?:[-.:]|$))/im.test(content)) {
-      findings.push(`${toRepoPath(root, path)}: active Docker base must use Node 24`);
+      findings.push(
+        `${toRepoPath(root, path)}: active Docker base must use Node 24`,
+      );
     }
   }
 
   const workflowDirectory = join(root, ".github", "workflows");
-  for (const path of findFiles(workflowDirectory, (candidate) => candidate.endsWith(".yml"))) {
+  for (const path of findFiles(workflowDirectory, (candidate) =>
+    candidate.endsWith(".yml"),
+  )) {
     const content = readText(path, findings, root);
     if (/node-version:\s*["']?20(?:\.x)?["']?/i.test(content)) {
-      findings.push(`${toRepoPath(root, path)}: active workflow must use Node 24`);
+      findings.push(
+        `${toRepoPath(root, path)}: active workflow must use Node 24`,
+      );
+    }
+  }
+}
+
+function checkLegalCopy(root, findings) {
+  const legalDirectory = join(root, "apps", "client", "app", "legal");
+  if (!existsSync(legalDirectory)) return;
+
+  const bannedPatterns = [
+    { pattern: /pinky promise/i, label: "pinky promise joke copy" },
+    {
+      pattern: /teaching our lawyers/i,
+      label: "teaching our lawyers joke copy",
+    },
+    { pattern: /lorem ipsum/i, label: "lorem ipsum dummy copy" },
+    { pattern: /under construction/i, label: "under construction placeholder" },
+  ];
+
+  const files = findFiles(
+    legalDirectory,
+    (path) => path.endsWith(".tsx") || path.endsWith(".ts"),
+  );
+  for (const path of files) {
+    const content = readFileSync(path, "utf8");
+    for (const { pattern, label } of bannedPatterns) {
+      if (pattern.test(content)) {
+        findings.push(
+          `${toRepoPath(root, path)}: contains prohibited copy "${label}"`,
+        );
+      }
     }
   }
 }
@@ -188,6 +264,7 @@ checkStatusPages(root, findings);
 checkScorecard(root, findings);
 checkWorkerOperations(root, findings);
 checkNodeRuntime(root, findings);
+checkLegalCopy(root, findings);
 
 if (findings.length > 0) {
   console.error("Launch documentation governance violations:\n");

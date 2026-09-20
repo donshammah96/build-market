@@ -30,7 +30,7 @@ export default function LegalLayout({
           >
             Build Market
           </Link>
-          <div className="flex items-center gap-6 text-sm text-zinc-400">
+          <div className="flex flex-wrap items-center gap-4 md:gap-6 text-xs md:text-sm text-zinc-400">
             <Link
               href="/legal/privacy"
               className="hover:text-white transition-colors"
@@ -38,16 +38,34 @@ export default function LegalLayout({
               Privacy
             </Link>
             <Link
+              href="/legal/safety-and-verification"
+              className="hover:text-white transition-colors"
+            >
+              Safety &amp; Trust
+            </Link>
+            <Link
+              href="/legal/review-policy"
+              className="hover:text-white transition-colors"
+            >
+              Reviews
+            </Link>
+            <Link
+              href="/legal/disputes-and-complaints"
+              className="hover:text-white transition-colors"
+            >
+              Disputes
+            </Link>
+            <Link
+              href="/legal/content-moderation"
+              className="hover:text-white transition-colors"
+            >
+              Moderation
+            </Link>
+            <Link
               href="/legal/professional-terms"
               className="hover:text-white transition-colors"
             >
-              Professional Terms
-            </Link>
-            <Link
-              href="/legal/cookie-settings"
-              className="hover:text-white transition-colors"
-            >
-              Cookies
+              Terms
             </Link>
           </div>
         </div>

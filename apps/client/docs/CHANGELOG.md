@@ -16,6 +16,29 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added & Security — P0-8 Privacy & Safety Operations Launch Hardening & Legal Governance
+
+- **Interim Privacy Policy v1.0 & Legal Blocker Remediation (`apps/client/app/legal/privacy/page.tsx`, `apps/client/app/legal/layout.tsx`)**:
+  - Replaced mock placeholder ("Pinky Promise") with a production Interim Privacy Policy compliant with Kenya Data Protection Act 2019 (DPA) and GDPR.
+  - Formally designated Data Controller (Build Market Technologies Ltd) and statutory contact point (`privacy@buildmarket.app`).
+  - Mapped data collection to ADR-006 data classification tiers: Class A (Restricted), Class B (Sensitive & Identity), Class C (Internal Operational), and Class D (Public Profile).
+  - Explicitly disclosed lawful bases under DPA Section 30 (Contractual Performance, Statutory Tax Obligations, Consent, Legitimate Interests).
+  - Published transparent subprocessor inventory (Clerk, AWS S3, Neon, Resend, Safaricom Daraja, Africa's Talking) and cross-border safeguards (DPAs with Standard Contractual Clauses).
+  - Disclosed masked communication protections for homeowner telephone numbers and exact street addresses prior to proposal acceptance.
+  - Provided direct links to statutory Data Subject Rights: Portability (`/api/user/export`), Rectification (`/api/user/rectification`), and Erasure (`/api/user/deletion` with 30-day grace period and 7-year anonymized financial ledger retention), as well as complaint mechanisms to the Office of the Data Protection Commissioner (ODPC).
+  - Updated legal layout header navigation to display links across the full trust and safety suite.
+
+- **CI Legal Placeholder Copy Guard & Governance Integration (`apps/client/__tests__/legal/no-placeholder-copy.test.ts`, `scripts/check-launch-documentation-governance.mjs`)**:
+  - Added automated Vitest suite asserting zero occurrences of prohibited placeholder or joke copy (`pinky promise`, `teaching our lawyers`, `lorem ipsum`, `under construction`, `TODO`) across all `.tsx` and `.ts` files under `apps/client/app/legal/`.
+  - Wired `checkLegalCopy()` into `scripts/check-launch-documentation-governance.mjs` to block CI regressions across legal pages.
+
+- **Customer Trust & Public Safety Policy Suite (`apps/client/app/legal/safety-and-verification/page.tsx`, `apps/client/app/legal/review-policy/page.tsx`, `apps/client/app/legal/disputes-and-complaints/page.tsx`, `apps/client/app/legal/content-moderation/page.tsx`, `apps/client/public/.well-known/security.txt`)**:
+  - **Safety & Verification Standards**: Disambiguates Statutory Verification (NCA/EBK/BORAQS), Platform Performance (response times, completed projects), and Verified Reputation per Houzz precedent; reaffirms P0-7 non-custodial role.
+  - **Review & Rating Policy**: Enforces the Verified Hire requirement (only authenticated completed projects can submit ratings), prohibits astroturfing and competitor manipulation, and establishes contractor right-of-reply and appeal channels (`reviews@buildmarket.app`).
+  - **Complaints & Dispute Resolution**: Defines three-stage dispute process (Direct good-faith negotiation $\rightarrow$ Marketplace conciliation $\rightarrow$ Binding NCIA arbitration in Nairobi) with non-custodial limitation of liability (`disputes@buildmarket.app`).
+  - **Content Moderation & Acceptable Use**: Prohibits unlicensed structural engineering, non-KEBS materials, stolen portfolio media, and contact circumvention, defining takedown SLAs and statutory board reporting (`moderation@buildmarket.app`).
+  - **Security Disclosure (RFC 9116)**: Published machine-readable security contact file at `apps/client/public/.well-known/security.txt` pointing to `security@buildmarket.app` and `privacy@buildmarket.app`.
+
 ### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
 
 - **Single-Use Ticket Redemption Concurrency & Staging E2E Command Queue Chaining (`apps/client/components/auth/ClerkSignInWidget.tsx`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress/README.md`, `scripts/wait-for-staging-deployment.mjs`)**:

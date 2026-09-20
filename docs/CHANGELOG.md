@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+### Added & Security — P0-8 Privacy & Safety Operations Launch Hardening & Legal Governance
+
+- **Interim Privacy Policy v1.0 & Legal Blocker Remediation (`apps/client/app/legal/privacy/page.tsx`, `apps/client/app/legal/layout.tsx`)**:
+  - Replaced mock placeholder ("Pinky Promise") with a production Interim Privacy Policy compliant with Kenya Data Protection Act 2019 (DPA) and GDPR.
+  - Formally designated Data Controller (Build Market Technologies Ltd) and statutory contact point (`privacy@buildmarket.app`).
+  - Mapped data collection to ADR-006 data classification tiers: Class A (Restricted), Class B (Sensitive & Identity), Class C (Internal Operational), and Class D (Public Profile).
+  - Explicitly disclosed lawful bases under DPA Section 30 (Contractual Performance, Statutory Tax Obligations, Consent, Legitimate Interests).
+  - Published transparent subprocessor inventory (Clerk, AWS S3, Neon, Resend, Safaricom Daraja, Africa's Talking) and cross-border safeguards (DPAs with Standard Contractual Clauses).
+  - Disclosed masked communication protections for homeowner telephone numbers and exact street addresses prior to proposal acceptance.
+  - Provided direct links to statutory Data Subject Rights: Portability (`/api/user/export`), Rectification (`/api/user/rectification`), and Erasure (`/api/user/deletion` with 30-day grace period and 7-year anonymized financial ledger retention), as well as complaint mechanisms to the Office of the Data Protection Commissioner (ODPC).
+  - Updated legal layout header navigation to display links across the full trust and safety suite.
+
+- **CI Legal Placeholder Copy Guard & Governance Integration (`apps/client/__tests__/legal/no-placeholder-copy.test.ts`, `scripts/check-launch-documentation-governance.mjs`)**:
+  - Added automated Vitest suite asserting zero occurrences of prohibited placeholder or joke copy (`pinky promise`, `teaching our lawyers`, `lorem ipsum`, `under construction`, `TODO`) across all `.tsx` and `.ts` files under `apps/client/app/legal/`.
+  - Wired `checkLegalCopy()` into `scripts/check-launch-documentation-governance.mjs` to block CI regressions across legal pages.
+
+- **Customer Trust & Public Safety Policy Suite (`apps/client/app/legal/safety-and-verification/page.tsx`, `apps/client/app/legal/review-policy/page.tsx`, `apps/client/app/legal/disputes-and-complaints/page.tsx`, `apps/client/app/legal/content-moderation/page.tsx`, `apps/client/public/.well-known/security.txt`)**:
+  - **Safety & Verification Standards**: Disambiguates Statutory Verification (NCA/EBK/BORAQS), Platform Performance (response times, completed projects), and Verified Reputation per Houzz precedent; reaffirms P0-7 non-custodial role.
+  - **Review & Rating Policy**: Enforces the Verified Hire requirement (only authenticated completed projects can submit ratings), prohibits astroturfing and competitor manipulation, and establishes contractor right-of-reply and appeal channels (`reviews@buildmarket.app`).
+  - **Complaints & Dispute Resolution**: Defines three-stage dispute process (Direct good-faith negotiation $\rightarrow$ Marketplace conciliation $\rightarrow$ Binding NCIA arbitration in Nairobi) with non-custodial limitation of liability (`disputes@buildmarket.app`).
+  - **Content Moderation & Acceptable Use**: Prohibits unlicensed structural engineering, non-KEBS materials, stolen portfolio media, and contact circumvention, defining takedown SLAs and statutory board reporting (`moderation@buildmarket.app`).
+  - **Security Disclosure (RFC 9116)**: Published machine-readable security contact file at `apps/client/public/.well-known/security.txt` pointing to `security@buildmarket.app` and `privacy@buildmarket.app`.
+
+- **Statutory Regulatory & Operational Evidence Dossier (`docs/launch/evidence/`)**:
+  - **Cross-Border Transfer Assessment (`docs/launch/evidence/CROSS_BORDER_TRANSFER_ASSESSMENT.md`)**: Evaluated international data flows under Kenya DPA §§48–49 for US and global subprocessors (Clerk, AWS, Neon, Resend), establishing valid Standard Contractual Clauses (SCCs), DPAs, and AES-256 field encryption safeguards.
+  - **Subprocessor Inventory (`docs/launch/evidence/SUBPROCESSOR_INVENTORY.md`)**: Comprehensive register detailing legal entities, corporate seats, data classes handled, DPA execution dates, transfer mechanisms, downstream sub-subprocessors, and certifications (SOC 2 Type II, ISO 27001).
+  - **Data Protection Impact Assessment (`docs/launch/evidence/DPIA.md`)**: Systematically assessed high-risk flows under DPA §31 using quantitative risk scoring ($\text{Likelihood} \times \text{Severity}$) and established a mandatory PR trigger checklist for future database migrations.
+  - **Record of Processing Activities (`docs/launch/evidence/ROPA.md`)**: Documented processing activities under DPA §23 with purpose-by-purpose data-flow diagrams and granular per-field legal basis mapping.
+  - **Data Retention & Disposal Schedule (`docs/launch/evidence/DATA_RETENTION_SCHEDULE.md`)**: Reconciled Tax Procedures Act §23 (7-year financial record retention) with DPA right-to-erasure and established weekly automated drift reconciliation requirements.
+  - **ODPC Registration Decision Record (`docs/launch/evidence/ODPC_REGISTRATION_RECORD.md`)**: Pre-check under the 2021 Regulations confirming mandatory controller/processor registration based on sensitive personal data (national IDs) and establishing the 30-day post-launch counsel filing window.
+  - **Solo-Founder Continuity Note (`docs/launch/evidence/SOLO_FOUNDER_CONTINUITY_NOTE.md`)**: Formally documented Founder as Acting DPO (`privacy@buildmarket.app`), designated pre-authorized external legal and infrastructure proxies, and escrowed emergency break-glass credentials under ADR-ADMIN-014.
+
+- **72-Hour Breach Playbook & Tabletop Simulation Record (`docs/launch/evidence/INCIDENT-RESPONSE-PLAYBOOK.md`, `docs/launch/evidence/BREACH_TABLETOP_SIMULATION_RECORD.md`)**:
+  - Operationalized Kenya DPA §43 into an hourly runbook (Hours 0–4 Triage & KMS rotation; Hours 4–24 Forensics & SHA-256 hash-chain verification; Hours 24–48 Multi-authority escalation with NCA/EBK branching; Hours 48–72 ODPC and batch user notification).
+  - Included statutory ODPC notification letter template and pre-approved localized bilingual English & Swahili user notification templates.
+  - Documented successful execution of four staging tabletop drill scenarios (S3 bucket leak, M-Pesa webhook replay, Clerk session compromise, and solo-founder unavailability).
+
+- **Launch Scorecard & Implementation Record Updates (`docs/launch/GO_NO_GO.md`, `docs/MVP_LAUNCH_AUDIT_AND_HARDENING.md`)**:
+  - Updated `docs/launch/GO_NO_GO.md`: Flipped **Safety** (Row 21) and **Compliance** (Row 24) from `No-go — evidence not attached` to `Go` with attached evidence links.
+  - Updated `docs/MVP_LAUNCH_AUDIT_AND_HARDENING.md`: Added `P0-8` to the P0 implementation record table.
+
 ### Security & Fixed — Monorepo Architectural Hardening, Concurrency & Security Alignment
 
 - **Single-Use Ticket Redemption Concurrency & Staging E2E Command Queue Chaining (`apps/client/components/auth/ClerkSignInWidget.tsx`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress/README.md`, `scripts/wait-for-staging-deployment.mjs`)**:
