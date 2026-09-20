@@ -10,16 +10,14 @@ Under ADR-001 and ADR-002, production and staging Clerk/DB base identities are i
 
 ## Pool Inventory
 
-The staging environment maintains 6 dedicated, non-routable pool slots:
+The staging environment maintains 4 dedicated, non-routable pool slots:
 
 | Role           | Slot       | Primary Email Address                  | Target Scenarios             |
 | :------------- | :--------- | :------------------------------------- | :--------------------------- |
 | `PROFESSIONAL` | `pro-1`    | `e2e_pro_1@staging.buildmarket.app`    | `onboarding`, `verification` |
 | `PROFESSIONAL` | `pro-2`    | `e2e_pro_2@staging.buildmarket.app`    | `onboarding`, `verification` |
-| `PROFESSIONAL` | `pro-3`    | `e2e_pro_3@staging.buildmarket.app`    | `onboarding`, `verification` |
 | `CLIENT`       | `client-1` | `e2e_client_1@staging.buildmarket.app` | `onboarding`                 |
 | `CLIENT`       | `client-2` | `e2e_client_2@staging.buildmarket.app` | `onboarding`                 |
-| `CLIENT`       | `client-3` | `e2e_client_3@staging.buildmarket.app` | `onboarding`                 |
 
 > [!IMPORTANT]
 > Test runs MUST NOT delete the base `User` or Clerk accounts. Only leased fixtures and mutable child entities owned by `userId` (licenses, documents, notifications, verification cases) are reset.
@@ -32,7 +30,7 @@ The staging environment maintains 6 dedicated, non-routable pool slots:
 
 In the Clerk Dashboard (`Users` -> select user -> `Metadata`):
 
-**For Professionals (`e2e_pro_1`, `e2e_pro_2`, `e2e_pro_3`):**
+**For Professionals (`e2e_pro_1`, `e2e_pro_2`):**
 
 ```json
 {
@@ -43,7 +41,7 @@ In the Clerk Dashboard (`Users` -> select user -> `Metadata`):
 }
 ```
 
-**For Clients (`e2e_client_1`, `e2e_client_2`, `e2e_client_3`):**
+**For Clients (`e2e_client_1`, `e2e_client_2`):**
 
 ```json
 {

@@ -4,6 +4,7 @@ import { POST } from "@/app/api/internal/test-control/route";
 import { testControlService } from "@/app/lib/domains/testing/test-control/service";
 import { ok } from "@/app/lib/errors/result";
 import { signStagingGrant } from "@/app/lib/domains/testing/test-control/contracts";
+import { env } from "@/app/lib/infrastructure/env";
 
 // Mock internal secret validation
 vi.mock("@/app/lib/security/internal-secret", () => ({
@@ -253,5 +254,53 @@ describe("POST /api/internal/test-control", () => {
     expect(response.headers.get("x-test-control-denial")).toBe(
       "grant_scenario_not_eligible",
     );
+  });
+
+  it("returns 404 when ddEnv is staging but stagingTestControl.enabled is false (C-13 kill switch)", async () => {
+    const originalIsTest = env.isTest;
+    const originalDdEnv = env.otel.ddEnv;
+    const originalEnabled = env.stagingTestControl?.enabled;
+    const originalIsProd = env.isProd;
+    const originalIsVercelPreview = env.isVercelPreview;
+
+    try {
+      (env as any).isTest = false;
+      (env as any).isProd = true;
+      (env as any).isVercelPreview = false;
+      (env.otel as any).ddEnv = "staging";
+      if (!env.stagingTestControl) {
+        (env as any).stagingTestControl = {};
+      }
+      (env.stagingTestControl as any).enabled = false;
+
+      const req = new NextRequest(
+        "http://localhost:3500/api/internal/test-control",
+        {
+          method: "POST",
+          headers: {
+            "x-internal-secret": "valid-internal-secret",
+          },
+          body: JSON.stringify({
+            action: "create-run",
+            scenario: "onboarding",
+            actorLabel: "test",
+          }),
+        },
+      );
+
+      const response = await POST(req);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("x-test-control-denial")).toBe(
+        "not_staging_environment",
+      );
+    } finally {
+      (env as any).isTest = originalIsTest;
+      (env as any).isProd = originalIsProd;
+      (env as any).isVercelPreview = originalIsVercelPreview;
+      (env.otel as any).ddEnv = originalDdEnv;
+      if (env.stagingTestControl) {
+        (env.stagingTestControl as any).enabled = originalEnabled;
+      }
+    }
   });
 });

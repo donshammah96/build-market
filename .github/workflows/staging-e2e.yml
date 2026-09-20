@@ -47,6 +47,7 @@ jobs:
       STAGING_AUTH_USER: ${{ secrets.STAGING_AUTH_USER || vars.STAGING_AUTH_USER }}
       STAGING_AUTH_PASSWORD: ${{ secrets.STAGING_AUTH_PASSWORD || vars.STAGING_AUTH_PASSWORD }}
       DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.STAGING_DATABASE_URL || vars.DATABASE_URL || secrets.SUPABASE_DATABASE_URL }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || secrets.STAGING_CLERK_SECRET_KEY || vars.CLERK_SECRET_KEY }}
 
     steps:
       - name: Checkout

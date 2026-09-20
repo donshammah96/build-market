@@ -54,6 +54,8 @@ const testSecret = (process.env.TEST_CONTROL_SECRET || "").trim();
 const stagingAuthSecret = (process.env.STAGING_AUTH_SECRET || "").trim();
 const stagingAuthUser = (process.env.STAGING_AUTH_USER || "").trim();
 const stagingAuthPassword = (process.env.STAGING_AUTH_PASSWORD || "").trim();
+const databaseUrl = (process.env.DATABASE_URL || "").trim();
+const clerkSecretKey = (process.env.CLERK_SECRET_KEY || "").trim();
 
 function fail(message) {
   console.error(`[preflight] FAIL: ${message}`);
@@ -122,6 +124,150 @@ async function main() {
   } catch (err) {
     fail(`Could not probe /api/health at ${baseUrl}: ${err.message}`);
     return;
+  }
+
+  // S-2: Assert configured staging identity slots exist in Postgres and Clerk
+  let STAGING_IDENTITY_SLOTS;
+  try {
+    const mod = await import(
+      path.resolve(
+        process.cwd(),
+        "packages/db/dist/src/staging-test-runs/contracts.js",
+      )
+    );
+    STAGING_IDENTITY_SLOTS = mod.STAGING_IDENTITY_SLOTS;
+  } catch {
+    STAGING_IDENTITY_SLOTS = [
+      {
+        slot: "pro-1",
+        role: "PROFESSIONAL",
+        email: "e2e_pro_1@staging.buildmarket.app",
+      },
+      {
+        slot: "pro-2",
+        role: "PROFESSIONAL",
+        email: "e2e_pro_2@staging.buildmarket.app",
+      },
+      {
+        slot: "client-1",
+        role: "CLIENT",
+        email: "e2e_client_1@staging.buildmarket.app",
+      },
+      {
+        slot: "client-2",
+        role: "CLIENT",
+        email: "e2e_client_2@staging.buildmarket.app",
+      },
+    ];
+  }
+
+  if (databaseUrl) {
+    console.log(
+      `[preflight] Asserting ${STAGING_IDENTITY_SLOTS.length} configured staging identity slots exist in Postgres with correct roles...`,
+    );
+    let pgModule;
+    try {
+      pgModule = await import("pg");
+    } catch (err) {
+      console.warn(
+        `[preflight] 'pg' package not available; skipping direct DB slot verification: ${err.message}`,
+      );
+    }
+    if (pgModule) {
+      const Pool = pgModule.Pool || pgModule.default?.Pool;
+      const pool = new Pool({
+        connectionString: databaseUrl,
+        max: 1,
+        connectionTimeoutMillis: 5000,
+      });
+      let client;
+      try {
+        client = await pool.connect();
+        const emails = STAGING_IDENTITY_SLOTS.map((s) => s.email.toLowerCase());
+        const res = await client.query(
+          'SELECT LOWER(email) AS email, role, "clerkId" FROM users WHERE LOWER(email) = ANY($1::text[])',
+          [emails],
+        );
+        const foundByEmail = new Map(res.rows.map((r) => [r.email, r]));
+        for (const slot of STAGING_IDENTITY_SLOTS) {
+          const row = foundByEmail.get(slot.email.toLowerCase());
+          if (!row) {
+            fail(
+              `Missing Postgres user record for identity slot '${slot.slot}' (${slot.email}) in 'users' table.`,
+            );
+            return;
+          }
+          if (row.role !== slot.role) {
+            fail(
+              `Role mismatch for slot '${slot.slot}' (${slot.email}): expected ${slot.role}, found ${row.role} in Postgres.`,
+            );
+            return;
+          }
+          if (!row.clerkId || !row.clerkId.startsWith("user_")) {
+            fail(
+              `Invalid or missing clerkId for slot '${slot.slot}' (${slot.email}): '${row.clerkId}' in Postgres.`,
+            );
+            return;
+          }
+        }
+        console.log(
+          `[preflight] OK — all ${STAGING_IDENTITY_SLOTS.length} identity slots verified in Postgres with correct roles.`,
+        );
+      } catch (dbErr) {
+        fail(`Database slot preflight query failed: ${dbErr.message}`);
+        return;
+      } finally {
+        if (client) client.release();
+        await pool.end().catch(() => {});
+      }
+    }
+  }
+
+  if (clerkSecretKey) {
+    console.log(
+      `[preflight] Asserting ${STAGING_IDENTITY_SLOTS.length} configured staging identity slots exist in Clerk...`,
+    );
+    for (const slot of STAGING_IDENTITY_SLOTS) {
+      try {
+        const clerkRes = await fetch(
+          `https://api.clerk.com/v1/users?email_address=${encodeURIComponent(slot.email)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${clerkSecretKey}`,
+            },
+          },
+        );
+        if (!clerkRes.ok) {
+          fail(
+            `Could not query Clerk API for slot '${slot.slot}' (${slot.email}): status ${clerkRes.status}`,
+          );
+          return;
+        }
+        const users = await clerkRes.json();
+        if (!Array.isArray(users) || users.length === 0) {
+          fail(
+            `Clerk user for slot '${slot.slot}' (${slot.email}) was not found in Clerk.`,
+          );
+          return;
+        }
+        const clerkUser = users[0];
+        const clerkRole = clerkUser.public_metadata?.role;
+        if (clerkRole && clerkRole !== slot.role) {
+          fail(
+            `Clerk public_metadata.role mismatch for slot '${slot.slot}' (${slot.email}): expected ${slot.role}, found ${clerkRole}.`,
+          );
+          return;
+        }
+      } catch (clerkErr) {
+        fail(
+          `Clerk API request failed for slot '${slot.slot}' (${slot.email}): ${clerkErr.message}`,
+        );
+        return;
+      }
+    }
+    console.log(
+      `[preflight] OK — all ${STAGING_IDENTITY_SLOTS.length} identity slots verified in Clerk with matching roles.`,
+    );
   }
 
   console.log(`[preflight] Probing ${baseUrl}/api/internal/test-control ...`);

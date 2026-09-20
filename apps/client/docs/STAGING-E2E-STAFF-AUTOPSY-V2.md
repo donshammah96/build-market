@@ -730,15 +730,15 @@ Each phase ends with a **gate** — do not start the next phase until the gate p
 
 ### Phase 5 — Structural hardening
 
-- [ ] Single exported `STAGING_IDENTITY_SLOTS`; delete both `DEFAULT_STAGING_SLOTS` copies; reconcile the runbook table (S-2).
-- [ ] Preflight asserts every configured slot exists in Clerk **and** Postgres, with the right role (S-2).
-- [ ] Replace the OR'd environment gate in `test-control/route.ts` with the AND'd, production-excluding predicate; unit-test that `ddEnv="staging"` + `enabled=false` returns 404 (C-13).
-- [ ] `assertStagingTestControlEnabled()` at the head of every mutating service method, using the same predicate (S-10). The route's grant/action/scenario checks are already correct — do not duplicate them, just stop depending on a single caller.
-- [ ] Split `/api/health`: public gets status/version/buildSha/per-dependency status+latency; `message`, `circuitBreakers`, `caches`, `system` and deep mode require `x-internal-secret` (C-14c/f).
-- [ ] Remove the dead `capabilityBoundaryForPath` call inside `clerkHandler`; return an HTML 404 for document requests (S-6).
-- [ ] Move `isOnboarded`/`status` fully into Clerk session claims; demote the middleware self-fetch to a cached miss path or delete it; change `strict` mode's fallback from "assume not onboarded" to an explicit, logged decision (S-1).
-- [ ] `timingSafeEqualStrings` over SHA-256 digests to remove the length oracle (S-9).
-- [ ] Rewrite `staging-e2e-troubleshooting.md` §5 against the new diagnostics; delete Issue 1's remediation (superseded), correct the pool-size numbers, and **re-verify §6.1's kill-switch claim** once C-13 lands — it is currently false.
+- [x] Single exported `STAGING_IDENTITY_SLOTS`; delete both `DEFAULT_STAGING_SLOTS` copies; reconcile the runbook table (S-2).
+- [x] Preflight asserts every configured slot exists in Clerk **and** Postgres, with the right role (S-2).
+- [x] Replace the OR'd environment gate in `test-control/route.ts` with the AND'd, production-excluding predicate; unit-test that `ddEnv="staging"` + `enabled=false` returns 404 (C-13).
+- [x] `assertStagingTestControlEnabled()` at the head of every mutating service method, using the same predicate (S-10). The route's grant/action/scenario checks are already correct — do not duplicate them, just stop depending on a single caller.
+- [x] Split `/api/health`: public gets status/version/buildSha/per-dependency status+latency; `message`, `circuitBreakers`, `caches`, `system` and deep mode require `x-internal-secret` (C-14c/f).
+- [x] Remove the dead `capabilityBoundaryForPath` call inside `clerkHandler`; return an HTML 404 for document requests (S-6).
+- [x] Move `isOnboarded`/`status` fully into Clerk session claims; demote the middleware self-fetch to a cached miss path or delete it; change `strict` mode's fallback from "assume not onboarded" to an explicit, logged decision (S-1).
+- [x] `timingSafeEqualStrings` over SHA-256 digests to remove the length oracle (S-9).
+- [x] Rewrite `staging-e2e-troubleshooting.md` §5 against the new diagnostics; delete Issue 1's remediation (superseded), correct the pool-size numbers, and **re-verify §6.1's kill-switch claim** once C-13 lands — it is currently false.
 
 **Gate 5:** three consecutive green scheduled runs with zero retries consumed; `verify-vercel-env.ts` fails the build when any one of the Phase-1 variables is removed from Preview(staging); and the runbook's kill switch is exercised for real — set `ENABLE_STAGING_TEST_CONTROL=false`, redeploy, confirm 404 with `x-test-control-denial: not_staging_environment`, restore.
 

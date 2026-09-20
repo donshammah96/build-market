@@ -81,16 +81,14 @@ Configure these in **Vercel Project Settings $\rightarrow$ Environment Variables
 
 ## 3. Staging Identity Pool Setup
 
-The staging environment maintains 6 dedicated, non-routable pool slots:
+The staging environment maintains 4 dedicated, non-routable pool slots:
 
 | Role           | Slot       | Email Address                          | Assigned Scenarios           |
 | :------------- | :--------- | :------------------------------------- | :--------------------------- |
 | `PROFESSIONAL` | `pro-1`    | `e2e_pro_1@staging.buildmarket.app`    | `onboarding`, `verification` |
 | `PROFESSIONAL` | `pro-2`    | `e2e_pro_2@staging.buildmarket.app`    | `onboarding`, `verification` |
-| `PROFESSIONAL` | `pro-3`    | `e2e_pro_3@staging.buildmarket.app`    | `onboarding`, `verification` |
 | `CLIENT`       | `client-1` | `e2e_client_1@staging.buildmarket.app` | `onboarding`                 |
 | `CLIENT`       | `client-2` | `e2e_client_2@staging.buildmarket.app` | `onboarding`                 |
-| `CLIENT`       | `client-3` | `e2e_client_3@staging.buildmarket.app` | `onboarding`                 |
 
 ### 3.1 Clerk Dashboard Metadata Baseline
 
