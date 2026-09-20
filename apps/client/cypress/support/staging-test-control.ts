@@ -168,51 +168,55 @@ Cypress.Commands.add("loginStagingUser", (role: "CLIENT" | "PROFESSIONAL") => {
       sessionResult = res;
 
       // Visit the Clerk ticket URL with staging perimeter authentication restored
-      visitTicketUrlWithStagingAuth(res.signInUrl);
-      cy.document().then((doc) => {
-        if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
-          cy.task(
-            "log",
-            `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
-          );
-          throw new Error(`Auth loop broken: ${doc.body.innerText}`);
-        }
-        if (doc.body?.innerText?.includes("MIDDLEWARE_INVOCATION_FAILED")) {
-          cy.task(
-            "log",
-            `[STAGING DIAGNOSTIC] Middleware invocation failed: ${doc.body.innerText}`,
-          );
-          throw new Error(
-            `Middleware invocation failed on ticket redemption: ${doc.body.innerText}`,
-          );
-        }
-      });
-      cy.location("pathname", { timeout: 15000 }).should((pathname) => {
-        expect(pathname).not.to.include("/sign-in");
-        expect(pathname).not.to.include("/auth-callback");
-      });
-      cy.window({ timeout: 20000 }).should((win: any) => {
-        expect(win.Clerk, "window.Clerk").to.exist;
-        expect(win.Clerk.loaded, "window.Clerk.loaded").to.be.true;
-        expect(win.Clerk.session, "window.Clerk.session").to.exist;
-      });
-      cy.getCookies({ timeout: 15000 }).should((cookies) => {
-        const hasSession = cookies.some((c) => c.name.startsWith("__session"));
-        const hasClientUat = cookies.some((c) =>
-          c.name.startsWith("__client_uat"),
-        );
-        expect(
-          hasSession,
-          "Missing Clerk __session cookie after ticket sign-in",
-        ).to.be.true;
-        expect(
-          hasClientUat,
-          "Missing Clerk __client_uat cookie after ticket sign-in",
-        ).to.be.true;
-      });
-    })
-    .then(() => {
-      return sessionResult;
+      return visitTicketUrlWithStagingAuth(res.signInUrl)
+        .then(() => {
+          cy.document().then((doc) => {
+            if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
+              cy.task(
+                "log",
+                `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
+              );
+              throw new Error(`Auth loop broken: ${doc.body.innerText}`);
+            }
+            if (doc.body?.innerText?.includes("MIDDLEWARE_INVOCATION_FAILED")) {
+              cy.task(
+                "log",
+                `[STAGING DIAGNOSTIC] Middleware invocation failed: ${doc.body.innerText}`,
+              );
+              throw new Error(
+                `Middleware invocation failed on ticket redemption: ${doc.body.innerText}`,
+              );
+            }
+          });
+          cy.location("pathname", { timeout: 15000 }).should((pathname) => {
+            expect(pathname).not.to.include("/sign-in");
+            expect(pathname).not.to.include("/auth-callback");
+          });
+          cy.window({ timeout: 20000 }).should((win: any) => {
+            expect(win.Clerk, "window.Clerk").to.exist;
+            expect(win.Clerk.loaded, "window.Clerk.loaded").to.be.true;
+            expect(win.Clerk.session, "window.Clerk.session").to.exist;
+          });
+          cy.getCookies({ timeout: 15000 }).should((cookies) => {
+            const hasSession = cookies.some((c) =>
+              c.name.startsWith("__session"),
+            );
+            const hasClientUat = cookies.some((c) =>
+              c.name.startsWith("__client_uat"),
+            );
+            expect(
+              hasSession,
+              "Missing Clerk __session cookie after ticket sign-in",
+            ).to.be.true;
+            expect(
+              hasClientUat,
+              "Missing Clerk __client_uat cookie after ticket sign-in",
+            ).to.be.true;
+          });
+        })
+        .then(() => {
+          return sessionResult;
+        });
     });
 });
 
@@ -247,53 +251,57 @@ Cypress.Commands.add(
         };
 
         // Visit the Clerk ticket URL with staging perimeter authentication restored
-        visitTicketUrlWithStagingAuth(res.signInUrl);
-        cy.document().then((doc) => {
-          if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
-            cy.task(
-              "log",
-              `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
-            );
-            throw new Error(`Auth loop broken: ${doc.body.innerText}`);
-          }
-          if (doc.body?.innerText?.includes("MIDDLEWARE_INVOCATION_FAILED")) {
-            cy.task(
-              "log",
-              `[STAGING DIAGNOSTIC] Middleware invocation failed: ${doc.body.innerText}`,
-            );
-            throw new Error(
-              `Middleware invocation failed on ticket redemption: ${doc.body.innerText}`,
-            );
-          }
-        });
-        cy.location("pathname", { timeout: 15000 }).should((pathname) => {
-          expect(pathname).not.to.include("/sign-in");
-          expect(pathname).not.to.include("/auth-callback");
-        });
-        cy.window({ timeout: 20000 }).should((win: any) => {
-          expect(win.Clerk, "window.Clerk").to.exist;
-          expect(win.Clerk.loaded, "window.Clerk.loaded").to.be.true;
-          expect(win.Clerk.session, "window.Clerk.session").to.exist;
-        });
-        cy.getCookies({ timeout: 15000 }).should((cookies) => {
-          const hasSession = cookies.some((c) =>
-            c.name.startsWith("__session"),
-          );
-          const hasClientUat = cookies.some((c) =>
-            c.name.startsWith("__client_uat"),
-          );
-          expect(
-            hasSession,
-            "Missing Clerk __session cookie after ticket sign-in",
-          ).to.be.true;
-          expect(
-            hasClientUat,
-            "Missing Clerk __client_uat cookie after ticket sign-in",
-          ).to.be.true;
-        });
-      })
-      .then(() => {
-        return identityResult;
+        return visitTicketUrlWithStagingAuth(res.signInUrl)
+          .then(() => {
+            cy.document().then((doc) => {
+              if (doc.body?.innerText?.includes("AUTH_REDIRECT_LOOP_BROKEN")) {
+                cy.task(
+                  "log",
+                  `[STAGING DIAGNOSTIC] Loop broken body: ${doc.body.innerText}`,
+                );
+                throw new Error(`Auth loop broken: ${doc.body.innerText}`);
+              }
+              if (
+                doc.body?.innerText?.includes("MIDDLEWARE_INVOCATION_FAILED")
+              ) {
+                cy.task(
+                  "log",
+                  `[STAGING DIAGNOSTIC] Middleware invocation failed: ${doc.body.innerText}`,
+                );
+                throw new Error(
+                  `Middleware invocation failed on ticket redemption: ${doc.body.innerText}`,
+                );
+              }
+            });
+            cy.location("pathname", { timeout: 15000 }).should((pathname) => {
+              expect(pathname).not.to.include("/sign-in");
+              expect(pathname).not.to.include("/auth-callback");
+            });
+            cy.window({ timeout: 20000 }).should((win: any) => {
+              expect(win.Clerk, "window.Clerk").to.exist;
+              expect(win.Clerk.loaded, "window.Clerk.loaded").to.be.true;
+              expect(win.Clerk.session, "window.Clerk.session").to.exist;
+            });
+            cy.getCookies({ timeout: 15000 }).should((cookies) => {
+              const hasSession = cookies.some((c) =>
+                c.name.startsWith("__session"),
+              );
+              const hasClientUat = cookies.some((c) =>
+                c.name.startsWith("__client_uat"),
+              );
+              expect(
+                hasSession,
+                "Missing Clerk __session cookie after ticket sign-in",
+              ).to.be.true;
+              expect(
+                hasClientUat,
+                "Missing Clerk __client_uat cookie after ticket sign-in",
+              ).to.be.true;
+            });
+          })
+          .then(() => {
+            return identityResult;
+          });
       });
   },
 );

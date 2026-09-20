@@ -49,7 +49,6 @@ export default function ClerkSignInWidget({
     }
 
     lastAttemptedTicketRef.current = ticket;
-    let isMounted = true;
 
     async function processTicket() {
       try {
@@ -57,15 +56,12 @@ export default function ClerkSignInWidget({
         // sign out first to ensure ticket exchange establishes the correct identity (C-1)
         if (isSignedIn) {
           await clerk.signOut({ redirectUrl: undefined });
-          if (!isMounted) return;
         }
 
         const attempt = await clerk.client.signIn.create({
           strategy: "ticket",
           ticket: ticket!,
         });
-
-        if (!isMounted) return;
 
         if (attempt.status === "complete") {
           await clerk.setActive({ session: attempt.createdSessionId });
@@ -81,7 +77,6 @@ export default function ClerkSignInWidget({
           );
         }
       } catch (err: any) {
-        if (!isMounted) return;
         console.error(
           "[ClerkSignInWidget] Failed to authenticate ticket:",
           err,
@@ -93,18 +88,15 @@ export default function ClerkSignInWidget({
     }
 
     processTicket();
-
-    return () => {
-      isMounted = false;
-    };
   }, [
     clerk.loaded,
     clerk.client,
     clerk.setActive,
+    clerk.signOut,
     ticket,
-    isSignedIn,
     safeTargetUrl,
     clerk,
+    isSignedIn,
   ]);
 
   if (

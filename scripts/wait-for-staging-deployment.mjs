@@ -175,17 +175,41 @@ async function main() {
 
     if (result.buildSha) {
       // Check full match or prefix match (git shas often truncated to 7 chars)
-      const matches =
+      let matches =
         result.buildSha === expectedSha ||
         (expectedSha.length >= 7 && result.buildSha.startsWith(expectedSha)) ||
         (result.buildSha.length >= 7 &&
           expectedSha.startsWith(result.buildSha));
 
+      // If active SHA is not an exact match, check if expectedSha is an ancestor of result.buildSha.
+      // In CI/CD pipelines with auto-deployments, a newer commit on the same branch may supersede an earlier build.
+      // If expectedSha is an ancestor of the running buildSha, all of its changes are already live.
+      if (
+        !matches &&
+        /^[0-9a-fA-F]{7,40}$/.test(expectedSha) &&
+        /^[0-9a-fA-F]{7,40}$/.test(result.buildSha)
+      ) {
+        try {
+          const { execSync } = await import("node:child_process");
+          execSync(
+            `git merge-base --is-ancestor ${expectedSha} ${result.buildSha}`,
+            { stdio: "ignore" },
+          );
+          matches = true;
+          console.log(
+            `[wait-for-deployment] Note: active buildSha '${result.buildSha}' is a descendant of '${expectedSha}' (superseded and deployed).`,
+          );
+        } catch {
+          // Not an ancestor or git unavailable
+        }
+      }
+
       if (matches) {
         console.log(
           `[wait-for-deployment] SUCCESS: Deployment at ${baseUrl} is running target commit ${result.buildSha} (deploymentId: ${result.deploymentId ?? "none"}) after ${elapsedSec}s (${attempt} probes).`,
         );
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       } else {
         console.log(
           `[wait-for-deployment] [${elapsedSec}s | attempt ${attempt}] Active buildSha is '${result.buildSha}' (deploymentId: ${result.deploymentId ?? "none"}), waiting for '${expectedSha}'...`,
