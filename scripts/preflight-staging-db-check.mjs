@@ -165,16 +165,19 @@ async function main() {
     console.log(
       `[preflight] Asserting ${STAGING_IDENTITY_SLOTS.length} configured staging identity slots exist in Postgres with correct roles...`,
     );
-    let pgModule;
+    let Pool;
     try {
-      pgModule = await import("pg");
+      const pgModule = await import("pg");
+      Pool = pgModule.Pool || pgModule.default?.Pool;
+      if (!Pool) {
+        throw new Error("Pool constructor not found on 'pg' module");
+      }
     } catch (err) {
       console.warn(
         `[preflight] 'pg' package not available; skipping direct DB slot verification: ${err.message}`,
       );
     }
-    if (pgModule) {
-      const Pool = pgModule.Pool || pgModule.default?.Pool;
+    if (Pool) {
       const pool = new Pool({
         connectionString: databaseUrl,
         max: 1,
