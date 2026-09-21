@@ -32,6 +32,8 @@ export interface CookieConsentState {
   hasConsented: boolean;
   /** Whether consent is being synced to the backend */
   isSyncing: boolean;
+  /** Whether the preferences modal is currently forced open */
+  isPreferencesOpen: boolean;
   /** Update a single consent category */
   updateConsent: (
     category: keyof Omit<CookieConsent, "necessary">,
@@ -43,6 +45,10 @@ export interface CookieConsentState {
   rejectAll: () => void;
   /** Save current preferences (triggers backend sync + dismisses banner) */
   savePreferences: (preferences: Omit<CookieConsent, "necessary">) => void;
+  /** Re-open preferences panel so the user can adjust consent in place */
+  openPreferences: () => void;
+  /** Close preferences panel without forcing an update */
+  closePreferences: () => void;
 }
 
 // =============================================================================
@@ -126,6 +132,7 @@ export function CookieConsentProvider({
   const [consent, setConsent] = useState<CookieConsent>(DEFAULT_CONSENT);
   const [hasConsented, setHasConsented] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const { isSignedIn: clerkIsSignedIn } = useAuth();
   const isSignedIn = propIsSignedIn ?? Boolean(clerkIsSignedIn);
 
@@ -136,6 +143,14 @@ export function CookieConsentProvider({
       setConsent(stored);
       setHasConsented(true);
     }
+  }, []);
+
+  const openPreferences = useCallback(() => {
+    setIsPreferencesOpen(true);
+  }, []);
+
+  const closePreferences = useCallback(() => {
+    setIsPreferencesOpen(false);
   }, []);
 
   // Sync to backend for authenticated users
@@ -163,6 +178,7 @@ export function CookieConsentProvider({
     (newConsent: CookieConsent) => {
       setConsent(newConsent);
       setHasConsented(true);
+      setIsPreferencesOpen(false);
       writeStoredConsent(newConsent);
       syncToBackend(newConsent);
     },
@@ -206,19 +222,25 @@ export function CookieConsentProvider({
       consent,
       hasConsented,
       isSyncing,
+      isPreferencesOpen,
       updateConsent,
       acceptAll,
       rejectAll,
       savePreferences,
+      openPreferences,
+      closePreferences,
     }),
     [
       consent,
       hasConsented,
       isSyncing,
+      isPreferencesOpen,
       updateConsent,
       acceptAll,
       rejectAll,
       savePreferences,
+      openPreferences,
+      closePreferences,
     ],
   );
 

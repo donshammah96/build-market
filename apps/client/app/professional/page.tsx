@@ -19,7 +19,6 @@ import {
   Star,
 } from "lucide-react";
 
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +38,6 @@ export default function ProfessionalLandingPage() {
         <Testimonials />
         <CTASection />
       </main>
-
-      <Footer />
     </div>
   );
 }

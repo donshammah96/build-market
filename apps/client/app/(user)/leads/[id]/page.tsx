@@ -15,7 +15,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,7 +39,6 @@ export default function HomeownerLeadDetailPage({
             Loading project qualification details...
           </p>
         </main>
-        <Footer />
       </div>
     );
   }
@@ -63,7 +61,6 @@ export default function HomeownerLeadDetailPage({
             </Link>
           </Button>
         </main>
-        <Footer />
       </div>
     );
   }
@@ -237,7 +234,6 @@ export default function HomeownerLeadDetailPage({
           </Card>
         </main>
       </div>
-      <Footer />
     </div>
   );
 }

@@ -97,7 +97,7 @@ const SettingRow = memo(function SettingRow({
           >
             {label}
           </Label>
-          <p className="text-xs text-zinc-500 max-w-[280px]">{description}</p>
+          <p className="text-xs text-zinc-500 max-w-70">{description}</p>
         </div>
       </div>
       <div className="shrink-0">{children}</div>
@@ -127,6 +127,8 @@ export const AccessibilitySettingsPanel = memo(
     trigger,
   }: AccessibilitySettingsPanelProps) {
     const {
+      theme,
+      setTheme,
       reduceMotion,
       setReduceMotion,
       reduceTransparency,
@@ -196,7 +198,7 @@ export const AccessibilitySettingsPanel = memo(
                   setReduceMotion(value)
                 }
               >
-                <SelectTrigger className="w-[120px]" id="reduce-motion">
+                <SelectTrigger className="w-30" id="reduce-motion">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -221,7 +223,30 @@ export const AccessibilitySettingsPanel = memo(
             </SettingRow>
 
             {/* Visual */}
-            <SectionHeader title="Visual" />
+            <SectionHeader title="Visual & Theme" />
+
+            <SettingRow
+              icon={Sparkles}
+              label="Theme"
+              description="Switch between light, dark, or system appearance"
+              htmlFor="theme-selector"
+            >
+              <Select
+                value={theme}
+                onValueChange={(value: "system" | "light" | "dark") =>
+                  setTheme(value)
+                }
+              >
+                <SelectTrigger className="w-30" id="theme-selector">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">System</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="dark">Dark</SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingRow>
 
             <SettingRow
               icon={Eye}
@@ -259,7 +284,7 @@ export const AccessibilitySettingsPanel = memo(
                 value={String(fontSize)}
                 onValueChange={(value) => setFontSize(Number(value))}
               >
-                <SelectTrigger className="w-[100px]" id="font-size">
+                <SelectTrigger className="w-25" id="font-size">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -288,7 +313,7 @@ export const AccessibilitySettingsPanel = memo(
                   value: "none" | "protanopia" | "deuteranopia" | "tritanopia",
                 ) => setColorBlindMode(value)}
               >
-                <SelectTrigger className="w-[140px]" id="color-blind-mode">
+                <SelectTrigger className="w-35" id="color-blind-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -330,7 +355,7 @@ export const AccessibilitySettingsPanel = memo(
                   setLineSpacing(value)
                 }
               >
-                <SelectTrigger className="w-[110px]" id="line-spacing">
+                <SelectTrigger className="w-27.5" id="line-spacing">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

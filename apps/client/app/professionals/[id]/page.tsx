@@ -36,7 +36,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import type { ProfessionalDetailResult } from "@/app/lib/domains/professionals";
 import type { Portfolio, ProfessionalReview } from "@/types/professional";
 import {
@@ -97,7 +96,6 @@ const LoadingState = memo(function LoadingState() {
           <p className="text-slate-600">Loading professional profile...</p>
         </div>
       </div>
-      <Footer />
     </div>
   );
 });
@@ -114,7 +112,6 @@ const ErrorState = memo(function ErrorState({ message }: { message: string }) {
           </CardContent>
         </Card>
       </div>
-      <Footer />
     </div>
   );
 });
@@ -890,8 +887,6 @@ export default function ProfessionalProfilePage() {
         open={isContactOpen}
         onOpenChange={setIsContactOpen}
       />
-
-      <Footer />
     </div>
   );
 }

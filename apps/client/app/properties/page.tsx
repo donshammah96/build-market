@@ -4,7 +4,6 @@ import { Home, Building2, Warehouse, ArrowRight, LandPlot } from "lucide-react";
 import { Metadata } from "next";
 
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import PropertyCard from "@/components/real-estate/PropertyCard";
 import { ROUTES } from "@/lib/routes";
@@ -176,7 +175,6 @@ export default async function PropertiesPage() {
           </div>
         </section>
       </main>
-      <Footer />
     </div>
   );
 }

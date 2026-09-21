@@ -34,12 +34,12 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
     <div className="h-full group hover-lift">
       <Card
         className={cn(
-          "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-          "transition-all duration-300 hover:shadow-lg",
+          "h-full flex flex-col border border-border/70 bg-card text-card-foreground overflow-hidden rounded-xl shadow-xs",
+          "transition-all duration-300 hover:shadow-xl hover:border-primary/40",
         )}
       >
         {/* Image Section */}
-        <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
+        <div className="relative aspect-4/3 overflow-hidden bg-muted">
           <Link href={propertyUrl}>
             <div className="h-full w-full overflow-hidden">
               <ImageWithFallback
@@ -52,11 +52,11 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
 
           {/* Status Badge */}
           <div className="absolute top-3 left-3 flex gap-2">
-            <Badge className="bg-white/90 backdrop-blur-md text-zinc-900 hover:bg-white shadow-sm font-semibold border-0">
+            <Badge className="bg-background/90 dark:bg-card/90 backdrop-blur-md text-foreground hover:bg-background border border-border/40 shadow-xs font-semibold">
               For {property.type.toLowerCase()}
             </Badge>
             {property.featured && (
-              <Badge className="bg-emerald-600 text-white border-0 shadow-sm">
+              <Badge className="bg-emerald-600 text-white border-0 shadow-xs">
                 Featured
               </Badge>
             )}
@@ -64,14 +64,14 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
 
           {/* Favorite Button */}
           <button
-            className="absolute top-3 right-3 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
+            className="absolute top-3 right-3 p-2 rounded-full bg-black/30 hover:bg-black/50 text-white backdrop-blur-xs transition-colors"
             aria-label="Add to favorites"
           >
             <Heart className="h-4 w-4" aria-hidden="true" />
           </button>
 
           {/* Price Tag Overlay */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-12">
+          <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-4 pt-12">
             <p className="text-white text-xl font-bold tracking-tight">
               {formattedPrice}
             </p>
@@ -79,32 +79,37 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
         </div>
 
         {/* Content Section */}
-        <CardContent className="flex flex-col flex-grow p-5">
+        <CardContent className="flex flex-col grow p-5">
           {/* Title & Location */}
           <div className="mb-4">
             <Link
               href={propertyUrl}
-              className="group-hover:text-emerald-700 transition-colors"
+              className="group-hover:text-primary transition-colors"
             >
-              <h3 className="font-bold text-zinc-900 text-lg line-clamp-1 mb-1">
+              <h3 className="font-bold text-foreground text-lg line-clamp-1 mb-1">
                 {property.title}
               </h3>
             </Link>
-            <div className="flex items-center text-zinc-500 text-sm">
-              <MapPin className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
+            <div className="flex items-center text-muted-foreground text-sm">
+              <MapPin
+                className="h-3.5 w-3.5 mr-1 text-primary"
+                aria-hidden="true"
+              />
               <span>{property.location}</span>
             </div>
           </div>
 
           {/* Key Features */}
-          <div className="flex items-center gap-4 text-sm text-zinc-600 mb-5 pb-5 border-b border-zinc-100">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-5 pb-5 border-b border-border/60">
             {property.beds && (
               <div
                 className="flex items-center gap-1.5"
                 title={`${property.beds} Bedrooms`}
               >
-                <Bed className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-                <span className="font-medium">{property.beds}</span>
+                <Bed className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span className="font-medium text-foreground">
+                  {property.beds}
+                </span>
                 <span className="sr-only">bedrooms</span>
               </div>
             )}
@@ -113,8 +118,10 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
                 className="flex items-center gap-1.5"
                 title={`${property.baths} Bathrooms`}
               >
-                <Bath className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-                <span className="font-medium">{property.baths}</span>
+                <Bath className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span className="font-medium text-foreground">
+                  {property.baths}
+                </span>
                 <span className="sr-only">bathrooms</span>
               </div>
             )}
@@ -123,13 +130,10 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
                 className="flex items-center gap-1.5"
                 title={`${property.area} Sq Ft`}
               >
-                <Square
-                  className="h-4 w-4 text-emerald-600"
-                  aria-hidden="true"
-                />
-                <span className="font-medium">
+                <Square className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span className="font-medium text-foreground">
                   {property.area}{" "}
-                  <span className="text-xs text-zinc-400">sqft</span>
+                  <span className="text-xs text-muted-foreground/70">sqft</span>
                 </span>
               </div>
             )}
@@ -139,15 +143,15 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
           <div className="mt-auto flex items-center justify-between">
             {/* Agent Info */}
             {property.agent ? (
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <div className="h-6 w-6 rounded-full bg-zinc-200 overflow-hidden relative">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="h-6 w-6 rounded-full bg-muted overflow-hidden relative border border-border/60">
                   <ImageWithFallback
                     src={property.agent.image}
                     alt=""
                     className="object-cover"
                   />
                 </div>
-                <span className="truncate max-w-[100px]">
+                <span className="truncate max-w-25 text-foreground/80">
                   {property.agent.name}
                 </span>
               </div>
@@ -158,7 +162,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
             <Button
               variant="ghost"
               size="sm"
-              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 p-0 h-auto font-medium"
+              className="text-primary hover:text-primary/80 hover:bg-primary/10 px-2 py-1 h-auto font-medium transition-colors"
               asChild
             >
               <Link href={propertyUrl} className="flex items-center gap-1">

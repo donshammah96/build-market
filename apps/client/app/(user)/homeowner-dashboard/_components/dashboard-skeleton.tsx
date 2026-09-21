@@ -1,7 +1,6 @@
 "use client";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function DashboardSkeleton() {
@@ -28,7 +27,6 @@ export function DashboardSkeleton() {
           </div>
         </div>
       </div>
-      <Footer />
     </div>
   );
 }

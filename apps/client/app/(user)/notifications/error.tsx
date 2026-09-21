@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { ROUTES } from "@/lib/routes";
 
 export default function NotificationsError({
@@ -47,7 +46,6 @@ export default function NotificationsError({
           </div>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

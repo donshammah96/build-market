@@ -16,6 +16,66 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed & Fixed — Accessibility Semantics, Non-Custodial Copy Hardening, Centralized Legal Routes & Root Footer Deduplication
+
+- **Accessibility Toggle Semantics & Non-Custodial Copy Hardening (`apps/client/components/home/HowItWorks.tsx`, `apps/client/__tests__/components/home/how-it-works.test.tsx`)**:
+  - **Button Group Toggle ARIA Semantics**: Refactored audience toggle from incomplete tablist pattern (`role="tablist"`, `role="tab"`, `aria-selected` without associated tabpanel, aria-controls, or keyboard arrows) to a two-state button group (`role="group"`, `aria-label="View how it works for"`, `aria-pressed={audience === key}`). Screen readers accurately announce the toggle state without expecting tab widget keyboard navigation.
+  - **Client-Facing Non-Custodial Copy Hardening**: Replaced milestone payment-protection guarantee ("Hire with milestone protection", "release payment as each milestone is approved — never pay for work that hasn't been done") with non-custodial stage sign-off copy ("Structured stage sign-offs", "Agree on project stages up front and record approvals between both parties as each milestone is completed to keep deliverables clear."). Aligns strictly with P0-7 non-custodial policy.
+  - **Professional-Facing Non-Custodial Settlement Copy**: Replaced fund disbursement promises ("Get paid on milestones", "disbursed as work is approved") with direct stage agreements ("Direct stage agreements", "Agree on clear deliverables per project stage and record client approvals as work is completed, keeping expectations aligned from kickoff to handover."). Honoring the settlement boundary documented in `/legal/safety-and-verification`.
+  - **Automated Regression Suite (`apps/client/__tests__/components/home/how-it-works.test.tsx`)**: Authored comprehensive unit test suite asserting button group ARIA semantics and guaranteeing zero prohibited custodial or escrow marketing claims in HowItWorks copy.
+
+- **Centralized Legal Route Contract Expansion (`apps/client/lib/routes/marketplace.routes.ts`, `apps/client/app/sitemap/page.tsx`, `apps/client/app/legal/layout.tsx`)**:
+  - Added centralized legal route definitions to `MARKETPLACE_ROUTES` and `LEGAL_ROUTES` for `safetyAndVerification`, `reviewPolicy`, `disputesAndComplaints`, `contentModeration`, and `foundingProTerms`.
+  - Refactored `apps/client/app/sitemap/page.tsx` and `apps/client/app/legal/layout.tsx` from hardcoded URL literals (`/legal/safety-and-verification`, `/legal/review-policy`, `/legal/disputes-and-complaints`, `/legal/content-moderation`, `/legal/founding-pro-terms`) to use strongly-typed `LEGAL_ROUTES.*` constants, eliminating URL drift.
+
+- **Page-Level Footer Deduplication (`apps/client/app/`)**:
+  - Paired the root layout global `<Footer />` mount in `apps/client/app/layout.tsx` with systematic removal of all redundant page-level `<Footer />` instances and unused imports across the application.
+  - Removed duplicate footers from `/professionals`, `/professionals/[id]`, `/properties`, `/properties/[id]`, `/professional`, `/sitemap`, `/profile/complete`, `/idea-books`, `/idea-books/[id]`, and all branches of `(user)` routes (`homeowner-dashboard`, `notifications`, `search`, `profile`, `reviews`, `leads`, `messages`). Prevents duplicate newsletter subscription boxes and repeated legal links.
+
+### Changed & Fixed — Landing Page Dark Mode Responsiveness & Semantic Token Normalization
+
+- **Landing Page Dark Mode Theme Auditing & Semantic Token Hardening (`apps/client/components/home/CTA.tsx`, `apps/client/components/reviews/`, `apps/client/components/vendors/`, `apps/client/components/real-estate/`, `apps/client/components/professional/`, `apps/client/app/page.tsx`, `apps/client/app/layout.tsx`, `apps/client/components/accessibility/AccessibilityProvider.tsx`)**:
+  - **CTA Section (`apps/client/components/home/CTA.tsx`, `apps/client/app/page.tsx`)**: Replaced inverted static/light container with dynamic responsive gradient (`bg-linear-to-br from-emerald-50 via-white to-emerald-100/60 dark:from-zinc-950 dark:via-zinc-900 dark:to-emerald-950/50`) and semantic design tokens (`text-foreground`, `text-primary`, `text-muted-foreground`), normalized button styling across themes (`bg-primary text-primary-foreground` and `bg-card border-border`), and aligned lazy-load Suspense skeleton fallback from `bg-primary` to `bg-muted` to prevent dark-mode flash.
+  - **Reviews Section & ReviewCard (`apps/client/components/reviews/ReviewsSection.tsx`, `apps/client/components/reviews/ReviewCard.tsx`)**: Eliminated hardcoded `bg-white`, `border-zinc-100`, `bg-zinc-50`, and low-contrast `text-zinc-900`/`text-zinc-700` in favor of semantic `bg-card`, `border-border`, `bg-muted/30`, and `text-foreground`/`text-muted-foreground`. Standardized verified badge, quote icon, and avatar fallback using OKLCH primary tokens.
+  - **Vendors Section & VendorCard (`apps/client/components/vendors/VendorSection.tsx`, `apps/client/components/vendors/VendorCard.tsx`)**: Purged hardcoded `bg-white`, `border-zinc-200`, and `bg-zinc-100` media wrappers; transitioned cards to `bg-card border-border/70`, section container to `bg-muted/30`, and carousel pagination controls to `bg-card border-border text-foreground hover:bg-accent`.
+  - **Properties & Professionals Sections (`apps/client/components/real-estate/`, `apps/client/components/professional/`)**: Harmonized Property, PropertyCard, Professionals, and ProfessionalCard to use `bg-card`, `bg-muted`, and `border-border/70`, preventing hardcoded white background flashes and maintaining crisp contrast ratios across all viewports.
+  - **URL Parameter & Pre-Hydration Theme Synchronization (`apps/client/app/layout.tsx`, `apps/client/components/accessibility/AccessibilityProvider.tsx`)**: Added `?theme=dark|light|system` search parameter detection in `AccessibilityProvider` and pre-hydration `<script nonce={nonce}>` in `<head>` to evaluate query parameters and `localStorage` before React hydration, preventing FOUC (flash of unstyled content), and added `suppressHydrationWarning` to `<html lang="en">` to eliminate React SSR/client className mismatch warnings.
+  - **SEC-LINT-003 & Persistence Allowlist Compliance Annotations (`apps/client/app/layout.tsx`, `apps/client/components/home/FAQSection.tsx`)**: Attached mandatory `SECURITY_XSS_ALLOWLIST` security annotations to static schema.org JSON-LD and pre-hydration theme initialization scripts, as well as `SECURITY_PERSISTENCE_ALLOWLIST` for non-sensitive theme storage reads, eliminating security drift and satisfying strict CI compliance checks.
+  - **Automated Regression Suite (`apps/client/__tests__/components/home/landing-page-dark-mode.test.tsx`)**: Authored 12-test Vitest verification suite ensuring zero regression of hardcoded light colors (`bg-white`, `bg-zinc-50`, `text-zinc-900`, `border-zinc-200`) across CTA, Reviews, Vendors, Properties, and Professionals components.
+
+### Added, Changed & Fixed — Landing Page Modernization, FAQ Schema, WCAG Accessibility & Theme Infrastructure
+
+- **Home Landing Modernization & Progressive Section Loading (`apps/client/app/page.tsx`, `apps/client/app/layout.tsx`, `apps/client/app/data/homeData.ts`)**:
+  - Re-architected below-the-fold landing page sections into code-split dynamic imports wrapped in React `Suspense` with lightweight layout skeletons, preserving Core Web Vitals (CLS/FID).
+  - Grounded marketplace categories, properties, and vendor data with authentic Kenyan geographic contexts (Nairobi, Kiambu, Machakos, Mombasa, Nakuru) and localized pricing in KES.
+  - Extracted global `Footer` and `CookieConsentProvider` mounting into `app/layout.tsx` to eliminate redundant per-page duplication.
+  - Replaced ad-hoc route strings across navigation and marketing sections with centralized, strongly-typed route definitions from `@/lib/routes`.
+
+- **FAQ Section & Schema.org Structured Data (`apps/client/components/home/FAQSection.tsx`, `apps/client/app/page.tsx`)**:
+  - Implemented accessible FAQ accordion via `@/components/ui/accordion` (Radix primitive) answering 6 core consumer questions on statutory professional accreditation (EBK, BORAQS, NCA), structured milestone releases, dispute resolution, and vendor material procurement.
+  - Injected valid `application/ld+json` Schema.org `FAQPage` metadata with structured `Question` and `Answer` entities to power Google rich snippets and search visibility.
+  - Strictly audited copy against Central Bank of Kenya non-custodial constraints, verified by `__tests__/legal/no-escrow-marketing-copy.test.ts` (351 passing assertions).
+
+- **Dark-Mode Infrastructure & Accessibility Theme Toggle (`apps/client/lib/stores/accessibilityStore.ts`, `apps/client/components/accessibility/AccessibilityProvider.tsx`, `apps/client/components/accessibility/AccessibilitySettingsPanel.tsx`)**:
+  - Extended client-side `accessibilityStore` with `theme: "system" | "light" | "dark"`, `setTheme()`, and local persistence under `bm_accessibility_settings`, avoiding external library weight (`next-themes`) and hydration mismatches on Cloudflare Workers / OpenNext.
+  - Wired `AccessibilityProvider` with `window.matchMedia("(prefers-color-scheme: dark)")` change listeners, synchronizing system preferences and toggling `.dark` on `document.documentElement` against OKLCH design tokens.
+  - Added interactive visual theme selector (System, Light, Dark) with iconography and accessible keyboard navigation in `AccessibilitySettingsPanel`.
+
+- **WCAG 2.1 AA Accessibility Remediations across Landing Page Components (`apps/client/components/accessibility/`, `apps/client/components/gdpr/`, `apps/client/components/real-estate/`, `apps/client/components/vendors/`, `apps/client/components/reviews/`)**:
+  - **AccessibilitySettingsPanel**: Upgraded dialog trigger/overlay mechanics, fixed contrast ratios, and added proper ARIA attributes to panel close buttons.
+  - **CookieBanner**: Added focus trapping, semantic button roles, accessible descriptions, and escape-key handling.
+  - **Property & PropertyCard**: Resolved unlabelled icon buttons, added screen-reader accessible price formats and feature badges, and enforced keyboard focus rings.
+  - **VendorSection & VendorCard**: Added verified badge tooltips with accessible labels, category tags, and explicit link titles.
+  - **ReviewsSection & ReviewCard**: Added semantic star rating labels (`aria-label="Rated 5 out of 5 stars"`), verified hire indicators, and accessible quote containers.
+
+- **Image Domain Security & Cloudflare Worker Optimization Audit (`apps/client/next.config.ts`, `apps/client/next-config-csp.ts`)**:
+  - Verified CSP `imgOrigins` and Next.js `remotePatterns` maintain strict parity with zero open wildcards (`*`), restricted to `img.clerk.com`, `res.cloudinary.com`, `images.unsplash.com`, `unsplash.com`, and `i.pravatar.cc`.
+  - Reaffirmed `images.unoptimized: true` architectural requirement for Cloudflare Workers / OpenNext V8 isolate runtimes where native Node `sharp` image transformations are unsupported.
+
+- **Legal Compliance Pages & Automated Sitemap (`apps/client/app/legal/terms/page.tsx`, `apps/client/app/legal/accessibility/page.tsx`, `apps/client/app/sitemap.ts`, `apps/client/app/sitemap/route.ts`)**:
+  - Added production-grade Terms of Service and Accessibility Statement pages conforming to statutory consumer protection standards.
+  - Generated dynamic Next.js sitemap mapping core landing, marketplace, legal, and pro discovery routes with appropriate change frequencies and priorities.
+
 ### Added & Security — P0-7 Financial Custody Prohibition & Paid M-Pesa Operational Gating
 
 - **Public Marketing & Onboarding Escrow Purge (`app/sign-up/[[...sign-up]]/page.tsx`, `app/professional/page.tsx`, `components/professional/Professionals.tsx`, `components/professional/MockDashboardUi.tsx`)**:

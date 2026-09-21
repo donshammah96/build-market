@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -106,7 +105,6 @@ export default function UserDashboardPage() {
             </Button>
           </div>
         </main>
-        <Footer />
       </div>
     );
   }
@@ -496,7 +494,6 @@ export default function UserDashboardPage() {
           </div>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

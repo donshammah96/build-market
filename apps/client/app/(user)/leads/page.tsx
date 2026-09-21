@@ -15,7 +15,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -315,7 +314,6 @@ export default function HomeownerLeadsDashboardPage() {
           )}
         </main>
       </div>
-      <Footer />
     </div>
   );
 }

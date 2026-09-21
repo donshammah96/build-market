@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Cookie, X, ChevronDown, ChevronUp, Shield } from "lucide-react";
+import { Cookie, X, ChevronDown, Shield } from "lucide-react";
 import Link from "next/link";
 import { useCookieConsent } from "@/hooks/useCookieConsent";
 import type { CookieConsent } from "@/components/providers/CookieConsentProvider";
@@ -89,8 +89,15 @@ const CATEGORIES: (
 // =============================================================================
 
 export function CookieBanner() {
-  const { consent, hasConsented, acceptAll, rejectAll, savePreferences } =
-    useCookieConsent();
+  const {
+    consent,
+    hasConsented,
+    isPreferencesOpen,
+    acceptAll,
+    rejectAll,
+    savePreferences,
+    closePreferences,
+  } = useCookieConsent();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [localPrefs, setLocalPrefs] = useState({
@@ -103,12 +110,32 @@ export function CookieBanner() {
     setIsMounted(true);
   }, []);
 
+  // When preferences are explicitly reopened, expand categories and sync local state
+  useEffect(() => {
+    if (isPreferencesOpen) {
+      setIsExpanded(true);
+      setLocalPrefs({
+        analytics: consent.analytics,
+        marketing: consent.marketing,
+        functional: consent.functional,
+      });
+    }
+  }, [isPreferencesOpen, consent]);
+
   // Don't render during SSR to prevent hydration mismatch,
-  // and don't render if user has already consented
-  if (!isMounted || hasConsented) return null;
+  // and don't render if user has already consented unless preferences are explicitly reopened
+  if (!isMounted || (hasConsented && !isPreferencesOpen)) return null;
 
   const handleCustomizeSave = () => {
     savePreferences(localPrefs);
+  };
+
+  const handleClose = () => {
+    if (isPreferencesOpen) {
+      closePreferences();
+    } else {
+      rejectAll();
+    }
   };
 
   return (
@@ -119,14 +146,14 @@ export function CookieBanner() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="fixed bottom-0 inset-x-0 z-[9999] p-4 md:p-6"
+        className="fixed bottom-0 inset-x-0 z-9999 p-4 md:p-6"
       >
         <div className="max-w-3xl mx-auto bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden">
           {/* Main Row */}
           <div className="p-5 md:p-6">
             <div className="flex items-start gap-4">
               {/* Icon */}
-              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 flex-shrink-0 mt-0.5">
+              <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 shrink-0 mt-0.5">
                 <Cookie className="w-5 h-5 text-emerald-400" />
               </div>
 
@@ -148,12 +175,16 @@ export function CookieBanner() {
                 </p>
               </div>
 
-              {/* Close (rejects all) */}
+              {/* Close (rejects all if initial, closes panel if reopened) */}
               <button
                 type="button"
-                onClick={rejectAll}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0"
-                aria-label="Reject all cookies"
+                onClick={handleClose}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 cursor-pointer"
+                aria-label={
+                  isPreferencesOpen
+                    ? "Close cookie settings"
+                    : "Reject all cookies"
+                }
               >
                 <X className="w-5 h-5" />
               </button>

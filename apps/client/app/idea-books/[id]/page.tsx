@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -84,7 +83,6 @@ export default function IdeaBookDetailPage() {
             </Link>
           </div>
         </main>
-        <Footer />
       </div>
     );
   }
@@ -96,7 +94,6 @@ export default function IdeaBookDetailPage() {
         <main className="flex-1 container mx-auto px-4 md:px-8 py-8 pt-24 max-w-7xl">
           <IdeaBookDetailSkeleton />
         </main>
-        <Footer />
       </div>
     );
   }
@@ -120,7 +117,6 @@ export default function IdeaBookDetailPage() {
             </Link>
           </div>
         </main>
-        <Footer />
       </div>
     );
   }
@@ -150,7 +146,7 @@ export default function IdeaBookDetailPage() {
             className="flex-1"
           >
             <div className="flex items-start gap-4">
-              <div className="h-14 w-14 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <div className="h-14 w-14 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
                 <BookOpen className="h-7 w-7 text-emerald-600" />
               </div>
               <div className="flex-1 min-w-0">
@@ -291,8 +287,6 @@ export default function IdeaBookDetailPage() {
           </>
         )}
       </AnimatePresence>
-
-      <Footer />
     </div>
   );
 }
@@ -336,7 +330,7 @@ function AttachmentCard({
       )}
 
       {/* Overlay with caption and delete */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
+      <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
         {attachment.caption && (
           <p className="text-white text-sm line-clamp-2">
             {attachment.caption}

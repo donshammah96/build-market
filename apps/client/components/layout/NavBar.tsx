@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 import { normalizeRole } from "@/app/lib/security/roles";
-import { ROUTES, dashboardForRole } from "@/lib/routes";
+import { ROUTES, LEGAL_ROUTES, dashboardForRole } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   useThrottledScroll,
@@ -32,6 +32,7 @@ import {
 } from "@/lib/hooks/usePerformance";
 import { AccessibilitySettingsPanel } from "@/components/accessibility";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useCookieConsent } from "@/hooks/useCookieConsent";
 
 // Discovery nav items for clients & consumers (Industry-standard separation)
 const discoveryNavItems = [
@@ -51,6 +52,13 @@ const discoveryNavItems = [
     href: ROUTES.properties,
     icon: Building2,
   },
+] as const;
+
+// Compact legal link set for the mobile drawer.
+const mobileLegalLinks = [
+  { label: "Privacy", href: LEGAL_ROUTES.privacy },
+  { label: "Terms", href: LEGAL_ROUTES.terms },
+  { label: "Cookies", href: LEGAL_ROUTES.cookieSettings },
 ] as const;
 
 interface NavbarProps {
@@ -114,6 +122,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
   const isScrolled = useThrottledScroll(20);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, isLoaded } = useUser();
+  const { openPreferences } = useCookieConsent();
   const pathname = usePathname();
   const isSignedIn = Boolean(user);
   const shouldAnimate = useShouldAnimate();
@@ -503,6 +512,44 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
               trigger={mobileMenuAccessibilityTrigger}
             />
           </div>
+
+          {/*
+           * NEW: compact legal row. Previously the mobile drawer had no
+           * path to Privacy/Terms/Cookies at all — a user on mobile had to
+           * close the menu and scroll the entire page down to the footer
+           * to find them (and only on pages that render <Footer />; see
+           * the audit note on mounting Footer globally in app/layout.tsx).
+           */}
+          <nav
+            aria-label="Legal"
+            className="pt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground"
+          >
+            {mobileLegalLinks.map((link, index) => (
+              <React.Fragment key={link.label}>
+                {index > 0 && <span aria-hidden="true">·</span>}
+                {link.label === "Cookies" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeMobileMenu();
+                      openPreferences();
+                    }}
+                    className="hover:text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm cursor-pointer"
+                  >
+                    {link.label}
+                  </button>
+                ) : (
+                  <Link
+                    href={link.href}
+                    onClick={closeMobileMenu}
+                    className="hover:text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
+                  >
+                    {link.label}
+                  </Link>
+                )}
+              </React.Fragment>
+            ))}
+          </nav>
         </div>
       </div>
     </>

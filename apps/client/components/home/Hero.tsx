@@ -36,7 +36,7 @@ export const Hero: FC = memo(function Hero() {
       {/* Background Layer */}
       <div className="absolute inset-0 z-0 bg-background">
         {/* Fallback gradient (shown immediately or on image error) */}
-        <div className="absolute inset-0 bg-linear-to-br from-foreground via-foreground/95 to-primary z-0" />
+        <div className="absolute inset-0 bg-linear-to-br from-zinc-950 via-zinc-900 to-emerald-950 z-0" />
 
         <div
           className="absolute -left-28 top-20 h-80 w-80 rounded-full bg-primary/30 blur-3xl z-10"

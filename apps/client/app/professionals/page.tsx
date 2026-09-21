@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +52,7 @@ const ProfessionalsSkeleton = memo(function ProfessionalsSkeleton() {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {Array.from({ length: 8 }).map((_, i) => (
         <Card key={i} className="overflow-hidden">
-          <Skeleton className="aspect-[4/3] w-full" />
+          <Skeleton className="aspect-4/3 w-full" />
           <CardContent className="p-5 space-y-3">
             <div className="flex items-start justify-between">
               <div className="space-y-2 flex-1">
@@ -386,7 +385,7 @@ function ProfessionalsPageContent() {
       {/* Hero Section */}
       <section
         ref={heroRef as React.RefObject<HTMLElement>}
-        className="relative bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 pt-32 pb-16 overflow-hidden"
+        className="relative bg-linear-to-br from-zinc-900 via-zinc-800 to-zinc-900 pt-32 pb-16 overflow-hidden"
       >
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10" aria-hidden="true">
@@ -412,7 +411,7 @@ function ProfessionalsPageContent() {
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
               Find Your Trusted{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-teal-300">
                 Professional
               </span>
             </h1>
@@ -484,7 +483,7 @@ function ProfessionalsPageContent() {
 
             <div className="flex items-center gap-3">
               <Select value={urlSort} onValueChange={handleSortChange}>
-                <SelectTrigger className="w-[180px] bg-white">
+                <SelectTrigger className="w-45 bg-white">
                   <SlidersHorizontal className="h-4 w-4 mr-2 text-zinc-400" />
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
@@ -550,8 +549,6 @@ function ProfessionalsPageContent() {
           />
         )}
       </main>
-
-      <Footer />
     </div>
   );
 }

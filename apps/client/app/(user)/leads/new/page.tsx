@@ -27,7 +27,6 @@ import {
   type BudgetReadiness,
 } from "@build/lead-qualification";
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1012,7 +1011,6 @@ export default function NewMarketplaceLeadPage() {
           </Card>
         </main>
       </div>
-      <Footer />
     </div>
   );
 }
