@@ -144,7 +144,7 @@ export const storesRepository = {
         documentVersion: "1.0",
         granted: true,
         grantedAt: new Date(),
-        metadata: data.metadata,
+        metadata: data.metadata as Prisma.InputJsonValue,
         ...(data.ipAddress && { ipAddress: data.ipAddress }),
         ...(data.userAgent && { userAgent: data.userAgent }),
       },
@@ -163,11 +163,11 @@ export const storesRepository = {
         granted: true,
         grantedAt: new Date(),
         ipAddress: data.ipAddress,
-        metadata: data.metadata,
+        metadata: data.metadata as Prisma.InputJsonValue,
       },
       update: {
         grantedAt: new Date(),
-        metadata: data.metadata,
+        metadata: data.metadata as Prisma.InputJsonValue,
       },
     });
   },

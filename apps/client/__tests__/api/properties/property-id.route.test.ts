@@ -27,6 +27,11 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (userId: string, namespace: string) => `${namespace}:${userId}`,
+    ),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },

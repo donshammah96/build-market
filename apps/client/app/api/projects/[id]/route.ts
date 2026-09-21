@@ -14,6 +14,7 @@ import {
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateProjectSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
@@ -21,7 +22,6 @@ import type { ProjectActorRole } from "@/app/lib/domains/projects/contracts";
 import { normalizeRole } from "@/app/lib/security/roles";
 
 type ProjectParams = { id: string };
-const logger = getClientLogger();
 
 function toStatus(error: string): number {
   switch (error) {
@@ -92,7 +92,7 @@ export const GET = withAuth<ProjectParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Project detail fetch failed", result.error, {
+      getClientLogger().error("Project detail fetch failed", result.error, {
         correlationId,
       });
       return apiError(
@@ -170,8 +170,7 @@ export const PATCH = withAuth<ProjectParams>(
       "project",
       dbUserId,
       "PATCH",
-      params.id,
-      PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -251,7 +250,7 @@ export const PATCH = withAuth<ProjectParams>(
 
     const responseData = result.data.data;
 
-    await IdempotencyService.complete(idempotencyKey, responseData);
+    await safeIdempotencyComplete(idempotencyKey, responseData);
     const response = apiSuccess(responseData, HttpStatus.OK);
     response.headers.set("ETag", `"${responseData.item.version ?? 0}"`);
     return response;
@@ -291,8 +290,7 @@ export const DELETE = withAuth<ProjectParams>(
       "project",
       dbUserId,
       "DELETE",
-      params.id,
-      PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -374,7 +372,7 @@ export const DELETE = withAuth<ProjectParams>(
       },
     };
 
-    await IdempotencyService.complete(idempotencyKey, responseData);
+    await safeIdempotencyComplete(idempotencyKey, responseData);
     return apiSuccess(responseData, HttpStatus.OK);
   },
 );

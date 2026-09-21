@@ -70,6 +70,9 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
     error: mockLoggerError,
     debug: mockLoggerDebug,
   }),
+}));
+
+vi.mock("@/app/lib/api/api-response", () => ({
   apiError: vi
     .fn()
     .mockImplementation((message: string, status: number, details?: unknown) =>
@@ -83,17 +86,16 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
     .mockImplementation((data: unknown, status: number = 200) =>
       NextResponse.json({ success: true, data }, { status }),
     ),
-}));
-
-vi.mock("@/app/lib/api/api-response", () => ({
   HttpStatus: {
     OK: 200,
     BAD_REQUEST: 400,
     UNAUTHORIZED: 401,
     FORBIDDEN: 403,
+    NOT_FOUND: 404,
     CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
     INTERNAL_SERVER_ERROR: 500,
+    SERVICE_UNAVAILABLE: 503,
   },
 }));
 
@@ -185,8 +187,8 @@ describe("PATCH /api/onboarding/professional/complete", () => {
 
     const terminalOutcomeCall = mockLoggerInfo.mock.calls.find(
       ([message, payload]) =>
-        message === "Onboarding adapter outcome" &&
-        (payload as { outcome?: string }).outcome === "succeeded",
+        message === "Onboarding route outcome" &&
+        (payload as { outcome?: string }).outcome === "success",
     );
 
     expect(terminalOutcomeCall).toBeDefined();
@@ -194,10 +196,8 @@ describe("PATCH /api/onboarding/professional/complete", () => {
       expect.objectContaining({
         correlationId: "test-correlation-id",
         operationName: "complete-professional-onboarding",
-        httpMethod: "PATCH",
-        routePattern: "/api/onboarding/professional/complete",
         actorRole: "PROFESSIONAL",
-        outcome: "succeeded",
+        outcome: "success",
         httpStatus: 200,
         durationMs: expect.any(Number),
       }),
@@ -228,7 +228,7 @@ describe("PATCH /api/onboarding/professional/complete", () => {
     const data = await response.json();
 
     expect(response.status).toBe(403);
-    expect(data.error).toContain("suspended or banned accounts");
+    expect(data.error).toContain("Forbidden");
   });
 
   it("rejects requests when authenticated role cannot be normalized", async () => {
@@ -269,20 +269,18 @@ describe("PATCH /api/onboarding/professional/complete", () => {
     expect(data.error).toContain("Invalid JSON");
     expect(mockCompleteProfessionalOnboarding).not.toHaveBeenCalled();
 
-    const badRequestOutcomeCall = mockLoggerInfo.mock.calls.find(
+    const badRequestOutcomeCall = mockLoggerWarn.mock.calls.find(
       ([message, payload]) =>
-        message === "Onboarding adapter outcome" &&
-        (payload as { outcome?: string }).outcome === "bad_request",
+        message === "Onboarding route outcome" &&
+        (payload as { outcome?: string }).outcome === "validation_error",
     );
 
     expect(badRequestOutcomeCall).toBeDefined();
     expect(badRequestOutcomeCall?.[1]).toEqual(
       expect.objectContaining({
         operationName: "complete-professional-onboarding",
-        httpMethod: "PATCH",
-        routePattern: "/api/onboarding/professional/complete",
         actorRole: "PROFESSIONAL",
-        outcome: "bad_request",
+        outcome: "validation_error",
         httpStatus: 400,
         durationMs: expect.any(Number),
       }),
@@ -327,7 +325,9 @@ describe("PATCH /api/onboarding/professional/complete", () => {
       }),
     );
 
-    const warnCall = mockLoggerWarn.mock.calls.at(-1);
+    const warnCall = mockLoggerWarn.mock.calls.find(
+      ([message]) => message === "Onboarding completion validation failed",
+    );
     const loggedErrors = (warnCall?.[1] as { errors?: unknown[] } | undefined)
       ?.errors;
     expect(Array.isArray(loggedErrors)).toBe(true);

@@ -1,0 +1,13 @@
+diff --git a/dist/esnext/uri.js b/dist/esnext/uri.js
+--- a/dist/esnext/uri.js
++++ b/dist/esnext/uri.js
+@@ -1 +1 @@
+-import punycode from "punycode";
++import punycode from "punycode/";
+
+diff --git a/dist/esnext/schemes/mailto.js b/dist/esnext/schemes/mailto.js
+--- a/dist/esnext/schemes/mailto.js
++++ b/dist/esnext/schemes/mailto.js
+@@ -1 +1 @@
+-import punycode from "punycode";
++import punycode from "punycode/";

@@ -68,7 +68,7 @@ import {
   portfolioClient,
   type PortfolioItem,
   type ProjectTypeValue,
-} from "@/lib/portfolio-client";
+} from "@/lib/facades/portfolio-client";
 
 // ─── Form schema (UI-layer only) ──────────────────────────────────────────────
 

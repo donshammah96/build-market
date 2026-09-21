@@ -2,13 +2,8 @@
  * Circuit Breaker pattern to protect struggling services from cascading failures
  */
 
-import {
-  CircuitBreakerConfig,
-  CircuitState,
-  CircuitBreakerState,
-} from "./types";
-import { Logger } from "./logger";
-import { getDefaultCircuitBreakerConfig } from "./config";
+import { CircuitBreakerConfig, CircuitBreakerState } from "./types.js";
+import { Logger } from "./logger.js";
 
 export class CircuitBreakerOpenError extends Error {
   constructor(
@@ -44,6 +39,7 @@ export class CircuitBreaker {
   };
 
   private failures: number[] = []; // Timestamps of failures
+  private halfOpenInFlight = false;
   private readonly config: CircuitBreakerConfig;
   private readonly logger?: Logger;
 
@@ -75,6 +71,17 @@ export class CircuitBreaker {
       }
     }
 
+    const isHalfOpenProbe = this.state.state === "half-open";
+    if (isHalfOpenProbe) {
+      if (this.halfOpenInFlight) {
+        throw new CircuitBreakerOpenError(
+          this.name,
+          this.state.nextAttemptTime ?? Date.now(),
+        );
+      }
+      this.halfOpenInFlight = true;
+    }
+
     try {
       const result = await operation();
       this.recordSuccess();
@@ -82,6 +89,10 @@ export class CircuitBreaker {
     } catch (error) {
       this.recordFailure();
       throw error;
+    } finally {
+      if (isHalfOpenProbe) {
+        this.halfOpenInFlight = false;
+      }
     }
   }
 
@@ -183,6 +194,7 @@ export class CircuitBreaker {
       successCount: 0,
     };
     this.failures = [];
+    this.halfOpenInFlight = false;
 
     this.logger?.info(
       `Circuit breaker '${this.name}' closed after successful recovery`,
@@ -209,6 +221,7 @@ export class CircuitBreaker {
       successCount: 0,
     };
     this.failures = [];
+    this.halfOpenInFlight = false;
 
     this.logger?.info(`Circuit breaker '${this.name}' manually reset`, {
       circuitName: this.name,

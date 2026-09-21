@@ -14,7 +14,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
-import type { MyPropertyListing } from "@/lib/properties-client";
+import type { MyPropertyListing } from "@/lib/facades/properties-client";
 
 export interface PropertyListCardProps {
   property: MyPropertyListing;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LEGAL_ROUTES } from "@/lib/routes";
 
 export const metadata: Metadata = {
   title: "Legal",
@@ -12,7 +13,7 @@ export default function LegalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white">
+    <div className="min-h-screen bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white">
       {/* Subtle animated background grain */}
       <div
         className="fixed inset-0 opacity-[0.03] pointer-events-none"
@@ -26,28 +27,52 @@ export default function LegalLayout({
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/"
-            className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent hover:from-emerald-300 hover:to-emerald-200 transition-all"
+            className="text-lg font-bold bg-linear-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent hover:from-emerald-300 hover:to-emerald-200 transition-all"
           >
             Build Market
           </Link>
-          <div className="flex items-center gap-6 text-sm text-zinc-400">
+          <div className="flex flex-wrap items-center gap-4 md:gap-6 text-xs md:text-sm text-zinc-400">
             <Link
-              href="/legal/privacy"
+              href={LEGAL_ROUTES.privacy}
               className="hover:text-white transition-colors"
             >
               Privacy
             </Link>
             <Link
-              href="/legal/professional-terms"
+              href={LEGAL_ROUTES.safetyAndVerification}
               className="hover:text-white transition-colors"
             >
-              Professional Terms
+              Safety &amp; Trust
             </Link>
             <Link
-              href="/legal/cookie-settings"
+              href={LEGAL_ROUTES.reviewPolicy}
               className="hover:text-white transition-colors"
             >
-              Cookies
+              Reviews
+            </Link>
+            <Link
+              href={LEGAL_ROUTES.disputesAndComplaints}
+              className="hover:text-white transition-colors"
+            >
+              Disputes
+            </Link>
+            <Link
+              href={LEGAL_ROUTES.contentModeration}
+              className="hover:text-white transition-colors"
+            >
+              Moderation
+            </Link>
+            <Link
+              href={LEGAL_ROUTES.foundingProTerms}
+              className="hover:text-white transition-colors"
+            >
+              Founding Pro
+            </Link>
+            <Link
+              href={LEGAL_ROUTES.professionalTerms}
+              className="hover:text-white transition-colors"
+            >
+              Terms
             </Link>
           </div>
         </div>
@@ -67,10 +92,10 @@ export default function LegalLayout({
           <p className="mt-1">
             Questions? Reach us at{" "}
             <a
-              href="mailto:legal@buildmarket.co.ke"
+              href="mailto:legal@buildmarket.app"
               className="text-emerald-400 hover:underline"
             >
-              legal@buildmarket.co.ke
+              legal@buildmarket.app
             </a>
           </p>
         </div>

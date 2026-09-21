@@ -33,10 +33,8 @@ import {
   enqueueImageUploadProcessingJob,
   type ImageUploadProcessingJobData,
 } from "@/app/lib/queues/upload-processing.queue";
-import { processImageUploadJob } from "@/app/workers/uploads/processor";
 import { z } from "zod";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 const ROUTE_PATTERN = "/api/uploads";
 const OPERATION_NAME = "create_upload_asset";
@@ -122,7 +120,7 @@ export const POST = withAuth(
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {
-      logger.info("Upload adapter outcome", {
+      getClientLogger().info("Upload adapter outcome", {
         correlationId,
         operationName: OPERATION_NAME,
         httpMethod: req.method,
@@ -146,7 +144,7 @@ export const POST = withAuth(
           UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
         );
       } catch (statusError) {
-        logger.error(
+        getClientLogger().error(
           "Failed to mark pending upload as failed",
           statusError instanceof Error
             ? statusError
@@ -160,7 +158,7 @@ export const POST = withAuth(
         );
       }
 
-      logger.error(
+      getClientLogger().error(
         env.isProd
           ? "Image upload queue unavailable in production"
           : "Image upload queue unavailable and inline processing disabled",
@@ -221,13 +219,26 @@ export const POST = withAuth(
       if (metadataField && typeof metadataField === "string") {
         try {
           const parsed = JSON.parse(metadataField);
-          const validated = UploadContextSchema.parse(parsed);
-          uploadOptions = validated;
-        } catch (error) {
-          logger.warn("Invalid upload metadata, using defaults", {
-            correlationId,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          const metaValidation = UploadContextSchema.safeParse(parsed);
+          if (metaValidation.success) {
+            uploadOptions = metaValidation.data;
+          } else {
+            getClientLogger().warn("Invalid upload metadata, using defaults", {
+              correlationId,
+              errors: metaValidation.error.issues,
+            });
+          }
+        } catch (jsonError) {
+          getClientLogger().warn(
+            "Malformed upload metadata JSON, using defaults",
+            {
+              correlationId,
+              error:
+                jsonError instanceof Error
+                  ? jsonError.message
+                  : String(jsonError),
+            },
+          );
         }
       }
 
@@ -287,10 +298,9 @@ export const POST = withAuth(
                 fieldName,
                 error: validation.error || "Validation failed",
               });
-              logger.warn("File validation failed", {
+              getClientLogger().warn("File validation failed", {
                 correlationId,
                 fieldName,
-                fileName: file.name,
                 error: validation.error,
               });
               continue;
@@ -336,8 +346,12 @@ export const POST = withAuth(
 
               if (inlineProcessingEnabled) {
                 processingMode = "inline";
-                void processImageUploadJob(imageJobData).catch(
-                  async (jobError) => {
+                void (async () => {
+                  try {
+                    const { processImageUploadInline } =
+                      await import("@/app/lib/domains/uploads/inline-processor");
+                    await processImageUploadInline(imageJobData);
+                  } catch (jobError) {
                     const message =
                       jobError instanceof Error
                         ? jobError.message
@@ -345,7 +359,7 @@ export const POST = withAuth(
 
                     await markUploadFailed(uploadId, message);
 
-                    logger.error(
+                    getClientLogger().error(
                       "Inline image upload processing failed",
                       jobError instanceof Error
                         ? jobError
@@ -358,8 +372,8 @@ export const POST = withAuth(
                         outcome: "failed",
                       },
                     );
-                  },
-                );
+                  }
+                })();
               } else {
                 try {
                   await enqueueImageUploadProcessingJob(imageJobData);
@@ -385,14 +399,17 @@ export const POST = withAuth(
                 expiresAt: pending.createdAt,
               });
 
-              logger.info("Image upload accepted for async processing", {
-                correlationId,
-                fieldName,
-                uploadId,
-                processingMode,
-                operationName: OPERATION_NAME,
-                outcome: "accepted",
-              });
+              getClientLogger().info(
+                "Image upload accepted for async processing",
+                {
+                  correlationId,
+                  fieldName,
+                  uploadId,
+                  processingMode,
+                  operationName: OPERATION_NAME,
+                  outcome: "accepted",
+                },
+              );
 
               continue;
             }
@@ -483,10 +500,9 @@ export const POST = withAuth(
 
             if (deduplicated) {
               deduplicatedCount++;
-              logger.info("File deduplicated before storage write", {
+              getClientLogger().info("File deduplicated before storage write", {
                 correlationId,
                 fieldName,
-                checksum: storedChecksum,
                 existingAssetId: asset.id,
               });
             }
@@ -495,8 +511,8 @@ export const POST = withAuth(
               fieldName,
               originalName: file.name,
               assetId: asset.id,
-              url: asset.cdnUrl,
-              cdnUrl: asset.cdnUrl,
+              url: asset.cdnUrl ?? undefined,
+              cdnUrl: asset.cdnUrl ?? undefined,
               thumbnailUrl: asset.thumbnailUrl,
               size: asset.size,
               mimeType: asset.mimeType,
@@ -509,7 +525,7 @@ export const POST = withAuth(
               deduplicated,
             });
 
-            logger.info("File uploaded successfully", {
+            getClientLogger().info("File uploaded successfully", {
               correlationId,
               fieldName,
               assetId: asset.id,
@@ -524,13 +540,12 @@ export const POST = withAuth(
                 ? error.message
                 : "Upload processing failed";
             errors.push({ fieldName, error: errorMessage });
-            logger.error(
+            getClientLogger().error(
               "File upload error",
               error instanceof Error ? error : new Error(String(error)),
               {
                 correlationId,
                 fieldName,
-                fileName: file.name,
               },
             );
           }
@@ -545,7 +560,7 @@ export const POST = withAuth(
         return apiError("All uploads failed", HttpStatus.BAD_REQUEST, errors);
       }
 
-      logger.info("Upload batch completed", {
+      getClientLogger().info("Upload batch completed", {
         correlationId,
         successCount: uploadResults.length,
         errorCount: errors.length,
@@ -579,7 +594,7 @@ export const POST = withAuth(
         statusCode,
       );
     } catch (err) {
-      logger.error(
+      getClientLogger().error(
         "Upload error",
         err instanceof Error ? err : new Error(String(err)),
         {

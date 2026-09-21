@@ -18,7 +18,6 @@ import {
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 type ThreadParams = { id: string };
 
 function toMessagingActor(context: {
@@ -60,7 +59,7 @@ export const POST = withAuth<ThreadParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to mark thread read", result.error, {
+      getClientLogger().error("Failed to mark thread read", result.error, {
         correlationId,
         threadId,
       });

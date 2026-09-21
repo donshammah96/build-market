@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircle2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Props for StepIndicator component */
@@ -14,47 +14,48 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
   stepNumber,
   label,
 }) => {
-  const isActive = current >= stepNumber;
-  const isCurrent = current === stepNumber;
   const isComplete = current > stepNumber;
+  const isCurrent = current === stepNumber;
 
   return (
     // aria-current="step" signals the active step to screen readers (WCAG 2.4.8).
     <div
-      className="flex min-w-12 flex-col items-center gap-1.5"
+      className="flex flex-col items-center gap-2"
       aria-current={isCurrent ? "step" : undefined}
     >
-      {/* Step circle — glow on active via box-shadow */}
+      {/* Step circle */}
       <div
         aria-hidden="true"
         className={cn(
-          "relative flex h-8 w-8 items-center justify-center rounded-full",
-          "border-2 text-xs font-bold transition-all duration-500",
-          isActive
-            ? [
-                "border-(--color-onboarding-primary)",
-                "bg-(--color-onboarding-primary)",
-                "text-[oklch(0.08_0.016_222)]",
-                // Emerald glow ring — only when active
-                "shadow-[0_0_0_4px_oklch(0.70_0.21_162/0.18),0_0_20px_oklch(0.70_0.21_162/0.25)]",
-              ].join(" ")
-            : ["border-white/20 bg-white/4", "text-onboarding-ink/35"].join(
-                " ",
-              ),
+          "relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all duration-300",
+          isComplete && [
+            "bg-emerald-500 text-zinc-950 font-bold border-2 border-emerald-400",
+            "shadow-[0_0_16px_rgba(16,185,129,0.35)]",
+          ],
+          isCurrent && [
+            "bg-zinc-900 text-emerald-400 border-2 border-emerald-500",
+            "shadow-[0_0_20px_rgba(16,185,129,0.25),0_0_0_4px_rgba(16,185,129,0.12)]",
+          ],
+          !isComplete &&
+            !isCurrent && [
+              "bg-zinc-900/80 text-zinc-500 border border-zinc-800",
+            ],
         )}
       >
-        {isActive ? (
-          <CheckCircle2 size={15} strokeWidth={2.5} />
+        {isComplete ? (
+          <Check size={16} strokeWidth={3} />
         ) : (
-          <span className="font-['Outfit']">{stepNumber}</span>
+          <span className="font-['Outfit'] text-sm font-semibold">
+            {stepNumber}
+          </span>
         )}
 
-        {/* Pulse ring — only on the actively-current step */}
+        {/* Subtle breathing glow ring on the active step */}
         {isCurrent && (
           <span
             aria-hidden="true"
-            className="absolute inset-0 rounded-full animate-ping opacity-20 bg-(--color-onboarding-primary)"
-            style={{ animationDuration: "2.5s" }}
+            className="absolute inset-0 rounded-full animate-ping opacity-20 bg-emerald-500"
+            style={{ animationDuration: "3s" }}
           />
         )}
       </div>
@@ -62,16 +63,13 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
       {/* Label */}
       <span
         className={cn(
-          // Syne for the step label — consistent with heading font
-          "font-['Syne'] text-[9.5px] font-bold uppercase leading-none tracking-[0.12em] transition-colors duration-300",
-          isActive
-            ? "text-(--color-onboarding-primary)"
-            : "text-onboarding-ink/35",
+          "text-xs font-medium tracking-wide transition-colors duration-300",
+          isCurrent && "text-emerald-400 font-semibold",
+          isComplete && "text-zinc-300 font-medium",
+          !isComplete && !isCurrent && "text-zinc-500",
         )}
       >
-        {/* Visible label */}
         <span aria-hidden="true">{label}</span>
-        {/* Screen-reader-only context */}
         <span className="sr-only">
           {label}
           {isComplete && " (completed)"}

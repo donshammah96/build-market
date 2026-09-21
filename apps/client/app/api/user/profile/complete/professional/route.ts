@@ -16,7 +16,6 @@ import { completeProfessionalProfile } from "@/app/lib/domains/user-profile";
 import { ProfessionalProfileCompleteSchema } from "@/app/lib/domains/user-profile/profile-complete-contracts";
 import { checkProfileCompleteRateLimit } from "../shared";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 /**
@@ -55,7 +54,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     // Capture request metadata for audit
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
-    logger.info("Professional profile complete request received", {
+    getClientLogger().info("Professional profile complete request received", {
       correlationId,
       operationName: "update_professional_profile_complete",
       fieldsReceived: Object.keys(body),
@@ -64,7 +63,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     const validationResult = ProfessionalProfileCompleteSchema.safeParse(body);
     if (!validationResult.success) {
-      logger.warn("Professional profile validation failed", {
+      getClientLogger().warn("Professional profile validation failed", {
         correlationId,
         operationName: "update_professional_profile_complete",
         errors: validationResult.error.issues,
@@ -98,7 +97,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!result.success) {
-      logger.error(
+      getClientLogger().error(
         "Professional profile update failed",
         result.error || new Error("Unknown error"),
         {
@@ -130,7 +129,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     const responseData = domainResult.data;
 
-    logger.info("Professional profile updated successfully", {
+    getClientLogger().info("Professional profile updated successfully", {
       correlationId,
       operationName: "update_professional_profile_complete",
       isComplete: responseData.completion.isComplete,
@@ -139,7 +138,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(responseData);
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Professional profile complete error",
       err instanceof Error ? err : new Error(String(err)),
       {

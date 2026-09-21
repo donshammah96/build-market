@@ -15,6 +15,7 @@ import {
   createDocumentSchema,
 } from "@/app/lib/validation/properties-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import {
   type ActionErrorCode,
@@ -207,8 +208,7 @@ export async function createPropertyAction(data: CreatePropertyActionInput) {
         "property",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -238,7 +238,7 @@ export async function createPropertyAction(data: CreatePropertyActionInput) {
           ),
           "Failed to create property",
         );
-        await IdempotencyService.complete(idempotencyKey, property);
+        await safeIdempotencyComplete(idempotencyKey, property);
         revalidatePath("/professional-portal/settings/properties");
         revalidatePath("/professional-portal");
         return property;
@@ -277,8 +277,7 @@ export async function createPropertiesBatchAction(
         "property",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -308,7 +307,7 @@ export async function createPropertiesBatchAction(
           ),
           "Failed to create properties",
         );
-        await IdempotencyService.complete(idempotencyKey, result);
+        await safeIdempotencyComplete(idempotencyKey, result);
         revalidatePath("/professional-portal/settings/properties");
         revalidatePath("/professional-portal");
         return result;
@@ -356,8 +355,7 @@ export async function updatePropertyAction(
         "property",
         actor!.dbUserId,
         "PATCH",
-        input.id,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -407,7 +405,7 @@ export async function updatePropertyAction(
           property: result.property,
           version: result.version,
         };
-        await IdempotencyService.complete(idempotencyKey, response);
+        await safeIdempotencyComplete(idempotencyKey, response);
         revalidatePath("/professional-portal/settings/properties");
         revalidatePath(`/professional-portal/settings/properties/${input.id}`);
         return response;
@@ -466,8 +464,7 @@ export async function deletePropertyAction(
         "property",
         actor!.dbUserId,
         "DELETE",
-        input.id,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -517,7 +514,7 @@ export async function deletePropertyAction(
           deletedAt: result.deletedAt,
           version: result.version,
         };
-        await IdempotencyService.complete(idempotencyKey, response);
+        await safeIdempotencyComplete(idempotencyKey, response);
         revalidatePath("/professional-portal/settings/properties");
         revalidatePath("/professional-portal");
         return response;

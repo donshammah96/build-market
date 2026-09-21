@@ -15,7 +15,7 @@ import {
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { err, ok } from "@/app/lib/errors/result";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { dashboardForRole } from "@/lib/links";
+import { dashboardForRole } from "@/lib/routes";
 import type {
   OnboardingIdempotencyContext,
   OnboardingIntent,
@@ -58,13 +58,15 @@ function toCreateStoreInput(store: StoreOnboardingData): CreateStoreInput {
     kraPin: store.kraPin,
     acceptsCard: store.acceptsCard,
     acceptsCash: store.acceptsCash,
-    images: (store.images ?? []).map((image) => ({
-      assetId: image.assetId,
-      category: image.category ?? "INTERIOR",
-      caption: image.caption,
-      isMain: image.isMain ?? false,
-      sortOrder: image.sortOrder,
-    })),
+    images: (store.images ?? []).map(
+      (image: NonNullable<StoreOnboardingData["images"]>[number]) => ({
+        assetId: image.assetId,
+        category: image.category ?? "INTERIOR",
+        caption: image.caption,
+        isMain: image.isMain ?? false,
+        sortOrder: image.sortOrder,
+      }),
+    ),
   };
 }
 

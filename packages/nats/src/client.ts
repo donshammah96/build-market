@@ -4,33 +4,19 @@ import {
   JetStreamClient,
   JetStreamManager,
 } from "nats";
-import type { NatsConfig, NatsClient } from "./types";
-
-/**
- * Connection health metrics
- */
-interface ConnectionMetrics {
-  reconnectAttempts: number;
-  lastReconnectAt?: Date;
-  lastDisconnectAt?: Date;
-  totalDisconnects: number;
-  connectedAt?: Date;
-  errors: Array<{ timestamp: Date; error: string }>;
-}
-
-/**
- * Connection status information
- */
-export interface ConnectionStatus {
-  connected: boolean;
-  server?: string;
-  metrics: ConnectionMetrics;
-  config: {
-    servers: string | string[];
-    name: string;
-    environment: string;
-  };
-}
+import { connect as connectWs } from "nats.ws";
+import {
+  setConnectionStatus,
+  recordReconnect,
+  recordDisconnect,
+} from "./metrics.js";
+import type {
+  NatsConfig,
+  ResolvedNatsConfig,
+  NatsClient,
+  ConnectionMetrics,
+  ConnectionStatus,
+} from "./types.js";
 
 /**
  * Singleton NATS client instance
@@ -54,11 +40,11 @@ let verboseLogging = false;
 /**
  * Get environment-aware default configuration
  */
-function getDefaultConfig(): NatsConfig {
+function getDefaultConfig(): ResolvedNatsConfig {
   const env = process.env.NODE_ENV || "development";
   const isProd = env === "production";
 
-  return {
+  const config: ResolvedNatsConfig = {
     servers: process.env.NATS_URL || "nats://localhost:4222",
     name: process.env.NATS_CLIENT_NAME || `build-market-${env}`,
     reconnect: true,
@@ -74,16 +60,25 @@ function getDefaultConfig(): NatsConfig {
       process.env.NATS_TIMEOUT || (isProd ? "10000" : "5000"),
       10,
     ),
-    token: process.env.NATS_TOKEN,
-    user: process.env.NATS_USER,
-    pass: process.env.NATS_PASS,
   };
+
+  if (process.env.NATS_TOKEN !== undefined) {
+    config.token = process.env.NATS_TOKEN;
+  }
+  if (process.env.NATS_USER !== undefined) {
+    config.user = process.env.NATS_USER;
+  }
+  if (process.env.NATS_PASS !== undefined) {
+    config.pass = process.env.NATS_PASS;
+  }
+
+  return config;
 }
 
 /**
  * Merge user config with environment-aware defaults
  */
-function mergeConfig(config?: Partial<NatsConfig>): NatsConfig {
+function mergeConfig(config?: Partial<NatsConfig>): ResolvedNatsConfig {
   const defaultConfig = getDefaultConfig();
   return {
     ...defaultConfig,
@@ -163,17 +158,46 @@ export async function createNatsClient(
   });
 
   try {
+    // Detect WebSocket vs TCP connections (e.g. Render Public Web Service URLs)
+    const normalizedServers = (
+      Array.isArray(mergedConfig.servers)
+        ? mergedConfig.servers
+        : [mergedConfig.servers]
+    ).map((server) => {
+      if (server.startsWith("https://")) {
+        return server.replace(/^https:\/\//, "wss://");
+      }
+      if (server.startsWith("http://")) {
+        return server.replace(/^http:\/\//, "ws://");
+      }
+      return server;
+    });
+
+    const isWebSocket = normalizedServers.some(
+      (s) => s.startsWith("ws://") || s.startsWith("wss://"),
+    );
+
     // Build connection options
     const connectionOptions: Parameters<typeof connect>[0] = {
-      servers: Array.isArray(mergedConfig.servers)
-        ? mergedConfig.servers
-        : [mergedConfig.servers],
-      name: mergedConfig.name,
-      reconnect: mergedConfig.reconnect,
-      maxReconnectAttempts: mergedConfig.maxReconnectAttempts,
-      reconnectTimeWait: mergedConfig.reconnectTimeWait,
-      timeout: mergedConfig.timeout,
+      servers: normalizedServers,
     };
+
+    if (mergedConfig.name !== undefined) {
+      connectionOptions.name = mergedConfig.name;
+    }
+    if (mergedConfig.reconnect !== undefined) {
+      connectionOptions.reconnect = mergedConfig.reconnect;
+    }
+    if (mergedConfig.maxReconnectAttempts !== undefined) {
+      connectionOptions.maxReconnectAttempts =
+        mergedConfig.maxReconnectAttempts;
+    }
+    if (mergedConfig.reconnectTimeWait !== undefined) {
+      connectionOptions.reconnectTimeWait = mergedConfig.reconnectTimeWait;
+    }
+    if (mergedConfig.timeout !== undefined) {
+      connectionOptions.timeout = mergedConfig.timeout;
+    }
 
     // Add authentication if provided
     if (mergedConfig.token) {
@@ -186,10 +210,15 @@ export async function createNatsClient(
       log("info", "Using user/password authentication");
     }
 
-    // Connect to NATS
-    const nc: NatsConnection = await connect(connectionOptions);
+    // Connect to NATS (WebSocket transport for ws/wss/https URLs, native TCP for nats/tls)
+    const nc: NatsConnection = isWebSocket
+      ? ((await connectWs(
+          connectionOptions as unknown as Parameters<typeof connectWs>[0],
+        )) as unknown as NatsConnection)
+      : await connect(connectionOptions);
 
     connectionMetrics.connectedAt = new Date();
+    setConnectionStatus(true);
     log("info", `Connected to ${nc.getServer()}`);
 
     // Get JetStream client and manager
@@ -206,6 +235,7 @@ export async function createNatsClient(
         try {
           await nc.drain();
           natsClient = null;
+          setConnectionStatus(false);
           log("info", "Connection closed gracefully");
         } catch (error) {
           log("error", "Error during connection close", error);
@@ -224,12 +254,16 @@ export async function createNatsClient(
           case "disconnect":
             connectionMetrics.lastDisconnectAt = new Date();
             connectionMetrics.totalDisconnects++;
+            setConnectionStatus(false);
+            recordDisconnect();
             log("warn", `Disconnected from ${status.data}`);
             break;
 
           case "reconnect":
             connectionMetrics.reconnectAttempts++;
             connectionMetrics.lastReconnectAt = new Date();
+            setConnectionStatus(true);
+            recordReconnect();
             log("info", `Reconnected to ${status.data}`, {
               attempts: connectionMetrics.reconnectAttempts,
             });
@@ -290,9 +324,8 @@ export function isNatsConnected(): boolean {
 export function getConnectionStatus(): ConnectionStatus {
   const defaultConfig = getDefaultConfig();
 
-  return {
+  const status: ConnectionStatus = {
     connected: isNatsConnected(),
-    server: natsClient?.connection.getServer(),
     metrics: { ...connectionMetrics },
     config: {
       servers: defaultConfig.servers,
@@ -300,6 +333,13 @@ export function getConnectionStatus(): ConnectionStatus {
       environment: process.env.NODE_ENV || "development",
     },
   };
+
+  const server = natsClient?.connection.getServer();
+  if (server !== undefined) {
+    status.server = server;
+  }
+
+  return status;
 }
 
 /**
@@ -323,7 +363,7 @@ export async function closeNatsConnection(): Promise<void> {
 }
 
 /**
- * Create a scoped NATS client for a specific service
+ * Register a scoped NATS client for a specific service
  * Useful for identifying which service is publishing/consuming
  */
 export async function createServiceClient(
@@ -338,6 +378,21 @@ export async function createServiceClient(
     },
     options,
   );
+}
+
+/**
+ * Test-only escape hatch: clears the module-level singleton and metrics
+ * counters so integration tests can connect fresh against an ephemeral
+ * test server without state leaking between test files. Deliberately not
+ * exported from index.ts.
+ */
+export function _resetNatsClientForTests(): void {
+  natsClient = null;
+  connectionMetrics = {
+    reconnectAttempts: 0,
+    totalDisconnects: 0,
+    errors: [],
+  };
 }
 
 /**

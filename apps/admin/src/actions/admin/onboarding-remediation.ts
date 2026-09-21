@@ -1,61 +1,23 @@
 "use server";
 
-import {
-  callClientApi,
-  requireAdminGranularRole,
-  safeAction,
-  type ActionResponse,
-} from "./shared";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { safeAction } from "@/_core/safe-action";
+import { type ActionResponse } from "./types";
+import { callClientApi } from "@/_core/client-api";
 
-const ONBOARDING_REMEDIATION_ALLOWED_ROLES = ["SUPER_ADMIN"] as const;
+import type {
+  AdminOnboardingReconciliationResult,
+  AdminOnboardingClerkSyncResult,
+  AdminOnboardingIdempotencyReconcileResult,
+} from "./types";
 
 type RemediationActorPayload = {
   userId: string;
   adminRole: string;
 };
 
-export type AdminOnboardingReconciliationResult = {
-  userId: string;
-  clerkId: string;
-  db: {
-    role: string | null;
-    status: string | null;
-    isOnboarded: boolean | null;
-    isProfileComplete: boolean | null;
-  };
-  clerk: {
-    role: string | null;
-    status: string | null;
-    isOnboarded: boolean | null;
-    isProfileComplete: boolean | null;
-  };
-  mismatches: Array<"role" | "status" | "isOnboarded" | "isProfileComplete">;
-  inSync: boolean;
-  pendingOnboardingIdempotencyKeys: number;
-};
-
-export type AdminOnboardingClerkSyncResult = {
-  userId: string;
-  clerkId: string;
-  metadata: {
-    role: string;
-    isOnboarded: true;
-    status?: string;
-    isProfileComplete?: true;
-  };
-  synced: true;
-};
-
-export type AdminOnboardingIdempotencyReconcileResult = {
-  key: string;
-  scope: string;
-  previousStatus: "PENDING";
-  currentStatus: "FAILED";
-  reconciled: true;
-};
-
 function getInternalRemediationSecret(): string {
-  const secret = process.env.INTERNAL_API_SECRET;
+  const secret = adminEnvConfig.INTERNAL_API_SECRET;
   if (!secret) {
     throw new Error("Internal onboarding remediation secret is not configured");
   }
@@ -85,57 +47,55 @@ function requireNonEmptyInput(value: string, field: string): string {
 export async function onboardingReconcile(
   userId: string,
 ): Promise<ActionResponse<AdminOnboardingReconciliationResult>> {
-  return safeAction("onboardingReconcile", async ({ adminUserId }) => {
-    const normalizedUserId = requireNonEmptyInput(userId, "userId");
-    const adminRole = await requireAdminGranularRole(
-      ONBOARDING_REMEDIATION_ALLOWED_ROLES,
-      adminUserId,
-    );
+  return safeAction(
+    "onboardingReconcile",
+    async ({ adminRole, adminUserId }) => {
+      const normalizedUserId = requireNonEmptyInput(userId, "userId");
 
-    const response = await callClientApi<{
-      success: true;
-      data: AdminOnboardingReconciliationResult;
-    }>("/api/internal/onboarding-remediation/reconcile", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": getInternalRemediationSecret(),
-      },
-      body: {
-        userId: normalizedUserId,
-        actor: buildRemediationActorPayload(adminUserId, adminRole),
-      },
-    });
+      const response = await callClientApi<{
+        success: true;
+        data: AdminOnboardingReconciliationResult;
+      }>("/api/internal/onboarding-remediation/reconcile", {
+        method: "POST",
+        headers: {
+          "x-internal-secret": getInternalRemediationSecret(),
+        },
+        body: {
+          userId: normalizedUserId,
+          actor: buildRemediationActorPayload(adminUserId, String(adminRole)),
+        },
+      });
 
-    return response.data;
-  });
+      return response.data;
+    },
+  );
 }
 
 export async function onboardingClerkSync(
   userId: string,
 ): Promise<ActionResponse<AdminOnboardingClerkSyncResult>> {
-  return safeAction("onboardingClerkSync", async ({ adminUserId }) => {
-    const normalizedUserId = requireNonEmptyInput(userId, "userId");
-    const adminRole = await requireAdminGranularRole(
-      ONBOARDING_REMEDIATION_ALLOWED_ROLES,
-      adminUserId,
-    );
+  return safeAction(
+    "onboardingClerkSync",
+    async ({ adminRole, adminUserId }) => {
+      const normalizedUserId = requireNonEmptyInput(userId, "userId");
 
-    const response = await callClientApi<{
-      success: true;
-      data: AdminOnboardingClerkSyncResult;
-    }>("/api/internal/onboarding-remediation/clerk-sync", {
-      method: "POST",
-      headers: {
-        "x-internal-secret": getInternalRemediationSecret(),
-      },
-      body: {
-        userId: normalizedUserId,
-        actor: buildRemediationActorPayload(adminUserId, adminRole),
-      },
-    });
+      const response = await callClientApi<{
+        success: true;
+        data: AdminOnboardingClerkSyncResult;
+      }>("/api/internal/onboarding-remediation/clerk-sync", {
+        method: "POST",
+        headers: {
+          "x-internal-secret": getInternalRemediationSecret(),
+        },
+        body: {
+          userId: normalizedUserId,
+          actor: buildRemediationActorPayload(adminUserId, String(adminRole)),
+        },
+      });
 
-    return response.data;
-  });
+      return response.data;
+    },
+  );
 }
 
 export async function onboardingIdempotencyReconcile(
@@ -143,12 +103,8 @@ export async function onboardingIdempotencyReconcile(
 ): Promise<ActionResponse<AdminOnboardingIdempotencyReconcileResult>> {
   return safeAction(
     "onboardingIdempotencyReconcile",
-    async ({ adminUserId }) => {
+    async ({ adminRole, adminUserId }) => {
       const normalizedKey = requireNonEmptyInput(key, "key");
-      const adminRole = await requireAdminGranularRole(
-        ONBOARDING_REMEDIATION_ALLOWED_ROLES,
-        adminUserId,
-      );
 
       const response = await callClientApi<{
         success: true;
@@ -160,7 +116,7 @@ export async function onboardingIdempotencyReconcile(
         },
         body: {
           key: normalizedKey,
-          actor: buildRemediationActorPayload(adminUserId, adminRole),
+          actor: buildRemediationActorPayload(adminUserId, String(adminRole)),
         },
       });
 

@@ -13,6 +13,7 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { CreateLicenseSchema } from "@/app/lib/validation/documents-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
@@ -23,7 +24,6 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class B - professional license identifiers and authority data cross this boundary.
 // Reviewed: 2026-04-09 by @copilot
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/licenses";
 
 type LicensesAdapterOutcome =
@@ -54,7 +54,7 @@ function createLicensesOutcomeLogger(
     httpStatus: number,
     details: LicensesOutcomeLogFields = {},
   ) => {
-    logger.info("Professional licenses adapter outcome", {
+    getClientLogger().info("Professional licenses adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -84,7 +84,7 @@ export const GET = withAuth(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "get_professional_licenses",
         httpMethod: req.method,
@@ -135,7 +135,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch licenses", result.error, {
+      getClientLogger().error("Failed to fetch licenses", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -183,7 +183,7 @@ export const POST = withAuth(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "create_professional_licenses",
         httpMethod: req.method,
@@ -244,13 +244,6 @@ export const POST = withAuth(
       dbUserId,
       "POST",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       logOutcome("succeeded", HttpStatus.OK, { idempotency: "replay" });
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
@@ -296,7 +289,7 @@ export const POST = withAuth(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to create license", result.error, {
+      getClientLogger().error("Failed to create license", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -353,7 +346,7 @@ export const POST = withAuth(
       data.data.id,
       { authority: licenseData.authority, action: "CREATE" },
     ).catch((err) =>
-      logger.error("Failed to create audit log", err, {
+      getClientLogger().error("Failed to create audit log", err, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -366,10 +359,10 @@ export const POST = withAuth(
     );
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete license idempotency replay",
         normalizeCaughtError(error),
         {

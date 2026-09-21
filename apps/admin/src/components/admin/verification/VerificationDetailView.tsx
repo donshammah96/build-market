@@ -161,11 +161,10 @@ export function VerificationDetailView({
     startTransition(async () => {
       // Determine document type based on entity type
       let documentType:
-        | "professional_document"
-        | "property_attachment"
-        | "certificate" = "professional_document";
+        "professional_document" | "property_document" | "certificate" =
+        "professional_document";
       if (entityType === "property") {
-        documentType = "property_attachment";
+        documentType = "property_document";
       }
 
       const response = await verifyDocument(
@@ -193,59 +192,76 @@ export function VerificationDetailView({
 
   // Extract entity-specific display info
   const getEntityInfo = () => {
-    const entity = details.entity;
-    switch (entityType) {
-      case "professional":
+    switch (details.entityType) {
+      case "professional": {
+        const professional = details.entity;
         return {
-          title: entity.companyName || "Professional Profile",
-          subtitle: entity.profession,
+          title: professional.companyName || "Professional Profile",
+          subtitle: professional.profession,
           fields: [
-            { label: "License Number", value: entity.licenseNumber },
-            { label: "Years Experience", value: entity.yearsExperience },
-            { label: "City", value: entity.city },
-            { label: "County", value: entity.county },
-            { label: "Website", value: entity.website, isLink: true },
+            { label: "License Number", value: professional.licenseNumber },
+            { label: "Years Experience", value: professional.yearsExperience },
+            { label: "City", value: professional.city },
+            { label: "County", value: professional.county },
+            { label: "Website", value: professional.website, isLink: true },
           ],
         };
-      case "store":
+      }
+      case "store": {
+        const store = details.entity;
         return {
-          title: entity.name || "Store",
-          subtitle: entity.storeType,
+          title: store.name || "Store",
+          subtitle: store.storeType,
           fields: [
-            { label: "Store Type", value: entity.storeType },
-            { label: "City", value: entity.city },
-            { label: "County", value: entity.county },
-            { label: "Address", value: entity.address },
-            { label: "Products", value: entity._count?.products },
+            { label: "Store Type", value: store.storeType },
+            { label: "City", value: store.city },
+            { label: "County", value: store.county },
+            { label: "Address", value: store.address },
+            { label: "Products", value: store._count?.products },
           ],
         };
-      case "property":
+      }
+      case "property": {
+        const property = details.entity;
         return {
-          title: entity.title || "Property",
-          subtitle: `${entity.type} - ${entity.category}`,
+          title: property.title || "Property",
+          subtitle: `${property.type} - ${property.category}`,
           fields: [
             {
               label: "Price",
-              value: entity.price
-                ? `KES ${Number(entity.price).toLocaleString()}`
+              value: property.price
+                ? `KES ${Number(property.price).toLocaleString()}`
                 : null,
             },
-            { label: "Location", value: entity.location },
-            { label: "County", value: entity.county },
-            { label: "Bedrooms", value: entity.bedrooms },
-            { label: "Bathrooms", value: entity.bathrooms },
+            { label: "Location", value: property.location },
+            { label: "County", value: property.county },
+            { label: "Bedrooms", value: property.bedrooms },
+            { label: "Bathrooms", value: property.bathrooms },
             {
               label: "Size",
-              value: entity.size ? `${entity.size} sqft` : null,
+              value: property.size ? `${property.size} sqft` : null,
             },
           ],
         };
+      }
       default:
         return { title: "Unknown", subtitle: "", fields: [] };
     }
   };
 
   const entityInfo = getEntityInfo();
+  const owner =
+    details.entityType === "professional"
+      ? details.entity.user
+      : details.entityType === "store"
+        ? (details.entity.owner ?? details.entity.professional?.user)
+        : (details.entity.owner ?? details.entity.agent?.user);
+  const description =
+    details.entityType === "professional"
+      ? (details.entity.bio ?? details.entity.description)
+      : details.entityType === "store"
+        ? details.entity.description
+        : (details.entity.bio ?? details.entity.description);
 
   return (
     <div className="space-y-6">
@@ -342,7 +358,11 @@ export function VerificationDetailView({
                           <dd className="text-sm">
                             {field.isLink ? (
                               <a
-                                href={field.value}
+                                href={
+                                  typeof field.value === "string"
+                                    ? field.value
+                                    : undefined
+                                }
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-500 hover:underline flex items-center gap-1"
@@ -358,7 +378,7 @@ export function VerificationDetailView({
                       ))}
                   </dl>
 
-                  {(details.entity.bio || details.entity.description) && (
+                  {description && (
                     <>
                       <Separator className="my-4" />
                       <div className="space-y-1">
@@ -366,7 +386,7 @@ export function VerificationDetailView({
                           Bio / Description
                         </dt>
                         <dd className="text-sm whitespace-pre-wrap">
-                          {details.entity.bio ?? details.entity.description}
+                          {description}
                         </dd>
                       </div>
                     </>
@@ -536,10 +556,7 @@ export function VerificationDetailView({
                 </div>
                 <div>
                   <p className="font-medium">
-                    {details.entity.user?.firstName ||
-                      details.entity.owner?.firstName}{" "}
-                    {details.entity.user?.lastName ||
-                      details.entity.owner?.lastName}
+                    {owner?.firstName} {owner?.lastName}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Account holder
@@ -550,18 +567,12 @@ export function VerificationDetailView({
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <Mail className="h-4 w-4 text-muted-foreground" />
-                  <span>
-                    {details.entity.user?.email || details.entity.owner?.email}
-                  </span>
+                  <span>{owner?.email}</span>
                 </div>
-                {(details.entity.user?.phone ||
-                  details.entity.owner?.phone) && (
+                {owner?.phone && (
                   <div className="flex items-center gap-2 text-sm">
                     <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>
-                      {details.entity.user?.phone ||
-                        details.entity.owner?.phone}
-                    </span>
+                    <span>{owner.phone}</span>
                   </div>
                 )}
               </div>

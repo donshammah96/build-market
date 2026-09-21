@@ -1,0 +1,35 @@
+{
+  "name": "@build/security-clerk",
+  "version": "0.0.1",
+  "description": "Shared Clerk satellite domain authentication mechanics, open-redirect security, and session freshness helpers for apps/client, apps/admin, and apps/verification-ops.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
+    "check-types": "tsc --noEmit",
+    "build": "tsc",
+    "prepack": "pnpm run build",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

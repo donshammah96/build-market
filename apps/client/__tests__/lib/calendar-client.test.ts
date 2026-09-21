@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { calendarClient } from "@/lib/calendar-client";
+import { calendarClient } from "@/lib/facades/calendar-client";
 
 function expectSuccess<T>(result: {
   success: boolean;

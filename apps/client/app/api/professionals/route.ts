@@ -17,8 +17,6 @@ import {
 } from "@/app/lib/validation/professionals-validation";
 import { PROFESSIONAL_CONFIG } from "@/app/lib/config/professional.config";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/professionals
  * Public endpoint — list verified professionals with filtering and sorting.
@@ -81,7 +79,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   if (!result.success || !result.data) {
-    logger.error("Failed to fetch professionals", result.error);
+    getClientLogger().error("Failed to fetch professionals", result.error);
     return apiSuccess(
       { professionals: [], total: 0, hasMore: false },
       HttpStatus.OK,
@@ -89,7 +87,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (!result.data.ok) {
-    logger.error(
+    getClientLogger().error(
       "Professionals domain returned failure",
       new Error(result.data.message ?? "Professionals domain failure"),
       { filters, error: result.data.error },

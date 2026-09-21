@@ -9,6 +9,7 @@ import {
   ApproveMilestoneSchema,
   FundEscrowSchema,
 } from "@/app/lib/validation/projects-validation";
+import type { DomainError, Result } from "@/app/lib/errors/result";
 
 export type ApproveMilestoneInput = z.infer<typeof ApproveMilestoneSchema>;
 export type FundEscrowInput = z.infer<typeof FundEscrowSchema>;
@@ -22,9 +23,8 @@ export type DomainErrorCode =
   | "professional_missing"
   | "limit_exceeded";
 
-export type DomainResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: DomainErrorCode; message?: string };
+export type ProjectDomainError = DomainError<DomainErrorCode>;
+export type ProjectResult<T> = Result<T, ProjectDomainError>;
 
 export type ProjectActorRole = "PROFESSIONAL" | "CLIENT" | "ADMIN";
 

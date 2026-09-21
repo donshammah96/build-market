@@ -5,7 +5,8 @@ import ProfessionalCard from "./ProfessionalCard";
 import { ProfessionalCardData } from "../../types/professional";
 import Link from "next/link";
 import { Button } from "../ui/button";
-import { ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight, ArrowLeft, ShieldCheck } from "lucide-react";
+import { ROUTES } from "@/lib/routes";
 import {
   Carousel,
   CarouselContent,
@@ -167,24 +168,27 @@ export const Professionals = memo(function Professionals({
 
   return (
     <section
-      className="py-20 bg-zinc-50 border-y border-zinc-200"
+      className="py-20 bg-background"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="professionals-heading"
     >
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-20">
         {/* Header with Navigation Controls */}
         <div className="flex flex-col sm:flex-row justify-between items-end mb-10 gap-6">
           <div
             className={cn(isInView && shouldAnimate && "animate-slide-in-left")}
           >
-            <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-emerald-600 uppercase bg-emerald-50 rounded-full">
+            <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-emerald-600 dark:text-emerald-400 uppercase bg-emerald-500/10 border border-emerald-500/20 rounded-full">
               Expert Talent
             </div>
             <h2
               id="professionals-heading"
-              className="text-3xl sm:text-4xl font-bold text-zinc-900 tracking-tight"
+              className="font-display text-3xl sm:text-4xl font-bold text-foreground tracking-tight"
             >
-              Featured <span className="text-emerald-600">Professionals</span>
+              Featured{" "}
+              <span className="text-emerald-600 dark:text-emerald-400">
+                Professionals
+              </span>
             </h2>
           </div>
 
@@ -193,7 +197,7 @@ export const Professionals = memo(function Professionals({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-zinc-300 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+              className="rounded-full border-border bg-card text-foreground hover:border-primary hover:text-primary hover:bg-accent transition-colors shadow-2xs"
               onClick={() => api?.scrollPrev()}
               aria-label="Previous professional"
             >
@@ -202,7 +206,7 @@ export const Professionals = memo(function Professionals({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-zinc-300 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+              className="rounded-full border-border bg-card text-foreground hover:border-primary hover:text-primary hover:bg-accent transition-colors shadow-2xs"
               onClick={() => api?.scrollNext()}
               aria-label="Next professional"
             >
@@ -239,10 +243,41 @@ export const Professionals = memo(function Professionals({
           </CarouselContent>
         </Carousel>
 
-        <div className="mt-8 text-center sm:hidden">
-          <Button variant="outline" className="w-full" asChild>
-            <Link href="/professionals">View All Professionals</Link>
-          </Button>
+        {/* Pro Recruitment Callout Banner */}
+        <div className="mt-12 p-6 sm:p-8 rounded-2xl bg-zinc-950 dark:bg-card text-white dark:text-foreground border border-zinc-800 dark:border-border shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+          <div className="space-y-2 text-center md:text-left max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/60 dark:bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              For Licensed Practitioners
+            </div>
+            <h3 className="font-display text-xl sm:text-2xl font-bold text-white dark:text-foreground tracking-tight">
+              Are you an Architect, Engineer, or Contractor in Kenya?
+            </h3>
+            <p className="text-xs sm:text-sm text-zinc-400 dark:text-muted-foreground leading-relaxed">
+              Showcase your project portfolio to vetted clients, secure your
+              milestone earnings with clear stage approvals, and win high-budget
+              contracts.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full h-11 px-6 text-sm shadow-md shadow-primary/20 w-full sm:w-auto transition-all"
+              asChild
+            >
+              <Link href={ROUTES.professional}>
+                Explore Pro Network
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              className="border-zinc-700 dark:border-border hover:border-zinc-500 dark:hover:border-border/80 text-zinc-300 dark:text-foreground hover:text-white dark:hover:text-foreground rounded-full h-11 px-6 text-sm bg-zinc-900/50 dark:bg-muted/40 backdrop-blur-xs w-full sm:w-auto transition-all"
+              asChild
+            >
+              <Link href={ROUTES.findProfessional}>Browse Directory</Link>
+            </Button>
+          </div>
         </div>
       </div>
     </section>

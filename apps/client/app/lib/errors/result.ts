@@ -6,8 +6,7 @@ export type DomainError<TCode extends string = string> = {
 };
 
 export type Result<T, E extends object = DomainError> =
-  | { ok: true; data: T }
-  | ({ ok: false } & E);
+  { ok: true; data: T } | ({ ok: false } & E);
 
 export function ok<T>(data: T): Result<T, never> {
   return { ok: true, data };

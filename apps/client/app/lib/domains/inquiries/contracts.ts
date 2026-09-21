@@ -20,11 +20,7 @@ export type InquiryActor = {
 };
 
 export type InquiryDomainErrorCode =
-  | "not_found"
-  | "forbidden"
-  | "conflict"
-  | "invalid_input"
-  | "internal";
+  "not_found" | "forbidden" | "conflict" | "invalid_input" | "internal";
 
 export type InquiryDomainError = DomainError<InquiryDomainErrorCode>;
 export type InquiryResult<T> = Result<T, InquiryDomainError>;

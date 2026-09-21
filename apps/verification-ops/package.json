@@ -1,0 +1,56 @@
+{
+  "name": "verification-ops",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": "24.x",
+    "pnpm": ">=11.1.2 <12.0.0"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3501",
+    "build": "next build",
+    "start": "next start --port 3501",
+    "test": "vitest run",
+    "lint": "eslint . --cache",
+    "check-types": "tsc --noEmit",
+    "check-env-contract": "node scripts/check-env-contract.mjs",
+    "check-security-drift": "node scripts/check-security-drift.mjs",
+    "report-security-drift": "node scripts/report-security-drift.mjs",
+    "report-security-drift:strict": "node scripts/report-security-drift.mjs --strict",
+    "check-all": "pnpm check-types && pnpm check-env-contract && pnpm check-security-drift && pnpm report-security-drift:strict"
+  },
+  "dependencies": {
+    "@build/db": "workspace:*",
+    "@build/enums": "workspace:*",
+    "@build/types": "workspace:*",
+    "@build/ui": "workspace:*",
+    "@build/verification-domain": "workspace:*",
+    "@build/env-validation": "workspace:*",
+    "@build/security-clerk": "workspace:*",
+    "@build/clerk-test-harness": "workspace:*",
+    "@build/telemetry": "workspace:*",
+    "@clerk/nextjs": "catalog:",
+    "lucide-react": "catalog:",
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:",
+    "tailwind-merge": "catalog:",
+    "@vercel/otel": "catalog:"
+  },
+  "devDependencies": {
+    "@build/eslint-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
+    "@vitejs/plugin-react": "catalog:",
+    "eslint": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:",
+    "tailwindcss": "catalog:",
+    "vitest": "catalog:",
+    "prettier": "catalog:"
+  }
+}

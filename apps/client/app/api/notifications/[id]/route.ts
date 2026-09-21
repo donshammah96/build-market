@@ -19,7 +19,6 @@ import {
 import { notificationsService } from "@/app/lib/domains/notifications";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/notifications/[id]";
 
 type NotificationParams = { id: string };
@@ -49,7 +48,7 @@ function createNotificationItemOutcomeLogger(
     httpStatus: number,
     details: NotificationItemOutcomeLogFields = {},
   ) => {
-    logger.info("Notification item adapter outcome", {
+    getClientLogger().info("Notification item adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -158,7 +157,7 @@ export const GET = withAuth<NotificationParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch notification", result.error, {
+      getClientLogger().error("Failed to fetch notification", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -281,7 +280,7 @@ export const PATCH = withAuth<NotificationParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to update notification", result.error, {
+      getClientLogger().error("Failed to update notification", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -374,7 +373,7 @@ export const DELETE = withAuth<NotificationParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to delete notification", result.error, {
+      getClientLogger().error("Failed to delete notification", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,

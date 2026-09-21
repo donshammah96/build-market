@@ -136,6 +136,17 @@ export const HIGH_VALUE_ROUTE_GUARD_RULES: HighValueRouteGuardRule[] = [
     ],
   },
   {
+    file: "app/api/v1/subscriptions/checkout/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 180"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "subscription-mpesa-checkout",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
     file: "app/api/professional-portal/finance/withdraw/route.ts",
     exportName: "POST",
     requiredAuthOptions: ["recentAuth"],
@@ -409,7 +420,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerifica
       exportName: "POST",
       orderedSnippets: [
         "documentsService.createDocument(",
-        "IdempotencyService.complete(",
+        "safeIdempotencyComplete(",
       ],
     },
     {
@@ -417,7 +428,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerifica
       exportName: "PATCH",
       orderedSnippets: [
         "documentsService.updateDocument(",
-        "IdempotencyService.complete(",
+        "safeIdempotencyComplete(",
       ],
     },
     {
@@ -425,7 +436,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerifica
       exportName: "POST",
       orderedSnippets: [
         "certificatesService.createCertificate(",
-        "IdempotencyService.complete(",
+        "safeIdempotencyComplete(",
       ],
     },
     {
@@ -433,7 +444,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerifica
       exportName: "PATCH",
       orderedSnippets: [
         "certificatesService.updateCertificate(",
-        "IdempotencyService.complete(",
+        "safeIdempotencyComplete(",
       ],
     },
     {
@@ -441,7 +452,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerifica
       exportName: "POST",
       orderedSnippets: [
         "licensesService.createLicense(",
-        "IdempotencyService.complete(",
+        "safeIdempotencyComplete(",
       ],
     },
     {
@@ -449,7 +460,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerifica
       exportName: "PATCH",
       orderedSnippets: [
         "licensesService.updateLicense(",
-        "IdempotencyService.complete(",
+        "safeIdempotencyComplete(",
       ],
     },
   ];

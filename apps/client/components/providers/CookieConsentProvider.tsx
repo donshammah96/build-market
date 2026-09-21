@@ -7,7 +7,8 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { consentClient } from "@/lib/consent-client";
+import { useAuth } from "@clerk/nextjs";
+import { consentClient } from "@/lib/facades/consent-client";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "cookie-consent-preferences",
@@ -31,6 +32,8 @@ export interface CookieConsentState {
   hasConsented: boolean;
   /** Whether consent is being synced to the backend */
   isSyncing: boolean;
+  /** Whether the preferences modal is currently forced open */
+  isPreferencesOpen: boolean;
   /** Update a single consent category */
   updateConsent: (
     category: keyof Omit<CookieConsent, "necessary">,
@@ -42,6 +45,10 @@ export interface CookieConsentState {
   rejectAll: () => void;
   /** Save current preferences (triggers backend sync + dismisses banner) */
   savePreferences: (preferences: Omit<CookieConsent, "necessary">) => void;
+  /** Re-open preferences panel so the user can adjust consent in place */
+  openPreferences: () => void;
+  /** Close preferences panel without forcing an update */
+  closePreferences: () => void;
 }
 
 // =============================================================================
@@ -117,7 +124,7 @@ function toApiPayload(consent: CookieConsent) {
 
 export function CookieConsentProvider({
   children,
-  isSignedIn = false,
+  isSignedIn: propIsSignedIn,
 }: {
   children: React.ReactNode;
   isSignedIn?: boolean;
@@ -125,6 +132,9 @@ export function CookieConsentProvider({
   const [consent, setConsent] = useState<CookieConsent>(DEFAULT_CONSENT);
   const [hasConsented, setHasConsented] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const { isSignedIn: clerkIsSignedIn } = useAuth();
+  const isSignedIn = propIsSignedIn ?? Boolean(clerkIsSignedIn);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -133,6 +143,14 @@ export function CookieConsentProvider({
       setConsent(stored);
       setHasConsented(true);
     }
+  }, []);
+
+  const openPreferences = useCallback(() => {
+    setIsPreferencesOpen(true);
+  }, []);
+
+  const closePreferences = useCallback(() => {
+    setIsPreferencesOpen(false);
   }, []);
 
   // Sync to backend for authenticated users
@@ -160,6 +178,7 @@ export function CookieConsentProvider({
     (newConsent: CookieConsent) => {
       setConsent(newConsent);
       setHasConsented(true);
+      setIsPreferencesOpen(false);
       writeStoredConsent(newConsent);
       syncToBackend(newConsent);
     },
@@ -203,19 +222,25 @@ export function CookieConsentProvider({
       consent,
       hasConsented,
       isSyncing,
+      isPreferencesOpen,
       updateConsent,
       acceptAll,
       rejectAll,
       savePreferences,
+      openPreferences,
+      closePreferences,
     }),
     [
       consent,
       hasConsented,
       isSyncing,
+      isPreferencesOpen,
       updateConsent,
       acceptAll,
       rejectAll,
       savePreferences,
+      openPreferences,
+      closePreferences,
     ],
   );
 

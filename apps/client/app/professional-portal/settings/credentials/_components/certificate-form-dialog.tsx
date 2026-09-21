@@ -74,9 +74,7 @@ export function CertificateFormDialog({
   const [assetId, setAssetId] = useState<string | null>(
     initialData?.asset?.id ?? null,
   );
-  const [previewUrl, setPreviewUrl] = useState<string | null>(
-    initialData?.asset?.cdnUrl ?? null,
-  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),

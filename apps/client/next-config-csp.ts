@@ -2,6 +2,17 @@
 // The module graph (app/lib/infrastructure/env.ts) is not initialized here.
 // Direct env access via next-config-env.ts is intentional per ADR-004.
 // See also: ADR-008 §4 (Security Header Baseline).
+//
+// IMPORTANT SCOPE NOTE: `headers()` in next.config.ts is evaluated once at
+// build/deploy time, not per-request, so there is no way to mint a fresh
+// nonce here. This file therefore CANNOT implement a strict nonce-based CSP
+// no matter how it's written — that's what csp-nonce.ts + middleware is for.
+// This is a static, host-allowlist-based fallback baseline that only matters
+// for requests the middleware's matcher doesn't cover. Treat any CSP
+// violation reports attributable to this policy (vs. the middleware policy)
+// as a signal that the middleware matcher has a gap, not as "this file needs
+// to be made stricter" — it structurally can't get much stricter without a
+// per-request nonce.
 
 export type CspSources = {
   appOrigin: string;
@@ -11,6 +22,19 @@ export type CspSources = {
   /** Derived from NEXT_PUBLIC_POSTHOG_HOST. Null when not configured. */
   analyticsOrigin: string | null;
   isDev: boolean;
+  /**
+   * Explicit Clerk satellite FAPI origins, e.g. "https://clerk.admin.buildmarket.app".
+   * Replaces the former "https://*.buildmarket.app" wildcard — see csp-nonce.ts for
+   * the full rationale. Defaults to [] (fails closed, not to a wildcard).
+   */
+  clerkSatelliteOrigins?: string[];
+  /**
+   * Origins Clerk's bot-protection challenge (Cloudflare Turnstile) needs to frame.
+   * Only pass if Clerk Attack Protection is enabled. Defaults to null.
+   */
+  clerkChallengeOrigins?: string[] | null;
+  /** CSP violation report endpoint (legacy `report-uri` directive). Defaults to null. */
+  reportUri?: string | null;
 };
 
 /**
@@ -19,9 +43,13 @@ export type CspSources = {
  * Design notes:
  * - Called inside `headers()` so values reflect each deployment's env, not the build.
  * - All third-party entries carry an inline justification (ADR-008 §4 governance rule).
- * - `unsafe-inline` in style-src is required by Next.js runtime style injection and
- *   several UI libraries. Removing it without a nonce/hash strategy breaks the UI.
- * - `unsafe-eval` is deliberately absent — no dynamic code execution is permitted.
+ * - `unsafe-inline` in style-src/style-src-attr is required: no per-request nonce is
+ *   available at this evaluation point (see scope note above), and CSP nonces don't
+ *   apply to inline style="" attributes regardless (spec limitation, not a config gap).
+ * - `unsafe-eval` is dev-only. Despite the historical comment here attributing this to
+ *   Clerk's production bundle, Clerk's own CSP docs say 'unsafe-eval' is a Next.js
+ *   *development-server* requirement, not a production one:
+ *   https://clerk.com/docs/security/clerk-csp
  */
 export function buildCspValue(sources: CspSources): string {
   const {
@@ -30,88 +58,125 @@ export function buildCspValue(sources: CspSources): string {
     clerkFrontendApiOrigin,
     analyticsOrigin,
     isDev,
+    clerkSatelliteOrigins = [],
+    clerkChallengeOrigins = null,
+    reportUri = null,
   } = sources;
+
+  const isVercelPreview =
+    process.env.VERCEL_ENV === "preview" ||
+    process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" ||
+    process.env.ENABLE_CSP_UNSAFE_EVAL === "true";
+
+  const allowUnsafeEval = isDev || isVercelPreview;
+
+  const dedup = (arr: string[]) => [...new Set(arr)];
 
   const selfAndFirstParty = ["'self'", appOrigin, apiOrigin];
 
   const connectOrigins = [
     ...selfAndFirstParty,
-    // Third-party (identity): Clerk frontend API for auth/session operations.
+    "https://www.buildmarket.app",
+    "https://staging.buildmarket.app",
     clerkFrontendApiOrigin,
-    // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
+    "https://clerk.staging.buildmarket.app",
+    "https://api.clerk.com",
+    ...clerkSatelliteOrigins,
     "https://*.clerk.accounts.dev",
-    // Third-party (identity): Clerk telemetry.
     "https://clerk-telemetry.com",
-    // Third-party (analytics): PostHog ingestion/query endpoint.
+    // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile)
+    "https://challenges.cloudflare.com",
     analyticsOrigin,
-    // Dev-only HMR websocket endpoint; no wildcard host.
+    "https://us.i.posthog.com",
+    "https://eu.i.posthog.com",
+    "https://vercel.live",
+    "https://*.vercel.live",
+    "wss://vercel.live",
+    "wss://*.vercel.live",
     isDev ? appOrigin.replace(/^http/, "ws") : null,
   ].filter((v): v is string => Boolean(v));
 
   const scriptOrigins = [
     ...selfAndFirstParty,
-    // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
-    // so the origin tracks env config rather than a hardcoded hostname.
+    "https://buildmarket.app",
+    "https://www.buildmarket.app",
+    "https://staging.buildmarket.app",
     clerkFrontendApiOrigin,
-    // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
+    "https://clerk.staging.buildmarket.app",
+    ...clerkSatelliteOrigins,
     "https://*.clerk.accounts.dev",
-    // Third-party (CDN): jsdelivr used by some Clerk-adjacent widgets.
+    // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile script)
+    "https://challenges.cloudflare.com",
     "https://cdn.jsdelivr.net",
-    // Third-party (identity avatars): Clerk image CDN — scripts loaded by Clerk widgets.
     "https://img.clerk.com",
-    // Third-party (analytics): PostHog web SDK assets.
     analyticsOrigin,
+    "https://static.cloudflareinsights.com",
+    "https://vercel.live",
+    "https://*.vercel.live",
+  ].filter((v): v is string => Boolean(v));
+
+  const scriptSrcTokens = [
+    allowUnsafeEval ? "'unsafe-eval'" : null,
+    ...dedup(scriptOrigins),
   ].filter((v): v is string => Boolean(v));
 
   const styleOrigins = [
     "'self'",
-    // Next.js and several UI libraries inject inline style attributes at runtime.
-    // Until a nonce/hash strategy is in place this directive must remain.
     "'unsafe-inline'",
-    // Third-party (typography): Google Fonts stylesheet host.
     "https://fonts.googleapis.com",
+    "https://vercel.live",
+    "https://*.vercel.live",
   ];
 
   const imgOrigins = [
     "'self'",
     "data:",
     "blob:",
-    // Third-party (identity avatars): Clerk image CDN.
     "https://img.clerk.com",
-    // Third-party (media hosting): Cloudinary.
     "https://res.cloudinary.com",
-    // Third-party (image catalog): Unsplash and related hostnames.
     "https://images.unsplash.com",
     "https://unsplash.com",
-    // Third-party (placeholder avatars): Pravatar — dev/demo only.
     "https://i.pravatar.cc",
   ];
 
   const fontOrigins = [
     "'self'",
     "data:",
-    // Third-party (CDN): jsdelivr for OpenDyslexic font
     "https://cdn.jsdelivr.net",
-    // Third-party (typography): Google Fonts file host.
     "https://fonts.gstatic.com",
   ];
 
-  const dedup = (arr: string[]) => [...new Set(arr)];
+  const frameOrigins = [
+    "'self'",
+    "https://staging.buildmarket.app",
+    "https://clerk.staging.buildmarket.app",
+    "https://vercel.live",
+    "https://*.vercel.live",
+    ...(clerkChallengeOrigins ?? [
+      "https://challenges.cloudflare.com",
+      "https://*.protect.clerk.com",
+    ]),
+  ];
 
-  return [
+  const directives = [
     "default-src 'self'",
-    `script-src ${dedup(scriptOrigins).join(" ")}`,
-    // FALLBACK: Middleware injects a per-request nonce-based CSP for browser routes.
-    // Keep unsafe-inline here until production confirms zero CSP violations.
-    `script-src-elem 'unsafe-inline' ${dedup(scriptOrigins).join(" ")}`,
+    `script-src ${scriptSrcTokens.join(" ")}`,
+    `script-src-elem ${dedup(["'unsafe-inline'", ...scriptOrigins]).join(" ")}`,
     `style-src ${dedup(styleOrigins).join(" ")}`,
+    `style-src-elem ${dedup(styleOrigins).join(" ")}`,
+    "style-src-attr 'unsafe-inline'",
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,
     `connect-src ${dedup(connectOrigins).join(" ")}`,
+    `frame-src ${dedup(frameOrigins).join(" ")}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'self'",
-  ].join("; ");
+    isDev ? null : "upgrade-insecure-requests",
+    reportUri ? `report-uri ${reportUri}` : null,
+  ].filter((v): v is string => Boolean(v));
+
+  return directives.join("; ");
 }

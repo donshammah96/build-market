@@ -1,4 +1,4 @@
-import { IdempotencyService } from "../../lib/services/idempotency.service";
+import { IdempotencyService } from "../../lib/infrastructure/idempotency.service";
 
 type RunWithIdempotencyParams<T> = {
   adminUserId: string;

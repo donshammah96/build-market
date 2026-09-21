@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { VerificationQueue } from "@/components/admin/verification/VerificationQueue";
-import { UserCheck, Store, Building2, Layers } from "lucide-react";
+import { UserCheck, Store, Building2, Layers, ShieldAlert } from "lucide-react";
 import type {
   VerificationQueueItem,
   VerificationFilterInput,
@@ -126,6 +127,13 @@ export function VerificationQueueWrapper({
             </button>
           );
         })}
+        <Link
+          href="/verifications/regulator"
+          className="rounded-md border border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-200 px-3 py-1.5 text-xs font-medium hover:bg-amber-500/20 transition-colors flex items-center gap-1.5"
+        >
+          <ShieldAlert className="h-3.5 w-3.5" />
+          Regulator Queue
+        </Link>
         {!canVerify && (
           <Badge
             variant="outline"

@@ -45,7 +45,10 @@ import { Textarea } from "@/components/ui/text-area";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { financeClient, type FinanceTransaction } from "@/lib/finance-client";
+import {
+  financeClient,
+  type FinanceTransaction,
+} from "@/lib/facades/finance-client";
 
 // Schema for updating a transaction
 const updateTransactionSchema = z.object({

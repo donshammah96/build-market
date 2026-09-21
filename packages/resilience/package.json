@@ -2,28 +2,46 @@
   "name": "@build/resilience",
   "version": "1.0.0",
   "description": "Resilience utilities for distributed systems - timeouts, retries, circuit breakers, caching, and observability",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
     "dev": "tsc --watch",
     "lint": "echo \"No lint configured\" && exit 0",
     "check-types": "tsc --noEmit",
-    "test": "echo \"No tests configured\" && exit 0",
-    "clean": "rm -rf dist"
+    "build": "tsc",
+    "prepack": "pnpm run build",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "lru-cache": "^11.2.2",
-    "@build/redis": "workspace:*"
+    "@build/redis": "workspace:*",
+    "lru-cache": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@build/typescript-config": "workspace:*",
-    "typescript": "^5.9.3"
+    "@opentelemetry/api": "catalog:",
+    "@types/node": "catalog:",
+    "pino-pretty": "^13.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

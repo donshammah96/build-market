@@ -31,10 +31,7 @@ export type ProfileCompleteRequestMetadata = {
 export type ProfileCompleteTarget = "client" | "professional";
 
 export type ProfileCompleteErrorCode =
-  | "not_found"
-  | "forbidden"
-  | "unsupported_role"
-  | "internal";
+  "not_found" | "forbidden" | "unsupported_role" | "internal";
 
 export type ProfileCompleteDomainResult<T> = Result<
   T,

@@ -101,9 +101,9 @@ export type PropertyCoordinates =
  * route adapter can set X-Property-Version without a second DB round-trip.
  */
 export type OptimisticLockResult<T> =
-  | { success: true; data: T; newVersion: number }
-  | { success: false; error: "not_found" | "forbidden" | "internal" }
-  | { success: false; error: "conflict"; currentVersion: number };
+  | { ok: true; data: T; newVersion: number }
+  | { ok: false; error: "not_found" | "forbidden" | "internal" }
+  | { ok: false; error: "conflict"; currentVersion: number };
 
 export type PropertyAssetDto = {
   id: string;

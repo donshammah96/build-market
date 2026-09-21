@@ -4,7 +4,7 @@ import { useProfileStatus } from "@/hooks/useProfileStatus";
 import ProfessionalForm from "@/components/forms/ProfessionalForm";
 import { ProfessionalOnboardingData } from "@build/types";
 import { Loader2 } from "lucide-react";
-import { profileClient } from "@/lib/profile-client";
+import { profileClient } from "@/lib/facades/profile-client";
 import { useRouter } from "next/navigation";
 import { ProfessionalProfileData } from "@/hooks/useProfileStatus";
 import type { ProfessionalWizardData } from "@/components/forms/professional-wizard";

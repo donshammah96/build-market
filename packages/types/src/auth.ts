@@ -1,6 +1,6 @@
 import z from "zod";
-import { professionalLicenseSchema } from "./license";
-import { professionalDocumentSchema } from "./documents";
+import { professionalLicenseSchema } from "./license.js";
+import { professionalDocumentSchema } from "./documents.js";
 import {
   COUNTIES,
   PROFESSIONS,
@@ -462,6 +462,12 @@ export const ProfessionalOnboardingSchema = z.object({
   // Upload status flags
   documentsPending: z.boolean().optional(),
   licensePending: z.boolean().optional(),
+  licensePendingReason: z
+    .string()
+    .trim()
+    .min(10, "Please explain why license details are pending")
+    .max(500, "License pending reason must be 500 characters or less")
+    .optional(),
 
   // Store data for suppliers
   stores: z.array(StoreOnboardingPayloadSchema).optional(),

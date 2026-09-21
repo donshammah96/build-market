@@ -14,7 +14,7 @@ import {
 import {
   ASSIGNABLE_USER_ROLES,
   getAssignableUserRolesPromptText,
-} from "@/lib/users/user-roles";
+} from "@/lib/domains/users/user-roles";
 import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
 
 type UserActionControlsProps = {

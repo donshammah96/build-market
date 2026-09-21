@@ -1,29 +1,32 @@
 {
   "name": "@build/types",
   "version": "0.0.1",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts": {
-    "lint": "echo \"No lint configured\" && exit 0",
-    "check-types": "tsc --noEmit",
-    "build": "tsc",
-    "test": "echo \"No tests configured\" && exit 0",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@build/enums": "workspace:*",
-    "zod": "^4.1.9"
-  },
-  "devDependencies": {
-    "@build/typescript-config": "workspace:*",
-    "@types/node": "^24.8.1"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "default": "./dist/index.js",
-      "require": "./dist/index.js"
+      "default": "./dist/index.js"
     }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
+    "lint": "echo \"No lint configured\" && exit 0",
+    "check-types": "tsc --noEmit",
+    "build": "tsc",
+    "prepack": "pnpm run build",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "dependencies": {
+    "@build/enums": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

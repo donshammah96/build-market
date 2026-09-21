@@ -1,12 +1,14 @@
 "use client";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
-import { MobileNav } from "./MobileNav";
 import Image from "next/image";
 import { SignInButton, useUser } from "@clerk/nextjs";
+import { MobileNav } from "./MobileNav";
 import ProfileButton from "../shared/ProfileButton";
+import { ROUTES } from "@/lib/routes";
+import { publicNavItems } from "@/app/lib/config/nav-config";
+
 export const Header = () => {
-  const { isSignedIn } = useUser();
+  const { isSignedIn, isLoaded } = useUser();
 
   const navLinkClass =
     "min-h-11 px-2 py-2 text-md font-medium text-foreground leading-loose rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2";
@@ -33,17 +35,23 @@ export const Header = () => {
               role="navigation"
               aria-label="Main navigation"
             >
-              <Link href={ROUTES.ideaBooks} className={navLinkClass}>
-                Idea Books
-              </Link>
-              <Link href={ROUTES.findProfessional} className={navLinkClass}>
-                Find Professionals
-              </Link>
-              <Link href={ROUTES.speakWithAdvisor} className={navLinkClass}>
-                Guidance
-              </Link>
+              {publicNavItems.map((item) => (
+                <Link key={item.key} href={item.href} className={navLinkClass}>
+                  {item.label}
+                </Link>
+              ))}
               <div className="flex items-center gap-6">
-                {!isSignedIn ? (
+                {/*
+                  Gate on isLoaded to avoid a flash of "Sign In" for
+                  already-authenticated users before Clerk resolves session
+                  state on first paint.
+                */}
+                {!isLoaded ? (
+                  <div
+                    className="h-9 w-24 rounded-md bg-muted animate-pulse"
+                    aria-hidden="true"
+                  />
+                ) : !isSignedIn ? (
                   <SignInButton forceRedirectUrl={ROUTES.authCallback} />
                 ) : (
                   <ProfileButton />

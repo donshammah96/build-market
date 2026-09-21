@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   ThreadQuerySchema,
   CreateThreadSchema,
@@ -21,8 +22,6 @@ import {
   messagingService,
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
 
 function toMessagingActor(context: {
   clerkId: string;
@@ -61,7 +60,7 @@ export const GET = withAuth(
     const rawParams = Object.fromEntries(searchParams.entries());
     const queryValidation = ThreadQuerySchema.safeParse(rawParams);
     if (!queryValidation.success) {
-      logger.warn("Thread query validation failed", {
+      getClientLogger().warn("Thread query validation failed", {
         correlationId,
         errors: queryValidation.error.issues,
       });
@@ -81,7 +80,7 @@ export const GET = withAuth(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch threads", result.error, {
+      getClientLogger().error("Failed to fetch threads", result.error, {
         correlationId,
         actorRole: actor.role,
       });
@@ -122,7 +121,7 @@ export const POST = withAuth(
 
     const validation = CreateThreadSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Create thread validation failed", {
+      getClientLogger().warn("Create thread validation failed", {
         correlationId,
         errors: validation.error.issues,
       });
@@ -148,11 +147,6 @@ export const POST = withAuth(
       actor.userId,
       "POST",
     );
-    if (!idempotencyCheck)
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     if (idempotencyCheck.status === "completed")
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     if (idempotencyCheck.status === "pending")
@@ -177,7 +171,7 @@ export const POST = withAuth(
 
     if (!result.success) {
       await IdempotencyService.fail(idempotencyKey).catch(() => {});
-      logger.error("Failed to create thread", result.error, {
+      getClientLogger().error("Failed to create thread", result.error, {
         correlationId,
         actorRole: actor.role,
       });
@@ -194,10 +188,7 @@ export const POST = withAuth(
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
-      await IdempotencyService.complete(
-        idempotencyKey,
-        serviceResult.data,
-      ).catch(() => {});
+      await safeIdempotencyComplete(idempotencyKey, serviceResult.data);
       return apiSuccess(serviceResult.data, HttpStatus.CREATED);
     }
   },

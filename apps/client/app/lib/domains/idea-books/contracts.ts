@@ -27,10 +27,7 @@ export type IdeaBooksActor = {
 };
 
 export type IdeaBooksDomainErrorCode =
-  | "not_found"
-  | "forbidden"
-  | "asset_not_found"
-  | "invalid_input";
+  "not_found" | "forbidden" | "asset_not_found" | "invalid_input";
 
 export type IdeaBookAttachmentAssetDto = {
   id: string;

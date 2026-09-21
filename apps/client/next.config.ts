@@ -47,6 +47,11 @@ const nextConfig: NextConfig = {
     "@build/messaging-server",
     "@build/mail-server",
     "@build/queue-server",
+    "@build/env-validation",
+    "@build/security-clerk",
+    "@build/media",
+    "@build/telemetry",
+    "@build/lead-qualification",
   ],
 
   // Turbopack configuration (used in dev mode with --turbopack flag)
@@ -56,8 +61,10 @@ const nextConfig: NextConfig = {
     // rules: { "*.svg": { loaders: ["@svgr/webpack"], as: "*.js" } }
   },
 
-  // Optimize images for faster loading
+  // Optimize images for faster loading (unoptimized for Cloudflare Workers V8 isolate)
   images: {
+    unoptimized: true,
+    qualities: [75, 85],
     remotePatterns: [
       { protocol: "https", hostname: "img.clerk.com" },
       { protocol: "https", hostname: "res.cloudinary.com" },

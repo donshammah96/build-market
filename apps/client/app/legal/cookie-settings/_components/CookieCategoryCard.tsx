@@ -23,7 +23,7 @@ export function CookieCategoryCard({
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08 }}
-      className={`bg-white/[0.03] backdrop-blur-sm border ${category.borderColor} rounded-2xl overflow-hidden`}
+      className={`bg-white/3 backdrop-blur-sm border ${category.borderColor} rounded-2xl overflow-hidden`}
     >
       <div className="p-5 md:p-6">
         <div className="flex items-start justify-between gap-4">
@@ -41,7 +41,7 @@ export function CookieCategoryCard({
               {category.description}
             </p>
           </div>
-          <div className="flex-shrink-0 pt-1">
+          <div className="shrink-0 pt-1">
             <Toggle
               checked={checked}
               onChange={onToggle}
@@ -51,7 +51,7 @@ export function CookieCategoryCard({
         </div>
 
         {category.cookies.length > 0 && (
-          <div className="mt-4 bg-white/[0.02] rounded-lg border border-white/5 overflow-hidden">
+          <div className="mt-4 bg-white/2 rounded-lg border border-white/5 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-white/5">
@@ -70,7 +70,7 @@ export function CookieCategoryCard({
                 {category.cookies.map((cookie) => (
                   <tr
                     key={cookie.name}
-                    className="border-b border-white/[0.03] last:border-0"
+                    className="border-b border-white/3 last:border-0"
                   >
                     <td className="py-2 px-3 text-emerald-400 font-mono">
                       {cookie.name}

@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { Upload, Loader2, FileCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { uploadForCredential } from "@/lib/upload-client";
+import { uploadForCredential } from "@/lib/facades/upload-client";
 
 interface CredentialUploadStepProps {
   onUploaded: (assetId: string, url: string) => void;

@@ -5,12 +5,11 @@ import Link from "next/link";
 import { Search, HardHat, BadgeCheck } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchProfessionals } from "@/hooks/useSearchProfessionals";
-import { getProfessionalUrl } from "@/lib/links";
+import { getProfessionalUrl } from "@/lib/routes";
 import type { SearchProfessionalResultDto } from "@/app/lib/domains/search/contracts";
 
 export default function SearchPage() {
@@ -40,7 +39,7 @@ export default function SearchPage() {
         {/* Hero */}
         <section className="bg-zinc-900 text-white py-16 relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] opacity-10 bg-cover bg-center" />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-zinc-900/90" />
+          <div className="absolute inset-0 bg-linear-to-b from-transparent to-zinc-900/90" />
 
           <div className="container mx-auto px-4 md:px-6 relative z-10 text-center max-w-2xl">
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
@@ -120,7 +119,6 @@ export default function SearchPage() {
           )}
         </section>
       </main>
-      <Footer />
     </div>
   );
 }

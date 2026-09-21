@@ -34,6 +34,7 @@ import {
   ChevronRight,
   Loader2,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "react-toastify";
@@ -56,7 +57,10 @@ interface VerificationQueueProps {
   canVerify: boolean;
 }
 
-const entityTypeConfig = {
+const entityTypeConfig: Record<
+  EntityType,
+  { icon: any; color: string; bgColor: string; label: string }
+> = {
   professional: {
     icon: UserCheck,
     color: "text-blue-500",
@@ -74,6 +78,12 @@ const entityTypeConfig = {
     color: "text-emerald-500",
     bgColor: "bg-emerald-500/10",
     label: "Property",
+  },
+  license: {
+    icon: ShieldCheck,
+    color: "text-rose-500",
+    bgColor: "bg-rose-500/10",
+    label: "License",
   },
 };
 

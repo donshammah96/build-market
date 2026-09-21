@@ -1,0 +1,650 @@
+import "./bootstrap.js";
+
+import { validateWorkerEnv } from "./env.js";
+import { initOtel, shutdownOtel } from "./otel.js";
+import { initTracer } from "./tracer.js";
+import { startHealthServer } from "./health.js";
+import { resolveWorkerOptions } from "./worker-options.js";
+import { processMaintenanceJob } from "./processors/maintenance.processor.js";
+import { processNotificationRetryJob } from "./processors/notification.processor.js";
+import { processDataExportJob } from "./processors/export.processor.js";
+import { processIncidentJob } from "./processors/incident.processor.js";
+import { processComplianceNotificationJob } from "./processors/compliance-notification.processor.js";
+import {
+  processConfirmationEmailJob,
+  processEspSyncJob,
+} from "./processors/newsletter.processor.js";
+import { processImageUploadJob } from "./processors/upload.processor.js";
+import { processLicenseVerificationJob } from "./processors/license-verification.processor.js";
+import {
+  processMpesaB2cInitiateJob,
+  processMpesaB2cResultJob,
+} from "./processors/mpesa-b2c.processor.js";
+import {
+  processMpesaStkCallbackJob,
+  processMpesaStkInitiateJob,
+} from "./processors/mpesa-stk.processor.js";
+import { processMpesaReconciliationJob } from "./processors/mpesa-reconciliation.processor.js";
+import {
+  getQueueBackendType,
+  type MaintenanceJobData,
+  type NotificationRetryJobData,
+  type ExportJobData,
+  type IncidentJobData,
+  type UserNotificationJobData,
+  type NewsletterConfirmationEmailJobData,
+  type NewsletterEspSyncJobData,
+  type ImageUploadProcessingJobData,
+  type LicenseVerificationJobData,
+  type MpesaStkInitiateJobData,
+  type MpesaStkCallbackJobData,
+  type MpesaB2cInitiateJobData,
+  type MpesaB2cResultJobData,
+  type MpesaReconcileJobData,
+  migrateBullMqSchema,
+} from "@build/queue-server";
+import {
+  createConsumer,
+  type JetStreamConsumer,
+  type MessagePayload,
+} from "@build/nats";
+import { Worker, type Job } from "bullmq";
+import { Redis } from "ioredis";
+import type { Client as PgClient } from "pg";
+import {
+  StructuredLogger,
+  CorrelationIdManager,
+  closeResilienceLogs,
+} from "@build/resilience";
+
+// 1. Fail-closed boot validation (P0: Must run before any socket initialization)
+const env = validateWorkerEnv();
+
+// 2. Datadog APM and OpenTelemetry instrumentation initialization
+initTracer(env);
+initOtel(env);
+
+const logger = new StructuredLogger("workers-daemon");
+logger.info("Starting BuildMarket background worker daemon...", {
+  nodeEnv: env.NODE_ENV,
+  dbPoolMax: env.DB_POOL_MAX,
+});
+
+// 3. Pre-deploy BullMQ schema validation / migration (no-ops safely if no queue uses postgres)
+try {
+  await migrateBullMqSchema();
+} catch (err) {
+  logger.error(
+    "[Fatal] Failed to verify or migrate BullMQ schema on boot",
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  process.exit(1);
+}
+
+if (env.DISABLE_BACKGROUND_JOBS) {
+  logger.warn(
+    "DISABLE_BACKGROUND_JOBS is enabled — worker processing will remain dormant.",
+  );
+}
+
+// 4. Connection check probes (lazily instantiated)
+let healthRedisClient: Redis | null = null;
+let healthPgClient: PgClient | null = null;
+
+let isShuttingDown = false;
+let isNatsConnected = false;
+const activeWorkers: Worker[] = [];
+let natsConsumer: JetStreamConsumer | null = null;
+let licenseNatsConsumer: JetStreamConsumer | null = null;
+
+// Global crash handlers.
+process.on("uncaughtException", (err) => {
+  logger.error(
+    "[Fatal] Uncaught exception — terminating for orchestrator restart",
+    err,
+  );
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error(
+    "[Fatal] Unhandled promise rejection — terminating for orchestrator restart",
+    reason instanceof Error ? reason : new Error(String(reason)),
+  );
+  process.exit(1);
+});
+
+// 3. Initialize BullMQ Workers
+function initializeBullMqWorkers() {
+  if (env.DISABLE_BACKGROUND_JOBS) {
+    return;
+  }
+
+  function getWorkerOptions(
+    queueName: string,
+    concurrency: number = 5,
+    limiter?: { max: number; duration: number },
+  ) {
+    return resolveWorkerOptions(queueName, concurrency, limiter, logger);
+  }
+
+  // Maintenance & GDPR Queues Worker
+  const maintenanceWorker = new Worker<MaintenanceJobData>(
+    "maintenance-jobs",
+    async (job: Job<MaintenanceJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processMaintenanceJob(job);
+        },
+      );
+    },
+    getWorkerOptions("maintenance-jobs", 5),
+  );
+
+  maintenanceWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:maintenance] Job failed: ${job?.name}`, err, {
+      jobId: job?.id,
+      jobName: job?.name,
+      attemptsMade: job?.attemptsMade,
+    });
+  });
+
+  maintenanceWorker.on("completed", (job) => {
+    logger.info(`[Worker:maintenance] Job completed: ${job.name}`, {
+      jobId: job.id,
+      jobName: job.name,
+    });
+  });
+
+  // Notification Retry Worker
+  const notificationWorker = new Worker<NotificationRetryJobData>(
+    "notification-retries",
+    async (job: Job<NotificationRetryJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processNotificationRetryJob(job);
+        },
+      );
+    },
+    getWorkerOptions("notification-retries", 5),
+  );
+
+  notificationWorker.on("failed", (job, err) => {
+    logger.error("[Worker:notifications] Job failed", err, {
+      jobId: job?.id,
+    });
+  });
+
+  // GDPR Data Export Worker
+  const exportWorker = new Worker<ExportJobData>(
+    "gdpr-data-export",
+    async (job: Job<ExportJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processDataExportJob(job);
+        },
+      );
+    },
+    getWorkerOptions("gdpr-data-export", 2),
+  );
+
+  exportWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:export] Job failed: ${job?.name}`, err, {
+      jobId: job?.id,
+      exportId: job?.data?.exportId,
+    });
+  });
+
+  // Security Incident Worker
+  const incidentWorker = new Worker<IncidentJobData>(
+    "security-incidents",
+    async (job: Job<IncidentJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processIncidentJob(job);
+        },
+      );
+    },
+    getWorkerOptions("security-incidents", 2, {
+      max: 10,
+      duration: 60000,
+    }),
+  );
+
+  incidentWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:incident] Job failed: ${job?.name}`, err, {
+      jobId: job?.id,
+      incidentId: job?.data?.incidentId,
+    });
+  });
+
+  // Compliance User Notification Batch Worker
+  const complianceNotificationWorker = new Worker<UserNotificationJobData>(
+    "compliance-notifications",
+    async (job: Job<UserNotificationJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processComplianceNotificationJob(job);
+        },
+      );
+    },
+    getWorkerOptions("compliance-notifications", 2),
+  );
+
+  complianceNotificationWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:compliance-notifications] Job failed`, err, {
+      jobId: job?.id,
+      incidentId: job?.data?.incidentId,
+    });
+  });
+
+  // Newsletter Confirmation Email Worker
+  const newsletterEmailWorker = new Worker<NewsletterConfirmationEmailJobData>(
+    "newsletter-confirmation-email",
+    async (job: Job<NewsletterConfirmationEmailJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processConfirmationEmailJob(job);
+        },
+      );
+    },
+    getWorkerOptions("newsletter-confirmation-email", 5),
+  );
+
+  newsletterEmailWorker.on("failed", (job, err) => {
+    logger.error("[Worker:newsletter-confirmation-email] Job failed", err, {
+      jobId: job?.id,
+      subscriberId: job?.data?.subscriberId,
+    });
+  });
+
+  // Newsletter ESP Sync Worker
+  const newsletterEspSyncWorker = new Worker<NewsletterEspSyncJobData>(
+    "newsletter-esp-sync",
+    async (job: Job<NewsletterEspSyncJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processEspSyncJob(job);
+        },
+      );
+    },
+    getWorkerOptions("newsletter-esp-sync", 5),
+  );
+
+  newsletterEspSyncWorker.on("failed", (job, err) => {
+    logger.error("[Worker:newsletter-esp-sync] Job failed", err, {
+      jobId: job?.id,
+      subscriberId: job?.data?.subscriberId,
+    });
+  });
+
+  // Upload Processing Worker
+  const uploadProcessingWorker = new Worker<ImageUploadProcessingJobData>(
+    "uploads-image-processing",
+    async (job: Job<ImageUploadProcessingJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processImageUploadJob(job);
+        },
+      );
+    },
+    getWorkerOptions("uploads-image-processing", 2, {
+      max: 20,
+      duration: 60000,
+    }),
+  );
+
+  uploadProcessingWorker.on("failed", (job, err) => {
+    logger.error("[Worker:uploads-image-processing] Job failed", err, {
+      jobId: job?.id,
+      uploadId: job?.data?.uploadId,
+    });
+  });
+
+  // License Verification Worker
+  const licenseVerificationWorker = new Worker<LicenseVerificationJobData>(
+    "license-verification",
+    async (job: Job<LicenseVerificationJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processLicenseVerificationJob(job);
+        },
+      );
+    },
+    getWorkerOptions("license-verification", 5),
+  );
+
+  licenseVerificationWorker.on("failed", (job, err) => {
+    logger.error("[Worker:license-verification] Job failed", err, {
+      jobId: job?.id,
+      professionalId: job?.data?.professionalId,
+    });
+  });
+
+  const mpesaWorker = new Worker<
+    | MpesaStkInitiateJobData
+    | MpesaStkCallbackJobData
+    | MpesaB2cInitiateJobData
+    | MpesaB2cResultJobData
+  >(
+    "mpesa-payments",
+    async (
+      job: Job<
+        | MpesaStkInitiateJobData
+        | MpesaStkCallbackJobData
+        | MpesaB2cInitiateJobData
+        | MpesaB2cResultJobData
+      >,
+    ) =>
+      CorrelationIdManager.run(job.data.correlationId, () =>
+        job.name === "process-stk-callback"
+          ? processMpesaStkCallbackJob(job as Job<MpesaStkCallbackJobData>)
+          : job.name === "initiate-b2c"
+            ? processMpesaB2cInitiateJob(
+                job as Job<MpesaB2cInitiateJobData>,
+                env,
+              )
+            : job.name === "process-b2c-result"
+              ? processMpesaB2cResultJob(job as Job<MpesaB2cResultJobData>)
+              : processMpesaStkInitiateJob(
+                  job as Job<MpesaStkInitiateJobData>,
+                  env,
+                ),
+      ),
+    getWorkerOptions("mpesa-payments", 2),
+  );
+  mpesaWorker.on("failed", (job, err) => {
+    logger.error("[Worker:mpesa] STK initiation failed", err, {
+      jobId: job?.id,
+      transactionId: (job?.data as { transactionId?: string } | undefined)
+        ?.transactionId,
+    });
+  });
+
+  const mpesaReconciliationWorker = new Worker<MpesaReconcileJobData>(
+    "mpesa-reconciliation",
+    async (job: Job<MpesaReconcileJobData>) =>
+      CorrelationIdManager.run(job.data.correlationId, () =>
+        processMpesaReconciliationJob(job, env),
+      ),
+    getWorkerOptions("mpesa-reconciliation", 1, {
+      max: 10,
+      duration: 10000,
+    }),
+  );
+  mpesaReconciliationWorker.on("failed", (job, err) => {
+    logger.error(
+      "[Worker:mpesa-reconciliation] Reconciliation job failed",
+      err,
+      {
+        jobId: job?.id,
+        correlationId: job?.data?.correlationId,
+      },
+    );
+  });
+
+  activeWorkers.push(
+    maintenanceWorker,
+    notificationWorker,
+    exportWorker,
+    incidentWorker,
+    complianceNotificationWorker,
+    newsletterEmailWorker,
+    newsletterEspSyncWorker,
+    uploadProcessingWorker,
+    licenseVerificationWorker,
+    mpesaWorker,
+    mpesaReconciliationWorker,
+  );
+}
+
+// 4. Initialize NATS JetStream Durable Consumers
+async function initializeNatsConsumer() {
+  if (env.DISABLE_BACKGROUND_JOBS || !env.NATS_URL) {
+    return;
+  }
+
+  try {
+    // 1. Notification retry consumer group
+    natsConsumer = createConsumer(
+      "workers-daemon",
+      "notification-retry-worker-group",
+      {
+        servers: env.NATS_URL,
+        ...(env.NATS_TOKEN ? { token: env.NATS_TOKEN } : {}),
+      },
+    );
+
+    await natsConsumer.connect();
+    isNatsConnected = true;
+    logger.info(
+      "[NATS] Connected and subscribed with durable consumer: notification-retry-worker-group",
+    );
+
+    // 2. License verification consumer group
+    licenseNatsConsumer = createConsumer(
+      "workers-license-daemon",
+      "license-auto-verify-group",
+      {
+        servers: env.NATS_URL,
+        ...(env.NATS_TOKEN ? { token: env.NATS_TOKEN } : {}),
+      },
+    );
+    await licenseNatsConsumer.connect();
+    await licenseNatsConsumer.subscribe([
+      {
+        subject: "license.auto_verify_requested",
+        consumerOptions: {
+          durableName: "workers-license-auto-verify-worker",
+        },
+        handler: async (msg: MessagePayload) => {
+          const event = msg.data as LicenseVerificationJobData;
+          msg.working();
+          await processLicenseVerificationJob({
+            id: `nats-${Date.now()}`,
+            data: event,
+          } as Job<LicenseVerificationJobData>);
+        },
+      },
+    ]);
+    logger.info(
+      "[NATS] Connected and subscribed with durable consumer: license-auto-verify-group",
+    );
+  } catch (err) {
+    isNatsConnected = false;
+    logger.error(
+      "[NATS] Failed to initialize JetStream consumers",
+      err instanceof Error ? err : new Error(String(err)),
+    );
+  }
+}
+
+// 5. Start Healthcheck Server (P1: Port 8080 / Render PORT)
+const healthServer = startHealthServer({
+  port: env.PORT || env.HEALTH_PORT,
+  checkRedis: async () => {
+    try {
+      if (env.DISABLE_BACKGROUND_JOBS) return true;
+      const hasRedis =
+        env.QUEUE_BACKEND === "redis" ||
+        activeWorkers.some((w) => getQueueBackendType(w.name) === "redis");
+      if (!hasRedis) return true;
+
+      if (!healthRedisClient) {
+        healthRedisClient = new Redis(env.REDIS_URL, {
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+        });
+      }
+
+      if (
+        healthRedisClient.status !== "ready" &&
+        healthRedisClient.status !== "connecting"
+      ) {
+        await healthRedisClient.connect();
+      }
+      const pong = await healthRedisClient.ping();
+      return pong === "PONG";
+    } catch {
+      return false;
+    }
+  },
+  checkPostgres: async () => {
+    try {
+      if (env.DISABLE_BACKGROUND_JOBS) return true;
+      const hasPostgres =
+        env.QUEUE_BACKEND === "postgres" ||
+        activeWorkers.some((w) => getQueueBackendType(w.name) === "postgres");
+      if (!hasPostgres) return true;
+
+      if (!healthPgClient) {
+        const pgModule = await import("pg");
+        const Client = pgModule.default?.Client || pgModule.Client;
+        const dnsModule = await import("node:dns");
+        healthPgClient = new Client({
+          connectionString: env.DATABASE_URL,
+          ssl:
+            env.NODE_ENV === "production"
+              ? { rejectUnauthorized: false }
+              : undefined,
+          lookup: (
+            hostname: string,
+            options: unknown,
+            callback: (
+              err: NodeJS.ErrnoException | null,
+              address: string,
+              family: number,
+            ) => void,
+          ) => {
+            const cb =
+              typeof options === "function"
+                ? (options as (
+                    err: NodeJS.ErrnoException | null,
+                    address: string,
+                    family: number,
+                  ) => void)
+                : callback;
+            const opts =
+              typeof options === "object" && options !== null ? options : {};
+            dnsModule.default.lookup(hostname, { ...opts, family: 4 }, cb);
+          },
+        } as any);
+        await healthPgClient.connect();
+      }
+
+      const res = await healthPgClient.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'bullmq';",
+      );
+      return res.rows.length > 0;
+    } catch {
+      if (healthPgClient) {
+        try {
+          await healthPgClient.end();
+        } catch {
+          // ignore
+        }
+        healthPgClient = null;
+      }
+      return false;
+    }
+  },
+  checkWorkers: () => {
+    if (env.DISABLE_BACKGROUND_JOBS) return true;
+    return (
+      activeWorkers.length > 0 && activeWorkers.every((w) => w.isRunning())
+    );
+  },
+  checkNats: () => {
+    if (env.DISABLE_BACKGROUND_JOBS || !env.NATS_URL) return true;
+    return isNatsConnected;
+  },
+  isShuttingDown: () => isShuttingDown,
+});
+
+// 6. Graceful Shutdown Traps
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.info(`Received ${signal}. Initiating graceful shutdown...`);
+
+  const shutdownTimeout = setTimeout(() => {
+    logger.error("Graceful shutdown timeout exceeded (30s). Forcing exit.");
+    process.exit(1);
+  }, 30000);
+
+  try {
+    // 1. Stop NATS consumers
+    if (natsConsumer) {
+      await natsConsumer.disconnect();
+      logger.info("[NATS] JetStream retry consumer disconnected.");
+    }
+    if (licenseNatsConsumer) {
+      await licenseNatsConsumer.disconnect();
+      logger.info("[NATS] JetStream license consumer disconnected.");
+    }
+
+    // 2. Close BullMQ workers (drain active jobs)
+    await Promise.all(activeWorkers.map((w) => w.close()));
+    logger.info("[BullMQ] All workers closed gracefully.");
+
+    // 3. Disconnect Redis and Postgres health probe clients
+    if (healthRedisClient) {
+      try {
+        await healthRedisClient.quit();
+      } catch {
+        healthRedisClient.disconnect();
+      }
+      healthRedisClient = null;
+    }
+    if (healthPgClient) {
+      try {
+        await healthPgClient.end();
+      } catch {
+        // ignore
+      }
+      healthPgClient = null;
+    }
+
+    // 4. Close health server last
+    healthServer.close();
+
+    // 5. Flush resilience logs and terminate OpenTelemetry
+    logger.info("Graceful shutdown complete.");
+    await closeResilienceLogs();
+    await shutdownOtel();
+
+    clearTimeout(shutdownTimeout);
+    process.exit(0);
+  } catch (err) {
+    logger.error(
+      "Error during graceful shutdown",
+      err instanceof Error ? err : new Error(String(err)),
+    );
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// Start services
+try {
+  initializeBullMqWorkers();
+} catch (err) {
+  logger.error(
+    "[Fatal] BullMQ worker initialization failed on startup. Terminating process for orchestrator restart.",
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  process.exit(1);
+}
+void initializeNatsConsumer();

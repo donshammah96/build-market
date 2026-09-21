@@ -21,7 +21,6 @@ import {
   type UserProfileUpdateInput,
 } from "@/app/lib/domains/user-profile";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 // Validation schema for profile PATCH
@@ -82,7 +81,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
 
   try {
-    logger.info("Fetching user profile", {
+    getClientLogger().info("Fetching user profile", {
       correlationId,
       operationName: "fetch_user_profile",
     });
@@ -99,7 +98,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!result.success) {
-      logger.error(
+      getClientLogger().error(
         "Profile fetch failed",
         result.error instanceof Error
           ? result.error
@@ -126,7 +125,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!profileResult.ok) {
       if (profileResult.error === "not_found") {
-        logger.info("User not found in database", {
+        getClientLogger().info("User not found in database", {
           correlationId,
           operationName: "fetch_user_profile",
           outcome: "not_found",
@@ -137,7 +136,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         );
       }
 
-      logger.error(
+      getClientLogger().error(
         "Profile fetch failed",
         new Error(profileResult.message || "Profile fetch failed"),
         {
@@ -152,7 +151,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    logger.info("Profile fetched successfully", {
+    getClientLogger().info("Profile fetched successfully", {
       correlationId,
       operationName: "fetch_user_profile",
       isComplete: profileResult.data.completion.isComplete,
@@ -163,7 +162,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(profileResult.data, HttpStatus.OK);
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Profile fetch error",
       err instanceof Error ? err : new Error(String(err)),
       {
@@ -208,7 +207,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    logger.info("Updating user profile", {
+    getClientLogger().info("Updating user profile", {
       correlationId,
       operationName: "update_user_profile",
       hasProfileData: !!validationResult.data.profileData,
@@ -228,7 +227,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!updateResult.success || !updateResult.data) {
-      logger.error(
+      getClientLogger().error(
         "Profile update failed",
         updateResult.error instanceof Error
           ? updateResult.error
@@ -259,7 +258,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         );
       }
 
-      logger.error(
+      getClientLogger().error(
         "Profile update failed",
         new Error(updateResult.data.message || "Update failed"),
         {
@@ -275,7 +274,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    logger.info("Profile updated successfully", {
+    getClientLogger().info("Profile updated successfully", {
       correlationId,
       operationName: "update_user_profile",
       outcome: "succeeded",
@@ -283,7 +282,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(updateResult.data.data);
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Profile update error",
       err instanceof Error ? err : new Error(String(err)),
       {

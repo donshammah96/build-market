@@ -74,11 +74,7 @@ export type Profession =
 
 // Professional verification status - matches Prisma VerificationStatus enum
 export type VerificationStatus =
-  | "UNVERIFIED"
-  | "PENDING"
-  | "VERIFIED"
-  | "REJECTED"
-  | "NEEDS_CORRECTION";
+  "UNVERIFIED" | "PENDING" | "VERIFIED" | "REJECTED" | "NEEDS_CORRECTION";
 
 // Certificate verification status - matches Prisma CertificateVerificationStatus enum
 export type CertificateVerificationStatus = "pending" | "verified" | "rejected";
@@ -194,10 +190,7 @@ export interface ProfessionalImage {
 
 // Attachment types for documents - matches Prisma AttachmentType enum (subset)
 export type ProfessionalAttachmentType =
-  | "NATIONAL_ID"
-  | "KRA_PIN"
-  | "EARB_CERTIFICATE"
-  | "PRACTICING_LICENCE";
+  "NATIONAL_ID" | "KRA_PIN" | "EARB_CERTIFICATE" | "PRACTICING_LICENCE";
 
 // Matches Prisma ProfessionalDocument model
 export interface ProfessionalDocument {

@@ -13,6 +13,7 @@ import {
   UpdateCalendarEventSchema,
 } from "@/app/lib/validation/calendar-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   createActionFailure,
   resolveRequiredActionActor,
@@ -136,7 +137,7 @@ export async function createCalendarEventAction(
     await IdempotencyService.fail(idempotencyKey);
     unwrapResultOrThrow(result, "Failed to create calendar event");
   } else {
-    await IdempotencyService.complete(idempotencyKey, result.data);
+    await safeIdempotencyComplete(idempotencyKey, result.data);
     revalidatePath("/professional-portal/calendar");
     return result.data;
   }
@@ -221,7 +222,7 @@ export async function updateCalendarEventAction(
     await IdempotencyService.fail(idempotencyKey);
     unwrapResultOrThrow(result, "Failed to update calendar event");
   } else {
-    await IdempotencyService.complete(idempotencyKey, result.data);
+    await safeIdempotencyComplete(idempotencyKey, result.data);
     revalidatePath("/professional-portal/calendar");
     revalidatePath(`/professional-portal/calendar/${eventId}`);
     return result.data;

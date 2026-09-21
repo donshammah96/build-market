@@ -13,12 +13,11 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   financeService,
   UpdateTransactionSchema,
 } from "@/app/lib/domains/finance";
-
-const logger = getClientLogger();
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
@@ -64,7 +63,7 @@ export const GET = withAuth<{ id: string }>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch transaction", result.error, {
+      getClientLogger().error("Failed to fetch transaction", result.error, {
         transactionId: id,
       });
       return apiError(
@@ -148,12 +147,6 @@ export const PATCH = withAuth<{ id: string }>(
       dbUserId,
       "PATCH",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -175,7 +168,7 @@ export const PATCH = withAuth<{ id: string }>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Updating transaction", {
+    getClientLogger().info("Updating transaction", {
       correlationId,
       transactionId: id,
       actorRole: userRole,
@@ -216,7 +209,7 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, result.data.data);
+    await safeIdempotencyComplete(idempotencyKey, result.data.data);
     return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
@@ -248,7 +241,7 @@ export const DELETE = withAuth<{ id: string }>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Deleting transaction", {
+    getClientLogger().info("Deleting transaction", {
       correlationId,
       transactionId: id,
       actorRole: userRole,

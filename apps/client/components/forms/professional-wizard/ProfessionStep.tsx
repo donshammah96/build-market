@@ -78,52 +78,47 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "group relative overflow-hidden rounded-xl border transition-all duration-300",
-        "p-4",
+        "group relative overflow-hidden rounded-2xl border transition-all duration-300",
+        "p-4 sm:p-5",
         isActive
           ? [
-              "bg-[var(--color-onboarding-primary)]/[0.11]",
-              "border-[var(--color-onboarding-primary)]/45",
-              "shadow-[0_0_24px_oklch(0.70_0.21_162_/_0.12)]",
+              "bg-emerald-950/20 border-emerald-500/50",
+              "shadow-[0_0_24px_rgba(16,185,129,0.12)] ring-1 ring-emerald-500/20",
             ].join(" ")
           : [
-              "bg-white/[0.04]",
-              "border-white/[0.10]",
-              "hover:border-white/20",
-              "hover:bg-white/[0.07]",
+              "bg-zinc-900/70 border-zinc-800/90",
+              "hover:border-zinc-700 hover:bg-zinc-900/95",
             ].join(" "),
       )}
     >
-      {/* Left accent bar — only when active */}
+      {/* Left accent bar */}
       <div
         aria-hidden="true"
         className={cn(
-          "absolute left-0 inset-y-0 w-[3px] rounded-r-full transition-all duration-300",
-          isActive
-            ? "opacity-100 bg-[var(--color-onboarding-primary)]"
-            : "opacity-0 bg-[var(--color-onboarding-primary)]",
+          "absolute left-0 inset-y-0 w-1 rounded-r-full transition-all duration-300",
+          isActive ? "opacity-100 bg-emerald-500" : "opacity-0 bg-emerald-500",
         )}
       />
 
       {/* Header row */}
-      <div className="flex items-center gap-3 mb-3 pl-2">
+      <div className="flex items-center gap-3 mb-3.5 pl-2">
         <div
           aria-hidden="true"
           className={cn(
-            "p-2 rounded-lg transition-colors duration-200",
+            "p-2 rounded-xl transition-colors duration-200",
             isActive
-              ? "bg-[var(--color-onboarding-primary)]/20 text-[var(--color-onboarding-primary)]"
-              : "bg-white/[0.07] text-white/50 group-hover:text-white/80",
+              ? "bg-emerald-500/20 text-emerald-400"
+              : "bg-zinc-800 text-zinc-400 group-hover:text-zinc-200",
           )}
         >
           {icon}
         </div>
         <h3
           className={cn(
-            "font-['Syne'] text-sm font-bold tracking-wide transition-colors duration-200",
+            "text-sm font-bold tracking-tight transition-colors duration-200",
             isActive
-              ? "text-[var(--color-onboarding-primary)]"
-              : "text-white/85 group-hover:text-white",
+              ? "text-emerald-400"
+              : "text-white group-hover:text-emerald-300",
           )}
         >
           {title}
@@ -141,17 +136,17 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
               onClick={() => onSelect(opt.value)}
               aria-pressed={isSelected}
               className={cn(
-                "text-xs px-2.5 py-1 rounded-full transition-all duration-200",
-                "focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] focus-visible:outline-offset-1",
+                "text-xs px-3 py-1.5 rounded-lg transition-all duration-200 font-medium",
+                "focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-1",
                 isSelected
                   ? [
-                      "bg-[var(--color-success)] text-white font-semibold",
-                      "shadow-[0_0_12px_oklch(0.70_0.21_162_/_0.40)]",
+                      "bg-emerald-500 text-zinc-950 font-bold",
+                      "shadow-[0_0_12px_rgba(16,185,129,0.4)]",
                     ].join(" ")
                   : [
-                      "bg-white/[0.09] text-white/70",
-                      "hover:bg-white/[0.16] hover:text-white",
-                      "border border-white/[0.08]",
+                      "bg-zinc-800/80 text-zinc-300",
+                      "hover:bg-zinc-700 hover:text-white",
+                      "border border-zinc-700/60",
                     ].join(" "),
               )}
             >
@@ -160,7 +155,10 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
           );
         })}
         {professionOptions.length > 4 && (
-          <span aria-hidden="true" className="text-xs text-white/35 px-2 py-1">
+          <span
+            aria-hidden="true"
+            className="text-xs text-zinc-500 px-2 py-1.5"
+          >
             +{professionOptions.length - 4} more
           </span>
         )}
@@ -224,36 +222,36 @@ export default function ProfessionStep({
   return (
     <form
       onSubmit={handleSubmit(onSubmit, onInvalid)}
-      className="space-y-7"
+      className="space-y-8"
       noValidate
     >
-      {/* ── Header ── */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="text-center"
+        className="text-center space-y-2"
       >
-        <div className="inline-flex items-center justify-center gap-2 mb-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-onboarding-primary)]/16 text-[var(--color-onboarding-primary)]">
+        <div className="inline-flex items-center justify-center gap-2 mb-2">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <Briefcase className="h-6 w-6" aria-hidden="true" />
           </div>
         </div>
-        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold leading-[1.1] text-white mb-2 tracking-tight">
-          What do you do?
+        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold tracking-tight text-white">
+          What is your primary profession?
         </h2>
-        <p className="text-white/55 text-sm max-w-md mx-auto leading-relaxed">
-          Select your primary expertise to customise your onboarding
-          verification.
+        <p className="text-zinc-400 text-sm max-w-md mx-auto leading-relaxed">
+          Select your primary expertise to customize your professional
+          verification requirements.
         </p>
       </motion.div>
 
-      {/* ── Search combobox ── */}
+      {/* Search combobox */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08, duration: 0.35 }}
-        className="max-w-md mx-auto"
+        className="max-w-md mx-auto space-y-2"
       >
         <label htmlFor="profession-search" className={WIZARD_STYLES.label}>
           Search All Professions
@@ -266,7 +264,7 @@ export default function ProfessionStep({
               options={PROFESSION_OPTIONS}
               value={field.value}
               onChange={field.onChange}
-              placeholder="Type to search..."
+              placeholder="Type to search profession..."
               searchPlaceholder="Search professions..."
               emptyMessage="No profession found"
               id="profession-search"
@@ -275,18 +273,14 @@ export default function ProfessionStep({
                 errors.profession ? "profession-error" : undefined
               }
               className={cn(
-                // Combobox trigger — properly visible on dark
-                "w-full bg-white/[0.08] border text-white hover:bg-white/[0.11]",
-                "focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]/25",
+                "w-full bg-zinc-900 border text-white hover:bg-zinc-800/80 rounded-xl",
+                "focus:outline-none focus:ring-2 focus:ring-emerald-500/25",
                 "transition-all duration-200",
-                errors.profession
-                  ? "border-[var(--color-error)]/60"
-                  : "border-white/[0.16]",
+                errors.profession ? "border-red-500/60" : "border-zinc-800",
               )}
             />
           )}
         />
-        {/* aria-live ensures errors are announced without interrupting AT */}
         <div aria-live="polite" aria-atomic="true">
           {errors.profession && (
             <p id="profession-error" className={WIZARD_STYLES.error}>
@@ -296,15 +290,15 @@ export default function ProfessionStep({
         </div>
       </motion.div>
 
-      {/* ── Category grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* Category grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <CategoryCard
           icon={<Building2 className="h-4 w-4" />}
           title="Architecture & Design"
           professions={PROFESSION_GROUPS["Architecture & Design"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
-          delay={0.12}
+          delay={0.05}
         />
         <CategoryCard
           icon={<Lightbulb className="h-4 w-4" />}
@@ -312,15 +306,15 @@ export default function ProfessionStep({
           professions={PROFESSION_GROUPS["Engineering"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
-          delay={0.16}
+          delay={0.1}
         />
         <CategoryCard
           icon={<HardHat className="h-4 w-4" />}
-          title="Construction"
+          title="Construction & Contracting"
           professions={PROFESSION_GROUPS["Construction Management"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
-          delay={0.2}
+          delay={0.15}
         />
         <CategoryCard
           icon={<Wrench className="h-4 w-4" />}
@@ -328,7 +322,7 @@ export default function ProfessionStep({
           professions={PROFESSION_GROUPS["Specialized Trades"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
-          delay={0.24}
+          delay={0.2}
         />
         <CategoryCard
           icon={<Home className="h-4 w-4" />}
@@ -336,38 +330,32 @@ export default function ProfessionStep({
           professions={PROFESSION_GROUPS["Real Estate"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
-          delay={0.28}
+          delay={0.25}
         />
         <CategoryCard
           icon={<Store className="h-4 w-4" />}
-          title="Suppliers"
+          title="Building Suppliers"
           professions={PROFESSION_GROUPS["Suppliers"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
-          delay={0.32}
+          delay={0.3}
         />
       </div>
 
-      {/* ── Selected profession feedback ── */}
+      {/* Selected profession feedback */}
       {selectedProfession && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className={cn(
-            "rounded-xl border p-4 overflow-hidden",
-            "bg-[var(--color-onboarding-primary)]/[0.1] border-[var(--color-onboarding-primary)]/35",
-          )}
+          className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-5 shadow-lg"
         >
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-[var(--color-onboarding-primary)]/16 rounded-lg shrink-0">
-              <CheckCircle2
-                className="h-4 w-4 text-[var(--color-onboarding-primary)]"
-                aria-hidden="true"
-              />
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0">
+              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="font-['Syne'] text-sm font-bold text-[var(--color-onboarding-primary)] truncate">
+              <h4 className="text-base font-bold text-emerald-400 truncate">
                 {
                   PROFESSION_OPTIONS.find((p) => p.value === selectedProfession)
                     ?.label
@@ -375,30 +363,31 @@ export default function ProfessionStep({
               </h4>
 
               {regulatoryBodyFullName ? (
-                <p className="text-xs text-white/60 mt-1">
-                  Verified by:{" "}
-                  <span className="font-semibold text-white/90">
+                <p className="text-xs text-zinc-300 mt-1">
+                  Regulated & Verified by:{" "}
+                  <span className="font-semibold text-white">
                     {regulatoryBodyFullName}
                   </span>
                 </p>
               ) : (
-                <p className="text-xs text-white/50 mt-1">
-                  Standard identity and tax compliance verification required.
+                <p className="text-xs text-zinc-400 mt-1">
+                  Standard identity, business registration, and tax compliance
+                  verification required.
                 </p>
               )}
 
               {isSupplier && (
-                <p className="text-xs text-[var(--color-onboarding-primary)] mt-2 flex items-center gap-1.5">
-                  <Store className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  You will be prompted to set up your merchant store in the next
-                  steps.
+                <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1.5 font-medium">
+                  <Store className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  You will be prompted to set up your merchant store details in
+                  the following steps.
                 </p>
               )}
               {isRealEstate && (
-                <p className="text-xs text-[var(--color-onboarding-primary)] mt-2 flex items-center gap-1.5">
-                  <Home className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  Have your board registration documents ready for the
-                  credential step.
+                <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1.5 font-medium">
+                  <Home className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  Have your Estate Agents Registration Board (EARB) credentials
+                  ready.
                 </p>
               )}
             </div>
@@ -406,12 +395,12 @@ export default function ProfessionStep({
         </motion.div>
       )}
 
-      {/* ── Navigation ── */}
+      {/* Navigation */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="flex justify-end pt-3"
+        transition={{ delay: 0.35 }}
+        className="flex justify-end pt-4 border-t border-zinc-800"
       >
         <button
           type="submit"
@@ -421,7 +410,7 @@ export default function ProfessionStep({
             "max-w-xs flex items-center justify-center gap-2",
           )}
         >
-          Continue
+          Continue to Details
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </motion.div>

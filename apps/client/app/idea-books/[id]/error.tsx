@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export default function Error({
   error,

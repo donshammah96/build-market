@@ -2,13 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockQueueAdd = vi.hoisted(() => vi.fn());
 const mockQueueClose = vi.hoisted(() => vi.fn());
-const mockWorkerClose = vi.hoisted(() => vi.fn());
-const mockWorkerOn = vi.hoisted(() => vi.fn());
-const mockCleanupExpiredStagedUploads = vi.hoisted(() => vi.fn());
-
-let capturedProcessor:
-  | ((job: { name: string; id: string }) => Promise<unknown>)
-  | null = null;
 
 vi.mock("@build/queue-server", () => ({
   createRedisConnection: () => ({ host: "localhost", port: 6379 }),
@@ -19,27 +12,6 @@ vi.mock("bullmq", () => ({
     add = mockQueueAdd;
     close = mockQueueClose;
     getRepeatableJobs = async () => [];
-  },
-  Worker: class MockWorker {
-    constructor(
-      _name: string,
-      processor: (job: unknown) => Promise<unknown>,
-      _options?: unknown,
-    ) {
-      capturedProcessor = processor as (job: {
-        name: string;
-        id: string;
-      }) => Promise<unknown>;
-    }
-    close = mockWorkerClose;
-    on = mockWorkerOn;
-    isRunning = () => true;
-  },
-}));
-
-vi.mock("@/app/lib/domains/uploads", () => ({
-  uploadService: {
-    cleanupExpiredStagedUploads: mockCleanupExpiredStagedUploads,
   },
 }));
 
@@ -59,7 +31,6 @@ vi.mock("@build/resilience", () => ({
 describe("onboarding-upload-cleanup job", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    capturedProcessor = null;
   });
 
   describe("scheduleOnboardingUploadCleanup", () => {
@@ -80,74 +51,6 @@ describe("onboarding-upload-cleanup job", () => {
           attempts: 3,
           backoff: { type: "exponential", delay: 60000 },
         }),
-      );
-    });
-  });
-
-  describe("createOnboardingUploadCleanupWorker processor", () => {
-    it("calls cleanupExpiredStagedUploads and returns metrics", async () => {
-      mockCleanupExpiredStagedUploads.mockResolvedValue({
-        count: 3,
-        deletedFromStorage: 3,
-        failedDeletions: [],
-      });
-
-      const { createOnboardingUploadCleanupWorker } =
-        await import("@/app/jobs/onboarding-upload-cleanup");
-
-      createOnboardingUploadCleanupWorker();
-
-      expect(capturedProcessor).toBeDefined();
-
-      const mockJob = {
-        name: "cleanup-expired-staged-uploads",
-        id: "job-123",
-      };
-
-      const result = await capturedProcessor!(mockJob);
-
-      expect(mockCleanupExpiredStagedUploads).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({
-        count: 3,
-        deletedFromStorage: 3,
-        failedDeletions: 0,
-        durationMs: expect.any(Number),
-      });
-    });
-
-    it("skips unexpected job types", async () => {
-      const { createOnboardingUploadCleanupWorker } =
-        await import("@/app/jobs/onboarding-upload-cleanup");
-
-      createOnboardingUploadCleanupWorker();
-
-      const mockJob = {
-        name: "other-job-type",
-        id: "job-456",
-      };
-
-      await capturedProcessor!(mockJob);
-
-      expect(mockCleanupExpiredStagedUploads).not.toHaveBeenCalled();
-    });
-
-    it("throws on cleanup failure for retry", async () => {
-      mockCleanupExpiredStagedUploads.mockRejectedValue(
-        new Error("Database connection failed"),
-      );
-
-      const { createOnboardingUploadCleanupWorker } =
-        await import("@/app/jobs/onboarding-upload-cleanup");
-
-      createOnboardingUploadCleanupWorker();
-
-      const mockJob = {
-        name: "cleanup-expired-staged-uploads",
-        id: "job-789",
-      };
-
-      await expect(capturedProcessor!(mockJob)).rejects.toThrow(
-        "Database connection failed",
       );
     });
   });

@@ -1,0 +1,8 @@
+Contact: mailto:privacy@buildmarket.app
+Contact: mailto:security@buildmarket.app
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: en, sw
+Canonical: https://buildmarket.app/.well-known/security.txt
+Policy: https://buildmarket.app/legal/safety-and-verification
+Hiring: https://buildmarket.app/careers
+Acknowledgments: https://buildmarket.app/security/hall-of-fame

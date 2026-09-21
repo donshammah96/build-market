@@ -20,7 +20,6 @@ import {
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 type Params = { id: string };
 
 function toMessagingActor(context: {
@@ -80,7 +79,7 @@ export const POST = withAuth<Params>(
     );
 
     if (!result.success) {
-      logger.error("Failed to add participant", result.error, {
+      getClientLogger().error("Failed to add participant", result.error, {
         correlationId,
         threadId,
       });
@@ -129,7 +128,7 @@ export const GET = withAuth<Params>(
     );
 
     if (!result.success) {
-      logger.error("Failed to list participants", result.error, {
+      getClientLogger().error("Failed to list participants", result.error, {
         correlationId,
         threadId,
       });
@@ -212,7 +211,7 @@ export const PATCH = withAuth<Params>(
     );
 
     if (!result.success) {
-      logger.error("Failed to update participant", result.error, {
+      getClientLogger().error("Failed to update participant", result.error, {
         correlationId,
         threadId,
       });
@@ -290,7 +289,7 @@ export const DELETE = withAuth<Params>(
     );
 
     if (!result.success) {
-      logger.error("Failed to delete participant", result.error, {
+      getClientLogger().error("Failed to delete participant", result.error, {
         correlationId,
         threadId,
       });

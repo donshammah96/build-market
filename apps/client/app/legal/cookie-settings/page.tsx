@@ -61,7 +61,7 @@ export default function CookieSettingsPage() {
       <h1 className="text-4xl md:text-5xl font-bold text-center leading-tight mb-6">
         Your Cookies,
         <br />
-        <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
+        <span className="bg-linear-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
           Your Rules.
         </span>
       </h1>

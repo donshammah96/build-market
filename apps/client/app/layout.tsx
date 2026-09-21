@@ -10,6 +10,7 @@ import { PostHogProvider } from "@/app/providers/PostHogProvider";
 import { CookieBanner } from "@/components/gdpr/CookieBanner";
 import { AccessibilityProvider } from "@/components/accessibility";
 import { RouteFocusManager } from "@/components/layout/RouteFocusManager";
+import { Footer } from "@/components/layout/Footer";
 import { env } from "@/app/lib/infrastructure/env"; // Added env import
 
 // Single, distinctive font with multiple weights for better performance
@@ -94,21 +95,108 @@ export default async function RootLayout({
     );
   }
 
+  // In production this intentionally fails OPEN rather than throwing (a hard
+  // crash on every page for a header-plumbing bug would be worse than a
+  // degraded CSP). But failing open silently means a middleware matcher
+  // regression — a route that stops going through middleware and so never
+  // gets 'x-nonce' set — would be invisible until someone notices scripts or
+  // styles failing to load. Log it loudly so it shows up in server logs
+  // instead of only surfacing as a hard-to-diagnose client-side CSP failure.
+  if (!rawNonce && env.isProd) {
+    console.error(
+      "[layout] Missing 'x-nonce' header in production. Clerk components " +
+        "and any nonce-scoped scripts/styles on this request will fall back " +
+        "to CSP's unsafe-inline path (if a browser still honors it) or fail " +
+        "to load. This usually means middleware's matcher isn't covering " +
+        "this route, or a proxy/edge layer is stripping the header before " +
+        "it reaches this render.",
+    );
+  }
+
   // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
   const nonce = rawNonce || undefined;
 
-  const { auth } = await import("@clerk/nextjs/server");
-  const { userId } = await auth();
-  const isSignedIn = !!userId;
+  let clerkOrigin: string | null = null;
+  if (env.clerk.frontendApi) {
+    try {
+      clerkOrigin = new URL(env.clerk.frontendApi).origin;
+    } catch {
+      // safe fallback
+    }
+  }
+
+  const siteUrl = env.appUrl ?? "http://localhost:3500";
+
+  // Organization structured data — helps Google surface Build Market as a
+  // known entity (knowledge panel, sitelinks) and is a near-zero-cost SEO
+  // win that was previously entirely absent from the page's <head>. Kept
+  // as a plain object (not user input) so JSON.stringify here is safe, and
+  // nonce'd like every other injected script to satisfy the strict CSP
+  // this app already enforces.
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Build Market",
+    url: siteUrl,
+    logo: `${siteUrl}/bm-logo-main.png`,
+    description:
+      "Build Market connects Kenyan homeowners with verified architects, engineers, contractors, and building suppliers.",
+    areaServed: "KE",
+  };
 
   return (
-    <ClerkProvider nonce={nonce} dynamic>
-      <html lang="en" className={dmSans.variable}>
+    <ClerkProvider
+      publishableKey={env.clerk.publishableKey}
+      nonce={nonce}
+      {...(env.clerk.isSatellite
+        ? {
+            isSatellite: true,
+            domain: env.clerk.domain,
+            signInUrl: env.clerk.primarySignInUrl,
+          }
+        : {})}
+    >
+      <html lang="en" className={dmSans.variable} suppressHydrationWarning>
         <head>
-          {/* Preconnect to critical third-party origins */}
-          <link rel="preconnect" href="https://clerk.com" />
+          {/* Preconnect to Clerk FAPI dynamically configured by env */}
+          {clerkOrigin && (
+            <>
+              <link
+                rel="preconnect"
+                href={clerkOrigin}
+                crossOrigin="anonymous"
+              />
+              <link rel="dns-prefetch" href={clerkOrigin} />
+            </>
+          )}
+          <link
+            rel="preconnect"
+            href="https://clerk-telemetry.com"
+            crossOrigin="anonymous"
+          />
+          <link rel="dns-prefetch" href="https://clerk-telemetry.com" />
           <link rel="preconnect" href="https://images.unsplash.com" />
           <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+
+          {/* Organization structured data (see audit doc, SEO section) */}
+          <script
+            type="application/ld+json"
+            nonce={nonce}
+            // SECURITY_XSS_ALLOWLIST: Static schema.org organization metadata, safe JSON-LD without user input
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(organizationJsonLd),
+            }}
+          />
+
+          {/* Pre-hydration theme application: prevents theme flash & supports ?theme=dark */}
+          <script
+            nonce={nonce}
+            // SECURITY_XSS_ALLOWLIST: Static client-side theme initialization IIFE without user input
+            // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive accessibility theme preferences
+            dangerouslySetInnerHTML={{
+              __html: `(function(){try{var p=new URLSearchParams(window.location.search).get('theme');var s=localStorage.getItem('accessibility-settings');var t=p||(s?JSON.parse(s).state?.theme:null);if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.remove('dark');}}catch(e){}})();`,
+            }}
+          />
         </head>
         <body
           className={`${dmSans.className} antialiased bg-background text-foreground`}
@@ -168,11 +256,21 @@ export default async function RootLayout({
           <PostHogProvider>
             <QueryProvider>
               <AccessibilityProvider>
-                <CookieConsentProvider isSignedIn={isSignedIn}>
+                <CookieConsentProvider>
                   <RouteFocusManager />
                   <div id="main-content" tabIndex={-1} className="outline-none">
                     {children}
                   </div>
+                  {/*
+                   * Moved here from being rendered ad hoc at the bottom of
+                   * app/page.tsx. Legal/compliance links must be reachable
+                   * from every route, not just the homepage — mounting
+                   * Footer once in the root layout guarantees that instead
+                   * of relying on every future page author to remember to
+                   * add <Footer /> themselves. See the audit doc's "Legal
+                   * routes" section for the reasoning.
+                   */}
+                  <Footer />
                   <CookieBanner />
                   <ToastContainer
                     position="bottom-right"

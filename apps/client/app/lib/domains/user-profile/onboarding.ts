@@ -18,6 +18,7 @@ import {
 } from "@/app/lib/errors/result";
 import { uploadService } from "@/app/lib/domains/uploads";
 import { syncUserProfileCompletionStatus } from "./completion";
+import { enqueueClerkMetadataSyncEvent } from "./outbox-worker";
 import {
   calculateProfileCompletion,
   getMissingFieldLabels,
@@ -30,7 +31,12 @@ import {
   resolveClientType,
   type ClientTypeComplianceRouting,
 } from "./client-type-compliance";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
+import {
+  professionalReadinessService,
+  type ProfessionalCapabilities,
+} from "@/app/lib/domains/professionals/readiness.service";
+import { publishOnboardingSubmittedEvent } from "@/app/lib/integrations/license-events";
 
 export type ClerkUserProfile = {
   emailAddresses?: Array<{ emailAddress?: string | null }>;
@@ -77,6 +83,9 @@ export type UserProfileOnboardingData = {
   role: string;
   isProfileComplete: boolean;
   clientTypeCompliance?: ClientTypeComplianceRouting;
+  capabilities?: ProfessionalCapabilities;
+  nextRoute?: string;
+  warnings?: string[];
 };
 
 export type SkipOnboardingData = UserProfileOnboardingData & {
@@ -521,6 +530,52 @@ export const userProfileOnboardingService = {
             }
           }
 
+          const targetState =
+            userRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "COMPLETED";
+
+          await tx.onboardingState.upsert({
+            where: { userId: dbUser.id },
+            create: {
+              userId: dbUser.id,
+              state: targetState,
+              role: userRole,
+              completedAt: new Date(),
+            },
+            update: {
+              state: targetState,
+              role: userRole,
+              completedAt: new Date(),
+            },
+          });
+
+          await tx.onboardingTransition.create({
+            data: {
+              userId: dbUser.id,
+              idempotencyKey: actor.correlationId
+                ? `trans_${actor.correlationId}`
+                : `trans_${dbUser.id}_${Date.now()}`,
+              fromState: "NOT_STARTED",
+              toState: targetState,
+              actorClerkId: actor.clerkId,
+              correlationId: actor.correlationId ?? "",
+              reason: "Onboarding completed via submitOnboarding",
+            },
+          });
+
+          await enqueueClerkMetadataSyncEvent(
+            {
+              userId: dbUser.id,
+              clerkId: actor.clerkId,
+              role: userRole,
+              status:
+                targetState === "PENDING_VERIFICATION"
+                  ? "PENDING_VERIFICATION"
+                  : "ACTIVE",
+              correlationId: actor.correlationId,
+            },
+            tx,
+          );
+
           return dbUser;
         },
         { maxWait: 10000, timeout: 30000 },
@@ -535,11 +590,56 @@ export const userProfileOnboardingService = {
         });
       }
 
+      let capabilities: ProfessionalCapabilities | undefined;
+      let nextRoute: string | undefined;
+
+      if (user.role === "PROFESSIONAL") {
+        const readinessRes = await professionalReadinessService.getReadiness(
+          user.id,
+        );
+        if (readinessRes.ok) {
+          capabilities = readinessRes.data.capabilities;
+          nextRoute = readinessRes.data.nextRoute;
+        }
+
+        // Fetch licenses for regulator verification event publishing
+        const proLicenses = await prisma.professionalLicense.findMany({
+          where: { professionalId: user.id },
+          select: {
+            id: true,
+            authority: true,
+            licenseNumber: true,
+            professional: { select: { companyName: true } },
+          },
+        });
+
+        if (proLicenses.length > 0) {
+          publishOnboardingSubmittedEvent({
+            professionalId: user.id,
+            correlationId:
+              actor.correlationId ?? `onboarding_${user.id}_${Date.now()}`,
+            licenses: proLicenses.map((l) => ({
+              licenseId: l.id,
+              authority: l.authority,
+              licenseNumber: l.licenseNumber,
+              companyName: l.professional.companyName,
+            })),
+          }).catch(() => {
+            // Non-blocking background event dispatch
+          });
+        }
+      }
+
+      const warnings: string[] = [];
+
       return ok({
         userId: user.id,
         role: user.role,
         isProfileComplete: completionResult.data.isProfileComplete,
         ...(clientTypeCompliance ? { clientTypeCompliance } : {}),
+        ...(capabilities ? { capabilities } : {}),
+        ...(nextRoute ? { nextRoute } : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
       });
     } catch (error) {
       if (
@@ -662,6 +762,46 @@ export const userProfileOnboardingService = {
             },
           });
 
+          await tx.onboardingState.upsert({
+            where: { userId: dbUser.id },
+            create: {
+              userId: dbUser.id,
+              state: "COMPLETED",
+              role: "CLIENT",
+              completedAt: new Date(),
+            },
+            update: {
+              state: "COMPLETED",
+              role: "CLIENT",
+              completedAt: new Date(),
+            },
+          });
+
+          await tx.onboardingTransition.create({
+            data: {
+              userId: dbUser.id,
+              idempotencyKey: actor.correlationId
+                ? `trans_${actor.correlationId}`
+                : `trans_${dbUser.id}_${Date.now()}`,
+              fromState: "NOT_STARTED",
+              toState: "COMPLETED",
+              actorClerkId: actor.clerkId,
+              correlationId: actor.correlationId ?? "",
+              reason: "Onboarding skipped via skipClientOnboarding",
+            },
+          });
+
+          await enqueueClerkMetadataSyncEvent(
+            {
+              userId: dbUser.id,
+              clerkId: actor.clerkId,
+              role: "CLIENT",
+              status: "ACTIVE",
+              correlationId: actor.correlationId,
+            },
+            tx,
+          );
+
           return {
             user: dbUser,
             clientTypeCompliance,
@@ -757,6 +897,46 @@ export const userProfileOnboardingService = {
               verified: false,
             },
           });
+
+          await tx.onboardingState.upsert({
+            where: { userId: dbUser.id },
+            create: {
+              userId: dbUser.id,
+              state: "PENDING_VERIFICATION",
+              role: "PROFESSIONAL",
+              completedAt: new Date(),
+            },
+            update: {
+              state: "PENDING_VERIFICATION",
+              role: "PROFESSIONAL",
+              completedAt: new Date(),
+            },
+          });
+
+          await tx.onboardingTransition.create({
+            data: {
+              userId: dbUser.id,
+              idempotencyKey: actor.correlationId
+                ? `trans_${actor.correlationId}`
+                : `trans_${dbUser.id}_${Date.now()}`,
+              fromState: "NOT_STARTED",
+              toState: "PENDING_VERIFICATION",
+              actorClerkId: actor.clerkId,
+              correlationId: actor.correlationId ?? "",
+              reason: "Onboarding skipped via skipProfessionalOnboarding",
+            },
+          });
+
+          await enqueueClerkMetadataSyncEvent(
+            {
+              userId: dbUser.id,
+              clerkId: actor.clerkId,
+              role: "PROFESSIONAL",
+              status: "PENDING_VERIFICATION",
+              correlationId: actor.correlationId,
+            },
+            tx,
+          );
 
           return dbUser;
         },
@@ -1130,6 +1310,46 @@ export const userProfileOnboardingService = {
             );
           }
 
+          await tx.onboardingState.upsert({
+            where: { userId: actor.userId },
+            create: {
+              userId: actor.userId,
+              state: "COMPLETED",
+              role: "PROFESSIONAL",
+              completedAt: now,
+            },
+            update: {
+              state: "COMPLETED",
+              role: "PROFESSIONAL",
+              completedAt: now,
+            },
+          });
+
+          await tx.onboardingTransition.create({
+            data: {
+              userId: actor.userId,
+              idempotencyKey: actor.correlationId
+                ? `trans_${actor.correlationId}`
+                : `trans_${actor.userId}_${Date.now()}`,
+              fromState: "ROLE_SELECTED",
+              toState: "COMPLETED",
+              actorClerkId: actor.clerkId,
+              correlationId: actor.correlationId ?? "",
+              reason: "Onboarding completed via completeProfessionalOnboarding",
+            },
+          });
+
+          await enqueueClerkMetadataSyncEvent(
+            {
+              userId: actor.userId,
+              clerkId: actor.clerkId,
+              role: "PROFESSIONAL",
+              status: "ACTIVE",
+              correlationId: actor.correlationId,
+            },
+            tx,
+          );
+
           return { user, profile: professionalProfile };
         },
         { maxWait: 10000, timeout: 30000 },
@@ -1142,8 +1362,7 @@ export const userProfileOnboardingService = {
           phone: transactionResult.user.phone,
           avatar: transactionResult.user.avatar,
           role: transactionResult.user.role.toLowerCase() as
-            | "client"
-            | "professional",
+            "client" | "professional",
         },
         transactionResult.profile,
       );

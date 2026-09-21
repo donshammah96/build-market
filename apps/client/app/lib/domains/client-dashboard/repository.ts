@@ -1,5 +1,6 @@
 import { ProjectStatus } from "@prisma/client";
 import { prisma } from "@build/db";
+import { toClientDashboardDto } from "./mappers";
 import type {
   DashboardDataDto,
   DashboardIdeaBookDto,
@@ -162,8 +163,12 @@ export const clientDashboardRepository = {
         budget,
         milestoneCount: p._count.milestones,
         professional,
-        startDate: p.startDate?.toISOString() ?? null,
-        estimatedEndDate: p.endDate?.toISOString() ?? null,
+        startDate: p.startDate
+          ? (toClientDashboardDto(p.startDate) as unknown as string)
+          : null,
+        estimatedEndDate: p.endDate
+          ? (toClientDashboardDto(p.endDate) as unknown as string)
+          : null,
       };
     });
 
@@ -190,7 +195,7 @@ export const clientDashboardRepository = {
         itemCount,
         attachmentCount: book._count.attachments,
         coverImage,
-        updatedAt: book.updatedAt.toISOString(),
+        updatedAt: toClientDashboardDto(book.updatedAt) as unknown as string,
       };
     });
 

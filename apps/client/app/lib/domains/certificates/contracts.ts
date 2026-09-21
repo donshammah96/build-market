@@ -57,7 +57,7 @@ export type CertificateListItem = {
   updatedAt: string;
   asset: {
     id: string;
-    cdnUrl: string | null;
+    visibility: string;
     originalName: string | null;
     mimeType: string | null;
     size: number | null;
@@ -87,8 +87,8 @@ export type CertificateDeleteResult = {
 
 /** Internal repository return types */
 export type GetCertificateResult =
-  | { success: true; data: CertificateDetail }
-  | { success: false; error: "not_found" | "forbidden" };
+  | { ok: true; data: CertificateDetail }
+  | { ok: false; error: "not_found" | "forbidden" };
 
 export type CreateCertificateResult =
   | { data: CertificateListItem }
@@ -101,5 +101,4 @@ export type UpdateCertificateResult =
     };
 
 export type DeleteCertificateResult =
-  | { data: CertificateDeleteResult }
-  | { error: "not_found" | "forbidden" };
+  { data: CertificateDeleteResult } | { error: "not_found" | "forbidden" };

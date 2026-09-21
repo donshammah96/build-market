@@ -215,12 +215,11 @@ export function domainResultToErrorResponse<T>(
 }
 
 export function conflictResponse(
-  message: string,
   currentVersion: number | null | undefined,
   correlationId: string,
 ): NextResponse {
   const response = apiError(
-    message,
+    "Resource version conflict. Retry with the latest version.",
     HttpStatus.CONFLICT,
     undefined,
     correlationId,

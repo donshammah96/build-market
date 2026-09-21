@@ -4,12 +4,13 @@ import { NextRequest } from "next/server";
 
 const mockGetPublicSettings = vi.hoisted(() => vi.fn());
 
-vi.mock("@build/db/system-settings", () => ({
+vi.mock("@/app/lib/domains/settings", () => ({
   getPublicSettings: (...args: unknown[]) => mockGetPublicSettings(...args),
 }));
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
+  checkReadRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
 }));
 
@@ -56,8 +57,8 @@ describe("GET /api/settings/public", () => {
   });
 
   it("returns 429 when rate limited", async () => {
-    const { checkRateLimit } = await import("@/app/lib/api/rate-limit");
-    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+    const { checkReadRateLimit } = await import("@/app/lib/api/rate-limit");
+    vi.mocked(checkReadRateLimit).mockResolvedValueOnce({
       success: false,
     } as never);
 

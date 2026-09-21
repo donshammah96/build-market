@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Verification Operations Center Design Tokens & Base Styles
+ * Note: Internal operations center is dark-mode only by deliberate design choice.
+ */
+:root {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --primary: 142.1 76.2% 36.3%;
+  --primary-foreground: 355.7 100% 97.3%;
+}
+
+body {
+  background-color: #09090b;
+  color: #fafafa;
+}

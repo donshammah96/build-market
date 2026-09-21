@@ -4,7 +4,7 @@ import Link from "next/link";
 import { LayoutTemplate } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export function EmptyState() {
   return (

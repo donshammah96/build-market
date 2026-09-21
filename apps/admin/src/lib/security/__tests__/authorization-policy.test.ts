@@ -1,27 +1,50 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@build/db", () => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    OPS_ADMIN: "OPS_ADMIN",
+    VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    FINANCE_MANAGER: "FINANCE_MANAGER",
+    AUDITOR: "AUDITOR",
+  },
+}));
+
 import {
   ADMIN_ACTION_POLICY_MAP,
   ADMIN_ROUTE_POLICY_MAP,
   getAdminActionPolicy,
 } from "../authorization-policy";
+import { AdminRole } from "@build/enums";
 
 describe("authorization-policy", () => {
   it("returns explicit high-risk policy for deleteUser", () => {
     const policy = getAdminActionPolicy("deleteUser");
     expect(policy.risk).toBe("high");
-    expect(policy.allowedRoles).toEqual(["admin"]);
+    expect(policy.allowedRoles).toEqual([AdminRole.SUPER_ADMIN]);
   });
 
   it("returns explicit verification policy for batch verification actions", () => {
     const policy = getAdminActionPolicy("batchVerifyEntities");
     expect(policy.risk).toBe("high");
-    expect(policy.allowedRoles).toEqual(["admin", "verification_admin"]);
+    expect(policy.allowedRoles).toEqual([
+      AdminRole.SUPER_ADMIN,
+      AdminRole.CONTENT_MODERATOR,
+    ]);
   });
 
-  it("falls back to default admin-only low-risk policy for unknown actions", () => {
+  it("falls back to default active-admin low-risk policy for unknown actions", () => {
     const policy = getAdminActionPolicy("unknownAction");
     expect(policy.risk).toBe("low");
-    expect(policy.allowedRoles).toEqual(["admin"]);
+    expect(policy.allowedRoles).toEqual([
+      AdminRole.SUPER_ADMIN,
+      AdminRole.CONTENT_MODERATOR,
+      AdminRole.SUPPORT_AGENT,
+      AdminRole.FINANCE_MANAGER,
+      AdminRole.AUDITOR,
+    ]);
   });
 
   it("defines expected route-level access requirements", () => {
@@ -68,37 +91,39 @@ describe("authorization-policy", () => {
     const actionMatrix = [
       {
         action: "deleteUser",
-        adminAllowed: true,
-        verificationAdminAllowed: false,
+        superAdminAllowed: true,
+        contentModeratorAllowed: false,
       },
       {
         action: "assignUserRole",
-        adminAllowed: true,
-        verificationAdminAllowed: false,
+        superAdminAllowed: true,
+        contentModeratorAllowed: false,
       },
       {
         action: "verifyEntity",
-        adminAllowed: true,
-        verificationAdminAllowed: true,
+        superAdminAllowed: true,
+        contentModeratorAllowed: true,
       },
       {
         action: "verifyDocument",
-        adminAllowed: true,
-        verificationAdminAllowed: true,
+        superAdminAllowed: true,
+        contentModeratorAllowed: true,
       },
     ] as const;
 
     for (const row of actionMatrix) {
       const policy = getAdminActionPolicy(row.action);
-      expect(policy.allowedRoles.includes("admin")).toBe(row.adminAllowed);
-      expect(policy.allowedRoles.includes("verification_admin")).toBe(
-        row.verificationAdminAllowed,
+      expect(policy.allowedRoles.includes(AdminRole.SUPER_ADMIN)).toBe(
+        row.superAdminAllowed,
+      );
+      expect(policy.allowedRoles.includes(AdminRole.CONTENT_MODERATOR)).toBe(
+        row.contentModeratorAllowed,
       );
     }
   });
 
-  it("keeps action policies constrained to supported access roles", () => {
-    const allowedRoles = new Set(["admin", "verification_admin"]);
+  it("keeps action policies constrained to supported admin roles", () => {
+    const allowedRoles = new Set(Object.values(AdminRole));
 
     for (const policy of Object.values(ADMIN_ACTION_POLICY_MAP)) {
       for (const role of policy.allowedRoles) {

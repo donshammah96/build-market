@@ -13,14 +13,13 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   IdeaBookQuerySchema,
   CreateIdeaBookSchema,
   IDEA_BOOK_CONFIG,
 } from "@/app/lib/validation/idea-books-validation";
 import { ideaBooksService } from "@/app/lib/domains/idea-books";
-
-const logger = getClientLogger();
 
 function mapIdeaBooksError(error: {
   error: string;
@@ -90,7 +89,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch idea books", result.error, {
+      getClientLogger().error("Failed to fetch idea books", result.error, {
         actorRole: userRole,
       });
       return apiError(
@@ -150,12 +149,6 @@ export const POST = withAuth(
       dbUserId,
       "POST",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -182,7 +175,7 @@ export const POST = withAuth(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to create idea book", result.error, {
+      getClientLogger().error("Failed to create idea book", result.error, {
         correlationId,
         actorRole: userRole,
       });
@@ -198,7 +191,7 @@ export const POST = withAuth(
     }
 
     const ideaBook = result.data.data;
-    await IdempotencyService.complete(idempotencyKey, ideaBook);
+    await safeIdempotencyComplete(idempotencyKey, ideaBook);
     return apiSuccess(ideaBook, HttpStatus.CREATED);
   },
 );

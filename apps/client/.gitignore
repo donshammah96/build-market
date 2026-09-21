@@ -13,8 +13,10 @@
 # testing
 /coverage
 
-# next.js
+# next.js / cloudflare opennext
 /.next/
+/.open-next/
+/.worker-next/
 /out/
 
 # production
@@ -52,3 +54,6 @@ yarn-error.log*
 next-env.d.ts
 
 MESSAGING_API_SETUP.md
+
+# Secrets Rotation Tracker
+secrets-rotation-*.csv

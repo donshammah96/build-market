@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: build-market-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: buildmarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d buildmarket"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - build-market-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: build-market-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory-policy noeviction
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - build-market-net
+
+  nats:
+    image: nats:latest
+    container_name: build-market-nats
+    restart: unless-stopped
+    command: -js -m 8222
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - build-market-net
+
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: build-market-workers
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/buildmarket?schema=public
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      NODE_ENV: development
+      HEALTH_PORT: "8080"
+    ports:
+      - "18080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - build-market-net
+    profiles: ["all", "workers"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+
+networks:
+  build-market-net:
+    driver: bridge

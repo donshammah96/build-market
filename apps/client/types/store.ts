@@ -49,11 +49,7 @@ export type StoreCategory =
 
 // Store type enum - matches Prisma StoreType
 export type StoreType =
-  | "retail"
-  | "wholesale"
-  | "manufacturer"
-  | "distributor"
-  | "online_only";
+  "retail" | "wholesale" | "manufacturer" | "distributor" | "online_only";
 
 // County enum - matches Prisma County
 export type County =

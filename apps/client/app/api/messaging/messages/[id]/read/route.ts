@@ -18,8 +18,6 @@ import {
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
-
 type MessageParams = { id: string };
 
 function toMessagingActor(context: {
@@ -66,7 +64,7 @@ export const POST = withAuth<MessageParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to mark message as read", result.error, {
+      getClientLogger().error("Failed to mark message as read", result.error, {
         correlationId,
         messageId,
       });

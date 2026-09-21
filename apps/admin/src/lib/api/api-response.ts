@@ -84,10 +84,10 @@ export interface PaginationInfo {
 export interface ApiErrorResponse {
   success: false;
   error: string;
-  code?: string;
+  code?: string | undefined;
   details?: unknown;
   timestamp: string;
-  correlationId?: string;
+  correlationId?: string | undefined;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface ApiSuccessResponse<T> {
   success: true;
   data: T;
   timestamp: string;
-  correlationId?: string;
+  correlationId?: string | undefined;
 }
 
 /**
@@ -108,7 +108,7 @@ export interface ApiListResponse<T> {
   data: T[];
   pagination: PaginationInfo;
   timestamp: string;
-  correlationId?: string;
+  correlationId?: string | undefined;
 }
 
 /**
@@ -184,7 +184,7 @@ export function buildSuccessResponse<T>(
     success: true,
     data,
     timestamp: new Date().toISOString(),
-    correlationId,
+    ...(correlationId ? { correlationId } : {}),
   };
 }
 
@@ -201,7 +201,7 @@ export function buildListResponse<T>(
     data,
     pagination,
     timestamp: new Date().toISOString(),
-    correlationId,
+    ...(correlationId ? { correlationId } : {}),
   };
 }
 
@@ -217,9 +217,9 @@ export function buildErrorResponse(
   return {
     success: false,
     error,
-    code,
-    details,
     timestamp: new Date().toISOString(),
-    correlationId,
+    ...(code ? { code } : {}),
+    ...(details !== undefined ? { details } : {}),
+    ...(correlationId ? { correlationId } : {}),
   };
 }

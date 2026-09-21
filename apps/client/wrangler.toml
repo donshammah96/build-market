@@ -3,9 +3,79 @@ main = ".open-next/worker.js"
 compatibility_date = "2026-04-18"
 compatibility_flags = ["nodejs_compat"]
 
+# OpenNext outputs the built worker entry point to .open-next/worker.js
+# and static assets to .open-next/assets. Building is orchestrated explicitly
+# via CI (deploy.yml) or local scripts (`pnpm run build:cloudflare-worker`).
+
+
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
 [observability]
 enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1
+
+# --- Staging Environment ---
+[env.staging]
+name = "build-market-client-staging"
+
+[[env.staging.tail_consumers]]
+service = "dd-tail-forwarder-staging"
+
+[[env.staging.r2_buckets]]
+binding = "STAGED_BUCKET"
+bucket_name = "buildmarket-staged-staging"
+
+[[env.staging.r2_buckets]]
+binding = "VERIFIED_PRIVATE_BUCKET"
+bucket_name = "buildmarket-verified-private-staging"
+
+[[env.staging.r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "buildmarket-inc-cache-staging"
+
+[[env.staging.queues.producers]]
+queue = "upload-scan-queue-staging"
+binding = "UPLOAD_SCAN_QUEUE"
+
+# VERIFIED_PRIVATE_BUCKET is bound because authorized Next.js route handlers (e.g. download)
+# read clean documents server-side via storage.readObject() after authorization.
+# QUARANTINE_BUCKET is intentionally excluded here, same as production —
+# the client app has no legitimate reason to read quarantined files.
+# Keep this exclusion; it's a correct least-privilege decision already
+# made in the original config, just carried forward per-environment now.
+
+# --- Production Environment ---
+[env.production]
+name = "build-market-client-production"
+
+[[env.production.tail_consumers]]
+service = "dd-tail-forwarder-production"
+
+[[env.production.r2_buckets]]
+binding = "STAGED_BUCKET"
+bucket_name = "buildmarket-staged"
+
+[[env.production.r2_buckets]]
+binding = "VERIFIED_PRIVATE_BUCKET"
+bucket_name = "buildmarket-verified-private"
+
+[[env.production.r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "buildmarket-inc-cache-production"
+
+[[env.production.queues.producers]]
+queue = "upload-scan-queue-production"
+binding = "UPLOAD_SCAN_QUEUE"

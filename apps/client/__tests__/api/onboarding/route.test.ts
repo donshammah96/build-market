@@ -65,6 +65,19 @@ vi.mock("@/app/lib/domains/user-profile", () => ({
   },
 }));
 
+vi.mock("@/app/lib/domains/user-profile/clerk-metadata", () => ({
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE:
+    "Unable to finalize account state. Please retry.",
+  finalizeClerkOnboardingTransition: vi.fn(async (params) => {
+    try {
+      await mockClerkUpdateUserMetadata({});
+    } catch (error) {
+      await params.onFailure?.();
+      throw error;
+    }
+  }),
+}));
+
 vi.mock("@/app/lib/api/api-response", () => ({
   apiError: vi
     .fn()
@@ -203,7 +216,79 @@ describe("POST /api/onboarding", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data.role).toBe("PROFESSIONAL");
+    expect(data.data).toEqual(
+      expect.objectContaining({
+        userId: "db_user_123",
+        profileId: "db_user_123",
+        role: "PROFESSIONAL",
+        status: "PENDING_VERIFICATION",
+        nextRoute: "/professional-portal/pending-verification",
+        warnings: [],
+      }),
+    );
+  });
+
+  it("normalizes cached professional idempotency responses to the public contract", async () => {
+    const { IdempotencyService } =
+      await import("@/app/lib/services/idempotency.service");
+    vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValueOnce({
+      status: "completed",
+      response: {
+        userId: "db_user_cached",
+        role: "PROFESSIONAL",
+        isProfileComplete: true,
+      },
+    });
+
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        role: "professional",
+        profession: "ARCHITECT",
+        companyName: "Cached Company Ltd",
+        county: "NAIROBI",
+        licensePending: true,
+        licensePendingReason: "License renewal is pending with the authority.",
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data).toEqual(
+      expect.objectContaining({
+        userId: "db_user_cached",
+        profileId: "db_user_cached",
+        role: "PROFESSIONAL",
+        status: "PENDING_VERIFICATION",
+        nextRoute: "/professional-portal/pending-verification",
+        warnings: [],
+      }),
+    );
+    expect(mockCompleteOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("rejects dedicated Join-as-Pro submissions without trusted professional intent", async () => {
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        role: "professional",
+        profession: "ARCHITECT",
+        companyName: "No Intent Company Ltd",
+        county: "NAIROBI",
+        licensePending: true,
+        licensePendingReason: "License renewal is pending with the authority.",
+      }),
+      headers: { "x-onboarding-source": "join-as-pro" },
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toContain("Professional onboarding intent expired");
+    expect(mockCompleteOnboarding).not.toHaveBeenCalled();
   });
 
   it("should reject invalid role", async () => {
@@ -238,7 +323,9 @@ describe("POST /api/onboarding", () => {
       }),
     );
 
-    const warnCall = mockLoggerWarn.mock.calls.at(-1);
+    const warnCall = mockLoggerWarn.mock.calls.find(
+      ([message]) => message === "Onboarding validation failed",
+    );
     const loggedErrors = (warnCall?.[1] as { errors?: unknown[] } | undefined)
       ?.errors;
     expect(Array.isArray(loggedErrors)).toBe(true);

@@ -14,8 +14,6 @@ import {
 import { isValidId } from "@/app/lib/api/api-guards";
 import { projectsService } from "@/app/lib/domains/projects/service";
 
-const logger = getClientLogger();
-
 type EscrowParams = { id: string; escrowId: string };
 
 /**
@@ -62,7 +60,7 @@ export const GET = withAuth<EscrowParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch escrow detail", result.error, {
+      getClientLogger().error("Failed to fetch escrow detail", result.error, {
         correlationId,
         escrowId,
       });

@@ -20,12 +20,11 @@ import {
 } from "lucide-react";
 
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PropertyCard from "@/components/real-estate/PropertyCard";
-import { propertiesClient } from "@/lib/properties-client";
+import { propertiesClient } from "@/lib/facades/properties-client";
 import PropertyGallery from "./_components/property-gallery";
 
 export const revalidate = 60;
@@ -390,8 +389,6 @@ export default async function PropertyDetailPage({
           </section>
         )}
       </main>
-
-      <Footer />
     </div>
   );
 }

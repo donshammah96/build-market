@@ -59,8 +59,8 @@ async function loadPasswordHashModule(): Promise<PasswordHashModule> {
 }
 
 export async function hashPasswordScrypt(password: string): Promise<string> {
-  const module = await loadPasswordHashModule();
-  return module.hashPasswordScrypt(password);
+  const pwModule = await loadPasswordHashModule();
+  return pwModule.hashPasswordScrypt(password);
 }
 
 export async function scryptAsync(
@@ -69,14 +69,14 @@ export async function scryptAsync(
   keylen: number,
   opts: { N: number; r: number; p: number },
 ): Promise<Buffer> {
-  const module = await loadPasswordHashModule();
-  return module.scryptAsync(password, salt, keylen, opts);
+  const pwModule = await loadPasswordHashModule();
+  return pwModule.scryptAsync(password, salt, keylen, opts);
 }
 
 export async function verifyScryptPassword(
   password: string,
   passwordHash: string,
 ): Promise<boolean> {
-  const module = await loadPasswordHashModule();
-  return module.verifyScryptPassword(password, passwordHash);
+  const pwModule = await loadPasswordHashModule();
+  return pwModule.verifyScryptPassword(password, passwordHash);
 }

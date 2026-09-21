@@ -5,7 +5,7 @@ applyTo: ".github/instructions/**"
 
 # Instruction Authoring Standard
 
-Last aligned with canonical on: 2026-04-04.
+Last aligned with canonical on: 2026-08-15.
 
 ## Scope
 

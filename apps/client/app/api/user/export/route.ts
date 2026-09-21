@@ -58,7 +58,6 @@ import {
 } from "@/app/lib/api/request-utils";
 import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 /**
@@ -98,7 +97,7 @@ export const POST = withAuth(
       );
 
       if (!success) {
-        logger.warn("Rate limit exceeded for export request", {
+        getClientLogger().warn("Rate limit exceeded for export request", {
           rateLimitKey,
           correlationId,
           operationName: "request_data_export",
@@ -112,7 +111,7 @@ export const POST = withAuth(
       // Capture request metadata for audit
       const { ipAddress, userAgent } = getRequestMetadata(req);
 
-      logger.info("Processing data export request", {
+      getClientLogger().info("Processing data export request", {
         ipAddress,
         correlationId,
         operationName: "request_data_export",
@@ -139,7 +138,7 @@ export const POST = withAuth(
 
         // Handle rate limit from service layer
         if (error?.message?.includes("rate limit")) {
-          logger.warn("Export rate limit exceeded", {
+          getClientLogger().warn("Export rate limit exceeded", {
             correlationId,
             operationName: "request_data_export",
           });
@@ -149,7 +148,7 @@ export const POST = withAuth(
           );
         }
 
-        logger.error(
+        getClientLogger().error(
           "Export request failed",
           error || new Error("Unknown error"),
           {
@@ -174,7 +173,7 @@ export const POST = withAuth(
       if (!exportResult.ok) {
         const status = exportResult.status || HttpStatus.INTERNAL_SERVER_ERROR;
 
-        logger.warn("Export request rejected", {
+        getClientLogger().warn("Export request rejected", {
           message: exportResult.message,
           correlationId,
           operationName: "request_data_export",
@@ -187,7 +186,7 @@ export const POST = withAuth(
         );
       }
 
-      logger.info("Export request completed successfully", {
+      getClientLogger().info("Export request completed successfully", {
         exportId: exportResult.data.exportId,
         status: exportResult.data.status,
         correlationId,
@@ -197,7 +196,7 @@ export const POST = withAuth(
 
       return apiSuccess(exportResult.data, HttpStatus.ACCEPTED);
     } catch (error) {
-      logger.error(
+      getClientLogger().error(
         "Export request error",
         error instanceof Error ? error : new Error(String(error)),
         {
@@ -247,7 +246,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!success) {
-      logger.warn("Rate limit exceeded for export status check", {
+      getClientLogger().warn("Rate limit exceeded for export status check", {
         identifier,
         correlationId,
         operationName: "fetch_export_status",
@@ -263,7 +262,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     // Handle list all exports when no ID provided
     if (!exportId) {
-      logger.info("Fetching all exports for user", {
+      getClientLogger().info("Fetching all exports for user", {
         correlationId,
         operationName: "list_user_exports",
       });
@@ -282,7 +281,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
 
       if (!listResult.success) {
-        logger.error(
+        getClientLogger().error(
           "Failed to list exports",
           listResult.error || new Error("Unknown error"),
           {
@@ -315,7 +314,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     // Validate exportId format (UUID)
     const idValidation = UUIDSchema.safeParse(exportId);
     if (!idValidation.success) {
-      logger.warn("Invalid export ID format", {
+      getClientLogger().warn("Invalid export ID format", {
         exportId,
         correlationId,
         operationName: "fetch_export_status",
@@ -341,7 +340,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!result.success) {
-      logger.error(
+      getClientLogger().error(
         "Failed to fetch export status",
         result.error || new Error("Unknown error"),
         {
@@ -365,7 +364,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
     if (!exportData.ok) {
-      logger.warn("Export not found or unauthorized", {
+      getClientLogger().warn("Export not found or unauthorized", {
         exportId,
         correlationId,
         operationName: "fetch_export_status",
@@ -379,7 +378,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
     return apiSuccess(exportData.data, HttpStatus.OK);
   } catch (error) {
-    logger.error(
+    getClientLogger().error(
       "Export status fetch error",
       error instanceof Error ? error : new Error(String(error)),
       {

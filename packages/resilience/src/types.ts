@@ -4,6 +4,9 @@
 
 export type OperationCriticality = "critical" | "normal" | "background";
 
+export type ResilienceOutcome =
+  "success" | "cache_hit" | "fallback" | "timeout" | "circuit_open" | "error";
+
 export interface TimeoutConfig {
   critical: number;
   normal: number;
@@ -50,8 +53,18 @@ export interface LogContext {
   // Log actorRole (an enum with no identity) instead. Any call site that was
   // passing userId will now produce a compile error, making violations visible
   // at build time rather than leaking silently at runtime.
+  userId?: never;
+  clerkId?: never;
+  userEmail?: never;
+  email?: never;
+  phone?: never;
+  nationalId?: never;
   operationName?: string;
   serviceName?: string;
+  // traceId / spanId are injected automatically by the logger's OTel mixin
+  // when an active span exists — do not set these manually from call sites.
+  traceId?: string;
+  spanId?: string;
   [key: string]: unknown;
 }
 
@@ -81,22 +94,24 @@ export interface CircuitBreakerState {
   nextAttemptTime?: number;
 }
 
-export interface ResilienceOptions {
+export interface ResilienceOptions<T = unknown> {
   timeout?: number | OperationCriticality;
   retry?: Partial<RetryConfig> | boolean;
   circuitBreaker?: Partial<CircuitBreakerConfig> | boolean;
   cache?: Partial<CacheConfig> | boolean;
-  fallback?: () => Promise<any>;
+  fallback?: () => Promise<T>;
   metrics?: boolean;
   operationName?: string;
+  cacheKey?: string;
 }
 
 export interface OperationResult<T> {
   success: boolean;
   data?: T;
   error?: Error;
+  outcome: ResilienceOutcome;
   fromCache?: boolean;
   fromFallback?: boolean;
-  attempts?: number;
-  duration?: number;
+  attempts: number;
+  duration: number;
 }

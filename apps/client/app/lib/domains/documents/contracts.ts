@@ -53,7 +53,7 @@ export type DocumentListItem = {
   updatedAt: string;
   asset: {
     id: string;
-    cdnUrl: string | null;
+    visibility: string;
     originalName: string | null;
     mimeType: string | null;
     size: number | null;
@@ -84,5 +84,4 @@ export type DocumentDeleteResult = {
 
 /** Internal repository return type for getDocumentById */
 export type GetDocumentResult =
-  | { data: DocumentDetail }
-  | { error: "not_found" | "forbidden" };
+  { data: DocumentDetail } | { error: "not_found" | "forbidden" };

@@ -109,8 +109,7 @@ export async function createStoreAction(data: CreateStoreActionInput) {
         "store",
         actor!.dbUserId,
         "POST",
-        undefined,
-        STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -181,8 +180,7 @@ export async function createStoresBatchAction(
         "store",
         actor!.dbUserId,
         "POST",
-        undefined,
-        STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -260,8 +258,7 @@ export async function updateStoreAction(input: UpdateStoreActionInput) {
         "store",
         actor!.dbUserId,
         "PATCH",
-        input.id,
-        STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -387,8 +384,7 @@ export async function deleteStoreAction(input: DeleteStoreActionInput) {
         "store",
         actor!.dbUserId,
         "DELETE",
-        input.id,
-        STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (

@@ -4,8 +4,14 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const envPath = path.resolve(__dirname, "..", ".env");
+const currentDir =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
+
+const envPath = path.resolve(currentDir, "..", ".env");
 if (fs.existsSync(envPath)) {
   const envConfig = fs.readFileSync(envPath, "utf-8");
   envConfig.split("\n").forEach((line) => {

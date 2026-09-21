@@ -2,39 +2,49 @@
   "name": "@build/auth-server",
   "version": "1.0.0",
   "description": "Server-side auth contracts and utilities",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./roles": {
-      "types": "./src/roles.ts",
-      "default": "./src/roles.ts"
+      "types": "./dist/roles.d.ts",
+      "import": "./dist/roles.js",
+      "default": "./dist/roles.js"
     },
     "./password-hash": {
-      "types": "./src/password-hash.ts",
-      "default": "./src/password-hash.ts"
+      "types": "./dist/password-hash.d.ts",
+      "import": "./dist/password-hash.js",
+      "default": "./dist/password-hash.js"
     },
     "./session-claims": {
-      "types": "./src/session-claims.ts",
-      "default": "./src/session-claims.ts"
+      "types": "./dist/session-claims.d.ts",
+      "import": "./dist/session-claims.js",
+      "default": "./dist/session-claims.js"
     },
     "./check-user-role": {
-      "types": "./src/check-user-role.ts",
-      "default": "./src/check-user-role.ts"
+      "types": "./dist/check-user-role.d.ts",
+      "import": "./dist/check-user-role.js",
+      "default": "./dist/check-user-role.js"
     }
   },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
     "lint": "echo \"No lint configured\" && exit 0",
     "check-types": "tsc --noEmit",
+    "build": "tsc",
+    "prepack": "pnpm run build",
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {},
   "devDependencies": {
     "@build/typescript-config": "workspace:*",
-    "@types/node": "^24.8.1",
-    "typescript": "^5.9.3"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

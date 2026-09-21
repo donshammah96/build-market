@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { AlertCircle, ArrowLeft, RefreshCcw } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export default function PropertyDetailError({
   error,

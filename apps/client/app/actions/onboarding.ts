@@ -226,9 +226,13 @@ export async function submitOnboarding(
         );
       }
 
+      const clientKey =
+        (input as { idempotencyKey?: string }).idempotencyKey ?? randomUUID();
+
       const idempotencyKey = IdempotencyService.generateKey(clerkId, "POST", {
         domain: "onboarding",
         role: normalizedInputRole,
+        clientKey,
       });
 
       const replayResult = await checkOnboardingTransitionIdempotency({
@@ -280,6 +284,7 @@ export async function skipOnboarding(): Promise<
       const idempotencyKey = IdempotencyService.generateKey(clerkId, "POST", {
         domain: "onboarding-skip-client",
         role: "CLIENT",
+        attemptId: randomUUID(),
       });
 
       const replayResult = await checkOnboardingTransitionIdempotency({
@@ -325,6 +330,7 @@ export async function skipProfessionalOnboarding(): Promise<
       const idempotencyKey = IdempotencyService.generateKey(clerkId, "POST", {
         domain: "onboarding-skip-professional",
         role: "PROFESSIONAL",
+        attemptId: randomUUID(),
       });
 
       const replayResult = await checkOnboardingTransitionIdempotency({

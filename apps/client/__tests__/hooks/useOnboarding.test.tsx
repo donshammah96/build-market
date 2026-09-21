@@ -8,7 +8,7 @@ import {
   OnboardingAnalyticsProvider,
   NullAnalytics,
 } from "@/lib/analytics/OnboardingAnalyticsContext";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const mockReplace = vi.hoisted(() => vi.fn());
 const mockPush = vi.hoisted(() => vi.fn());
@@ -30,7 +30,7 @@ let mockUserState: {
 };
 
 const mockSearchParams = vi.hoisted(() => ({
-  get: vi.fn(() => null),
+  get: vi.fn((_: string) => null as string | null),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -56,7 +56,7 @@ vi.mock("react-toastify", () => ({
   },
 }));
 
-vi.mock("@/lib/onboarding-client", () => ({
+vi.mock("@/lib/facades/onboarding-client", () => ({
   onboardingClient: {
     skipClient: mockSkipClient,
     skipProfessional: mockSkipProfessional,
@@ -105,7 +105,7 @@ describe("useOnboarding", () => {
     });
   });
 
-  it("submits onboarding data and routes professionals to their dashboard", async () => {
+  it("submits onboarding data and routes professionals to pending verification", async () => {
     mockReload.mockImplementation(async () => {
       if (mockUserState.user) {
         mockUserState.user.publicMetadata = {
@@ -146,7 +146,9 @@ describe("useOnboarding", () => {
       "Profile created! Redirecting...",
     );
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(ROUTES.professionalDashboard);
+      expect(mockPush).toHaveBeenCalledWith(
+        ROUTES.professionalPendingVerification,
+      );
     });
   });
 
@@ -255,5 +257,40 @@ describe("useOnboarding", () => {
       result.current.jumpToStep(1);
     });
     expect(result.current.step).toBe(1);
+  });
+  it("locks dedicated professional onboarding from URL state", async () => {
+    vi.clearAllMocks();
+    mockUserState = {
+      user: { id: "clerk_123", publicMetadata: {}, reload: mockReload },
+      isLoaded: true,
+    };
+    mockSearchParams.get.mockImplementation((key: string) => {
+      if (key === "role") return "professional";
+      if (key === "step") return "2";
+      if (key === "source") return "join-as-pro";
+      return null;
+    });
+
+    const { result } = renderHook(() => useOnboarding(), {
+      wrapper: ({ children }) => (
+        <OnboardingAnalyticsProvider value={NullAnalytics}>
+          {children}
+        </OnboardingAnalyticsProvider>
+      ),
+    });
+
+    await waitFor(() => {
+      expect(result.current.role).toBe("professional");
+      expect(result.current.step).toBe(2);
+      expect(result.current.roleLocked).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleRoleSelect("client");
+      result.current.jumpToStep(1);
+    });
+
+    expect(result.current.role).toBe("professional");
+    expect(result.current.step).toBe(2);
   });
 });

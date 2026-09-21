@@ -51,10 +51,7 @@ type OnboardingStateSnapshot = {
 };
 
 export type ReconciliationMismatch =
-  | "role"
-  | "status"
-  | "isOnboarded"
-  | "isProfileComplete";
+  "role" | "status" | "isOnboarded" | "isProfileComplete";
 
 export type ReconciliationReport = {
   userId: string;

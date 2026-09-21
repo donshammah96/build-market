@@ -1,0 +1,15 @@
+{
+  "name": "dd-tail-forwarder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

@@ -24,6 +24,7 @@ import type {
 } from "@/app/lib/domains/properties/contracts";
 import {
   toMyPropertyListingDto,
+  toPropertyDto,
   toPropertyAttachmentDto,
   toPropertyCreateResultDto,
   toPropertyDetailDto,
@@ -618,7 +619,7 @@ export const propertiesService = {
             return mapPropertyConflict(property, expectedVersion);
           }
 
-          const deletedAt = new Date().toISOString();
+          const deletedAt = toPropertyDto(new Date()) as unknown as string;
           const count = await propertyRepository.softDeletePropertyWithVersion(
             propertyId,
             expectedVersion,

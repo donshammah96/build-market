@@ -1,5 +1,5 @@
 import { getUserDetails } from "@/actions/admin";
-import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { notFound } from "next/navigation";

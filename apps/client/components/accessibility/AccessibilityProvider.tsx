@@ -16,6 +16,8 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
   children,
 }: AccessibilityProviderProps) {
   const {
+    theme,
+    setTheme,
     reduceMotion,
     reduceTransparency,
     highContrast,
@@ -30,8 +32,37 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
 
   // Apply settings to DOM
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     const html = document.documentElement;
     const body = document.body;
+
+    // Check URL query parameter e.g. ?theme=dark or ?theme=light
+    let activeTheme = theme;
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlTheme = urlParams.get("theme");
+    if (urlTheme === "dark" || urlTheme === "light" || urlTheme === "system") {
+      activeTheme = urlTheme;
+      if (theme !== urlTheme) {
+        setTheme(urlTheme);
+      }
+    }
+
+    // Theme (Light / Dark / System)
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => {
+      if (activeTheme === "dark") {
+        html.classList.add("dark");
+      } else if (activeTheme === "light") {
+        html.classList.remove("dark");
+      } else {
+        html.classList.toggle("dark", mediaQuery.matches);
+      }
+    };
+    applyTheme();
+    mediaQuery.addEventListener("change", applyTheme);
 
     // Reduce Motion
     if (reduceMotion === "on") {
@@ -82,8 +113,10 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
       html.style.removeProperty("--user-font-scale");
       html.style.removeProperty("--animation-duration");
       body.style.fontSize = "";
+      mediaQuery.removeEventListener("change", applyTheme);
     };
   }, [
+    theme,
     reduceMotion,
     reduceTransparency,
     highContrast,
@@ -93,6 +126,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
     colorBlindMode,
     dyslexiaFont,
     lineSpacing,
+    setTheme,
   ]);
 
   // Keyboard shortcut handler (Alt + A opens accessibility settings)

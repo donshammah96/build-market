@@ -2,36 +2,56 @@
   "name": "@build/db",
   "version": "1.0.0",
   "description": "BuildMarket Database",
-  "main": "./lib/prisma.ts",
-  "types": "./lib/prisma.ts",
+  "type": "module",
+  "main": "./dist/lib/prisma.js",
+  "types": "./dist/lib/prisma.d.ts",
   "exports": {
-    ".": "./lib/prisma.ts",
-    "./system-settings": "./lib/system-settings.ts"
+    ".": {
+      "types": "./dist/lib/prisma.d.ts",
+      "import": "./dist/lib/prisma.js",
+      "default": "./dist/lib/prisma.js"
+    },
+    "./system-settings": {
+      "types": "./dist/lib/system-settings.d.ts",
+      "import": "./dist/lib/system-settings.js",
+      "default": "./dist/lib/system-settings.js"
+    },
+    "./staging-test-runs": {
+      "types": "./dist/src/staging-test-runs/contracts.d.ts",
+      "import": "./dist/src/staging-test-runs/contracts.js",
+      "default": "./dist/src/staging-test-runs/contracts.js"
+    }
   },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
+    "build": "tsc",
+    "prepack": "pnpm run build",
     "check-types": "tsc --noEmit",
     "lint": "echo \"No lint configured\" && exit 0",
-    "test": "echo \"No tests configured\" && exit 0",
+    "test": "vitest run --exclude '**/dist/**'",
     "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "Don Shammah",
   "license": "ISC",
   "dependencies": {
-    "@prisma/adapter-pg": "^7.6.0",
-    "@prisma/client": "^7.6.0",
-    "pg": "^8.18.0",
-    "prisma": "^7.6.0",
-    "zod": "^4.3.6"
+    "@build/types": "workspace:*",
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/client": "catalog:",
+    "pg": "catalog:",
+    "prisma": "catalog:",
+    "zod": "catalog:"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
-    "@prisma/config": "^7.6.0",
-    "@types/node": "^24.8.1",
-    "@types/pg": "^8.16.0",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "@prisma/config": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

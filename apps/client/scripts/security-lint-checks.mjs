@@ -372,3 +372,52 @@ export function collectOpaqueLogContextDrift(
 
   return offenders;
 }
+
+export function collectWorkerImportDrift() {
+  const offenders = [];
+  const scanPaths = ["app", "components", "hooks", "lib"];
+
+  for (const filePath of collectFiles(scanPaths)) {
+    const relativePath = relativeToApp(filePath);
+
+    // Skip paths that are permitted to import job schedulers/tests
+    if (
+      relativePath.startsWith("app/jobs/") ||
+      relativePath.includes("/__tests__/") ||
+      relativePath.endsWith(".test.ts") ||
+      relativePath.endsWith(".test.tsx") ||
+      relativePath.endsWith(".spec.ts") ||
+      relativePath.endsWith(".spec.tsx")
+    ) {
+      continue;
+    }
+
+    const content = readFile(filePath);
+    if (!content.includes(".worker")) {
+      continue;
+    }
+
+    const lines = content.split(/\r?\n/);
+    const workerImportPatterns = [
+      /import\s+(?:.*\s+from\s+)?['"].*?\.worker(?:\.ts)?['"]/i,
+      /import\s*\(\s*['"].*?\.worker(?:\.ts)?['"]\s*\)/i,
+    ];
+
+    for (const pattern of workerImportPatterns) {
+      for (const match of content.matchAll(new RegExp(pattern, "gi"))) {
+        if (match.index === undefined) {
+          continue;
+        }
+
+        const line = findLineNumber(content, match.index);
+        offenders.push({
+          file: relativePath,
+          line,
+          sample: lines[line - 1]?.trim() ?? "",
+        });
+      }
+    }
+  }
+
+  return offenders;
+}

@@ -18,7 +18,9 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePortalProjects } from "@/hooks/useProjects";
-import { getProfessionalProjectUrl } from "@/lib/links";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { CapabilityRestrictedBanner } from "@/components/shared/CapabilityRestrictedBanner";
+import { getProfessionalProjectUrl } from "@/lib/routes";
 
 interface Project {
   id: string;
@@ -197,8 +199,13 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 export default function ProjectsPageClient() {
+  const { profile } = useProfileStatus();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+
+  const isUnverified =
+    profile &&
+    (profile as unknown as { verified?: boolean }).verified === false;
 
   const { data: listPayload, isLoading, error, refetch } = usePortalProjects();
 
@@ -224,6 +231,16 @@ export default function ProjectsPageClient() {
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-8 pb-10">
+      {isUnverified && (
+        <CapabilityRestrictedBanner
+          featureName="Projects & Quotes"
+          verificationStatus={
+            (profile as unknown as { verificationStatus?: string })
+              .verificationStatus
+          }
+        />
+      )}
+
       <div className="flex flex-col justify-between gap-4 border-b border-zinc-100 pb-6 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900">

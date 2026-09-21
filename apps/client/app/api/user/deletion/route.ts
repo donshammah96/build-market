@@ -55,7 +55,6 @@ import {
 } from "@/app/lib/api/request-utils";
 import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 // Deletion request validation schema
@@ -107,7 +106,7 @@ export const POST = withAuth(
       );
 
       if (!success) {
-        logger.warn("Rate limit exceeded for deletion request", {
+        getClientLogger().warn("Rate limit exceeded for deletion request", {
           rateLimitKey,
           correlationId,
           operationName: "request_account_deletion",
@@ -121,7 +120,7 @@ export const POST = withAuth(
       // Safely parse JSON body
       const bodyResult = await safeParseJsonBody(req);
       if (!bodyResult.success) {
-        logger.warn("Failed to parse deletion request body", {
+        getClientLogger().warn("Failed to parse deletion request body", {
           error: bodyResult.error,
           correlationId,
           operationName: "request_account_deletion",
@@ -132,7 +131,7 @@ export const POST = withAuth(
       const validationResult = DeletionRequestSchema.safeParse(bodyResult.data);
 
       if (!validationResult.success) {
-        logger.warn("Deletion request validation failed", {
+        getClientLogger().warn("Deletion request validation failed", {
           errors: validationResult.error.issues,
           correlationId,
           operationName: "request_account_deletion",
@@ -149,7 +148,7 @@ export const POST = withAuth(
       // Capture request metadata for audit
       const { ipAddress, userAgent } = getRequestMetadata(req);
 
-      logger.info("Processing account deletion request", {
+      getClientLogger().info("Processing account deletion request", {
         hasReason: !!reason,
         hasEmailConfirmation: !!confirmEmail,
         ipAddress,
@@ -176,7 +175,7 @@ export const POST = withAuth(
       );
 
       if (!result.success || !result.data) {
-        logger.error(
+        getClientLogger().error(
           "Deletion request failed",
           result.error || new Error("Unknown error"),
           {
@@ -198,7 +197,7 @@ export const POST = withAuth(
         );
       }
 
-      logger.info("Account deletion scheduled successfully", {
+      getClientLogger().info("Account deletion scheduled successfully", {
         scheduledDate: result.data.data.scheduledDeletionAt,
         correlationId,
         operationName: "request_account_deletion",
@@ -207,7 +206,7 @@ export const POST = withAuth(
 
       return apiSuccess(result.data.data, HttpStatus.OK);
     } catch (error) {
-      logger.error(
+      getClientLogger().error(
         "Deletion request error",
         error instanceof Error ? error : new Error(String(error)),
         {
@@ -269,7 +268,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!success) {
-      logger.warn("Rate limit exceeded for deletion status check", {
+      getClientLogger().warn("Rate limit exceeded for deletion status check", {
         identifier,
         correlationId,
         operationName: "fetch_deletion_status",
@@ -280,7 +279,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    logger.info("Fetching deletion status", {
+    getClientLogger().info("Fetching deletion status", {
       correlationId,
       operationName: "fetch_deletion_status",
     });
@@ -301,7 +300,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!result.success) {
-      logger.error(
+      getClientLogger().error(
         "Failed to fetch deletion status",
         result.error || new Error("Unknown error"),
         {
@@ -330,7 +329,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    logger.info("Deletion status fetched", {
+    getClientLogger().info("Deletion status fetched", {
       isDeletionScheduled: status.data.isDeletionScheduled,
       correlationId,
       operationName: "fetch_deletion_status",
@@ -339,7 +338,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(status.data, HttpStatus.OK);
   } catch (error) {
-    logger.error(
+    getClientLogger().error(
       "Deletion status fetch error",
       error instanceof Error ? error : new Error(String(error)),
       {
@@ -384,18 +383,21 @@ export const PATCH = withAuth(
       );
 
       if (!success) {
-        logger.warn("Rate limit exceeded for deletion cancellation", {
-          rateLimitKey,
-          correlationId,
-          operationName: "cancel_account_deletion",
-        });
+        getClientLogger().warn(
+          "Rate limit exceeded for deletion cancellation",
+          {
+            rateLimitKey,
+            correlationId,
+            operationName: "cancel_account_deletion",
+          },
+        );
         return apiError(
           "Rate limit exceeded. Please try again later.",
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
 
-      logger.info("Processing deletion cancellation request", {
+      getClientLogger().info("Processing deletion cancellation request", {
         correlationId,
         operationName: "cancel_account_deletion",
       });
@@ -418,7 +420,7 @@ export const PATCH = withAuth(
       );
 
       if (!result.success || !result.data) {
-        logger.error(
+        getClientLogger().error(
           "Failed to cancel deletion",
           result.error || new Error("Unknown error"),
           {
@@ -440,7 +442,7 @@ export const PATCH = withAuth(
         );
       }
 
-      logger.info("Deletion cancelled successfully", {
+      getClientLogger().info("Deletion cancelled successfully", {
         correlationId,
         operationName: "cancel_account_deletion",
         outcome: "succeeded",
@@ -448,7 +450,7 @@ export const PATCH = withAuth(
 
       return apiSuccess(result.data.data, HttpStatus.OK);
     } catch (error) {
-      logger.error(
+      getClientLogger().error(
         "Deletion cancellation error",
         error instanceof Error ? error : new Error(String(error)),
         {

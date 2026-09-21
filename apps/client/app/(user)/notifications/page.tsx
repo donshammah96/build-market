@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,15 +23,10 @@ import {
   useNotifications,
   useMarkNotificationRead,
 } from "@/hooks/useNotifications";
-import type { NotificationListItem } from "@/lib/notifications-client";
+import type { NotificationListItem } from "@/lib/facades/notifications-client";
 
 type NotificationTypeKey =
-  | "order"
-  | "message"
-  | "project"
-  | "system"
-  | "alert"
-  | "default";
+  "order" | "message" | "project" | "system" | "alert" | "default";
 
 function mapApiTypeToKey(type: string): NotificationTypeKey {
   const map: Record<string, NotificationTypeKey> = {
@@ -145,7 +139,6 @@ export default function NotificationsPage() {
           )}
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

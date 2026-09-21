@@ -1,4 +1,5 @@
 import { prisma } from "@build/db";
+import { toProfessionalSettingsDto } from "./mappers";
 import { type z } from "zod";
 import type { AppRole } from "@/app/lib/security/roles";
 import {
@@ -16,7 +17,14 @@ import {
   completeProfileSchema,
   type UpdateProfileInput,
 } from "@/app/lib/validation/profile-validation";
-import { DocumentCategory, County } from "@prisma/client";
+import { generateUniqueSlug } from "@/app/lib/utils/server-utils";
+import {
+  DocumentCategory,
+  County,
+  Profession,
+  type Prisma,
+} from "@prisma/client";
+import { uploadRepository } from "@/app/lib/domains/uploads";
 
 export type ProfessionalSettingsActor = {
   userId: string;
@@ -32,6 +40,61 @@ export type ServiceGroup = {
     name: string;
     slug: string;
   }[];
+};
+
+export type ServiceCategorySortField =
+  "createdAt" | "name" | "sortOrder" | "updatedAt";
+
+export type ServiceCategorySortDirection = "asc" | "desc";
+
+export type ServiceCategoryListItem = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
+  imageUrl: string | null;
+  professionType: Profession | null;
+  isActive: boolean;
+  isFeatured: boolean;
+  sortOrder: number | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  keywords: string[] | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ServiceCategoryListResult = {
+  services: ServiceCategoryListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type ServiceCategoryQuery = {
+  page: number;
+  limit: number;
+  sortField: ServiceCategorySortField;
+  sortDirection: ServiceCategorySortDirection;
+  search?: string;
+  professionType?: Profession | null;
+};
+
+export type CreateServiceCategoryInput = {
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  imageUrl?: string | null;
+  professionType?: Profession | null;
+  sortOrder?: number | null;
+  isFeatured?: boolean;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  keywords?: string[] | null;
 };
 
 export type SettingsProfileData = {
@@ -74,14 +137,35 @@ type SettingsProfileRecord = Omit<
 type CompleteProfessionalProfileInput = z.infer<typeof completeProfileSchema>;
 
 export type ProfessionalSettingsErrorCode =
-  | "not_found"
-  | "invalid_input"
-  | "internal";
+  "not_found" | "invalid_input" | "conflict" | "internal";
 
 type ProfessionalSettingsResult<T> = Result<
   T,
   DomainError<ProfessionalSettingsErrorCode>
 >;
+
+const serviceCategoryListSelect = {
+  id: true,
+  name: true,
+  slug: true,
+  description: true,
+  icon: true,
+  imageUrl: true,
+  professionType: true,
+  isActive: true,
+  isFeatured: true,
+  sortOrder: true,
+  metaTitle: true,
+  metaDescription: true,
+  keywords: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: {
+      services: true,
+    },
+  },
+} as const;
 
 async function ensureProfessionalProfile(
   actor: ProfessionalSettingsActor,
@@ -115,8 +199,12 @@ function mapSettingsProfileData(
 ): SettingsProfileData {
   return {
     ...profile,
-    createdAt: profile.createdAt.toISOString(),
-    updatedAt: profile.updatedAt.toISOString(),
+    createdAt: toProfessionalSettingsDto(
+      profile.createdAt,
+    ) as unknown as string,
+    updatedAt: toProfessionalSettingsDto(
+      profile.updatedAt,
+    ) as unknown as string,
   };
 }
 
@@ -293,6 +381,106 @@ export const professionalSettingsService = {
     }
   },
 
+  async listServiceCategoriesPage(
+    input: ServiceCategoryQuery,
+  ): Promise<ProfessionalSettingsResult<ServiceCategoryListResult>> {
+    try {
+      const limit = Math.min(input.limit, 50);
+      const skip = (input.page - 1) * limit;
+      const where: Prisma.ServiceCategoryWhereInput = {
+        deletedAt: null,
+        isActive: true,
+        ...(input.search && {
+          OR: [
+            { name: { contains: input.search, mode: "insensitive" as const } },
+            {
+              description: {
+                contains: input.search,
+                mode: "insensitive" as const,
+              },
+            },
+          ],
+        }),
+        ...(input.professionType && {
+          professionType: input.professionType,
+        }),
+      };
+
+      const [services, total] = await Promise.all([
+        prisma.serviceCategory.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { [input.sortField]: input.sortDirection },
+          select: serviceCategoryListSelect,
+        }),
+        prisma.serviceCategory.count({ where }),
+      ]);
+
+      return ok({
+        services,
+        pagination: {
+          page: input.page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch {
+      return err({
+        error: "internal",
+        message: "Failed to fetch services",
+        status: 500,
+      });
+    }
+  },
+
+  async createServiceCategory(
+    input: CreateServiceCategoryInput,
+  ): Promise<ProfessionalSettingsResult<ServiceCategoryListItem>> {
+    try {
+      const existing = await prisma.serviceCategory.findFirst({
+        where: { name: input.name, deletedAt: null },
+        select: { id: true },
+      });
+
+      if (existing) {
+        return err({
+          error: "conflict",
+          message: "A service with this name already exists",
+          status: 409,
+        });
+      }
+
+      const slug = await generateUniqueSlug("serviceCategory", input.name);
+
+      const service = await prisma.serviceCategory.create({
+        data: {
+          name: input.name,
+          slug,
+          description: input.description ?? undefined,
+          icon: input.icon ?? undefined,
+          imageUrl: input.imageUrl ?? undefined,
+          professionType: input.professionType ?? undefined,
+          sortOrder: input.sortOrder ?? undefined,
+          isFeatured: input.isFeatured ?? false,
+          metaTitle: input.metaTitle ?? undefined,
+          metaDescription: input.metaDescription ?? undefined,
+          keywords: input.keywords ?? undefined,
+        },
+        select: serviceCategoryListSelect,
+      });
+
+      return ok(service);
+    } catch {
+      return err({
+        error: "internal",
+        message: "Failed to create service category",
+        status: 500,
+      });
+    }
+  },
+
   async completeProfile(
     actor: ProfessionalSettingsActor,
     input: CompleteProfessionalProfileInput,
@@ -375,8 +563,13 @@ export const professionalSettingsService = {
             let assetId: string | undefined;
 
             if (staged) {
-              let asset = await tx.asset.findUnique({
-                where: { checksum: staged.checksum },
+              let asset = await tx.asset.findFirst({
+                where: {
+                  checksum: staged.checksum,
+                  uploaderId: actor.userId,
+                  visibility: "PUBLIC",
+                  deletedAt: null,
+                },
               });
 
               if (!asset) {
@@ -390,20 +583,18 @@ export const professionalSettingsService = {
                     bucket: staged.storageBucket,
                     key: staged.storageKey,
                     cdnUrl: staged.tempUrl,
+                    visibility: "PUBLIC",
                   },
                 });
               }
 
               assetId = asset.id;
 
-              await tx.onboardingUpload.update({
-                where: { id: staged.id },
-                data: {
-                  status: "CONSUMED",
-                  consumedAt: new Date(),
-                  consumedByUserId: actor.userId,
-                },
-              });
+              await uploadRepository.markStagedUploadConsumed(
+                staged.id,
+                actor.userId,
+                tx,
+              );
             }
 
             await tx.professionalDocument.create({

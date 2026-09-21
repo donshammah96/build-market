@@ -17,8 +17,6 @@ import {
 } from "@/app/lib/validation/leads-validation";
 import { leadsService } from "@/app/lib/domains/leads";
 
-const logger = getClientLogger();
-
 /**
  * POST /api/leads
  * Public endpoint — no authentication required.
@@ -70,7 +68,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   );
 
   if (!result.success || !result.data) {
-    logger.error("Failed to create lead", result.error, { correlationId });
+    getClientLogger().error("Failed to create lead", result.error, {
+      correlationId,
+    });
     return apiError(
       "Failed to submit inquiry",
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError("Professional not found", HttpStatus.NOT_FOUND);
   }
 
-  logger.info("Public lead created", {
+  getClientLogger().info("Public lead created", {
     correlationId,
     leadId: serviceResult.data.lead.id,
     professionalId: data.professionalId,

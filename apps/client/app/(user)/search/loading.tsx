@@ -1,5 +1,4 @@
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -38,7 +37,6 @@ export default function Loading() {
           </div>
         </section>
       </main>
-      <Footer />
     </div>
   );
 }

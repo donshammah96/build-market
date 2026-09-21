@@ -1,4 +1,5 @@
 import { env } from "@/app/lib/infrastructure/env";
+import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 
 export type SystemSettingsSnapshot = {
   maintenanceMode: boolean;
@@ -28,22 +29,45 @@ const DEFAULT_SETTINGS: SystemSettingsSnapshot = {
   allowedIPs: [],
 };
 
+let cachedResult: { result: SystemSettingsResult; expiresAt: number } | null =
+  null;
+
+/**
+ * Clear the in-memory system settings cache (useful for testing).
+ */
+export function clearSystemSettingsCache(): void {
+  cachedResult = null;
+}
+
 export async function resolveSystemSettings(
   baseUrl: string,
 ): Promise<SystemSettingsResult> {
+  const now = Date.now();
+  if (!env.isTest && cachedResult && now < cachedResult.expiresAt) {
+    return cachedResult.result;
+  }
+
   const internalSecret = env.services.internalApiSecret;
   if (!internalSecret) {
-    return {
+    recordMiddlewareFallback(
+      "/middleware/system-settings",
+      "settings_fallback_secret_missing",
+    );
+    const result: SystemSettingsResult = {
       state: "fallback",
       settings: DEFAULT_SETTINGS,
       source: "fallback",
       reason: "internal_secret_missing",
       cacheStrategy: "shared_service_or_metadata",
     };
+    cachedResult = { result, expiresAt: now + 5000 };
+    return result;
   }
 
   try {
-    const url = new URL("/api/internal/system-settings", baseUrl);
+    // Normalize localhost to 127.0.0.1 to avoid IPv6 (::1) ECONNREFUSED when servers bind to IPv4
+    const resolvedBase = baseUrl.replace("://localhost:", "://127.0.0.1:");
+    const url = new URL("/api/internal/system-settings", resolvedBase);
     const response = await fetch(url.toString(), {
       headers: { "x-internal-secret": internalSecret },
       signal: AbortSignal.timeout(2000),
@@ -51,17 +75,23 @@ export async function resolveSystemSettings(
     });
 
     if (!response.ok) {
-      return {
+      recordMiddlewareFallback(
+        "/middleware/system-settings",
+        "settings_fallback_non_ok",
+      );
+      const result: SystemSettingsResult = {
         state: "fallback",
         settings: DEFAULT_SETTINGS,
         source: "fallback",
         reason: "internal_api_non_ok",
         cacheStrategy: "shared_service_or_metadata",
       };
+      cachedResult = { result, expiresAt: now + 3000 };
+      return result;
     }
 
     const data = await response.json();
-    return {
+    const result: SystemSettingsResult = {
       state: "resolved",
       source: "internal_api",
       reason: "internal_api_resolved",
@@ -74,13 +104,21 @@ export async function resolveSystemSettings(
         allowedIPs: Array.isArray(data.allowedIPs) ? data.allowedIPs : [],
       },
     };
+    cachedResult = { result, expiresAt: now + 10000 };
+    return result;
   } catch {
-    return {
+    recordMiddlewareFallback(
+      "/middleware/system-settings",
+      "settings_fallback_error",
+    );
+    const result: SystemSettingsResult = {
       state: "fallback",
       settings: DEFAULT_SETTINGS,
       source: "fallback",
       reason: "internal_api_error",
       cacheStrategy: "shared_service_or_metadata",
     };
+    cachedResult = { result, expiresAt: now + 3000 };
+    return result;
   }
 }

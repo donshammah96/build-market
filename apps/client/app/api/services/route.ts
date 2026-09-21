@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
-import { prisma, Prisma, Profession } from "@build/db";
 import { z } from "zod";
 import { withRole } from "@/app/lib/api/api-middleware";
-import { generateUniqueSlug } from "@/app/lib/utils/server-utils";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
@@ -16,6 +14,8 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { checkBodySize } from "@/app/lib/api/api-guards";
+import { professionalSettingsService } from "@/app/lib/domains/professional-settings";
+import { ProfessionSchema } from "@/app/lib/validation/profile-validation";
 
 // Allowed sort fields to prevent arbitrary column injection
 const ALLOWED_SORT_FIELDS = [
@@ -32,7 +32,7 @@ const createServiceSchema = z.object({
   description: z.string().max(500).optional(),
   icon: z.string().max(100).optional(),
   imageUrl: z.string().url().max(500).optional(),
-  professionType: z.nativeEnum(Profession).optional(),
+  professionType: ProfessionSchema.optional(),
   sortOrder: z.number().int().min(0).optional(),
   isFeatured: z.boolean().optional(),
   metaTitle: z.string().max(150).optional(),
@@ -45,29 +45,8 @@ const querySchema = z.object({
   limit: z.string().regex(/^\d+$/).optional().default("10"),
   sort: z.string().optional().default("createdAt:desc"),
   search: z.string().optional().default(""),
-  professionType: z.nativeEnum(Profession).optional(),
+  professionType: ProfessionSchema.optional(),
 });
-
-// Optimized select for service list queries
-const serviceListSelect = {
-  id: true,
-  name: true,
-  slug: true,
-  description: true,
-  icon: true,
-  imageUrl: true,
-  professionType: true,
-  isActive: true,
-  isFeatured: true,
-  sortOrder: true,
-  createdAt: true,
-  updatedAt: true,
-  _count: {
-    select: {
-      services: true,
-    },
-  },
-} as const;
 
 /**
  * GET /api/services
@@ -117,7 +96,6 @@ export async function GET(request: NextRequest) {
   const { page, limit, sort, search, professionType } = queryValidation.data;
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit), 50);
-  const skip = (pageNum - 1) * limitNum;
 
   // Parse and validate sort parameter
   const [rawSortField = "createdAt", sortDirection] = sort.split(":");
@@ -126,57 +104,19 @@ export async function GET(request: NextRequest) {
   )
     ? (rawSortField as SortField)
     : "createdAt";
-  const orderBy = {
-    [sortField]: sortDirection === "asc" ? "asc" : "desc",
-  };
+  const sortDirectionValue = sortDirection === "asc" ? "asc" : "desc";
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      // Build where clause with soft-delete and active filters
-      const where: Prisma.ServiceCategoryWhereInput = {
-        deletedAt: null,
-        isActive: true,
-      };
-
-      if (search) {
-        where.OR = [
-          { name: { contains: search, mode: "insensitive" } },
-          { description: { contains: search, mode: "insensitive" } },
-        ];
-      }
-
-      if (professionType) {
-        where.professionType = professionType;
-      }
-
-      const [services, total] = await Promise.all([
-        prisma.serviceCategory.findMany({
-          where,
-          skip,
-          take: limitNum,
-          orderBy,
-          select: serviceListSelect,
-        }),
-        prisma.serviceCategory.count({ where }),
-      ]);
-
-      logger.info("Services fetched successfully", {
-        correlationId,
-        count: services.length,
-        total,
-      });
-
-      return {
-        services,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          totalPages: Math.ceil(total / limitNum),
-        },
-      };
-    },
+    () =>
+      professionalSettingsService.listServiceCategoriesPage({
+        page: pageNum,
+        limit: limitNum,
+        sortField,
+        sortDirection: sortDirectionValue,
+        search: search || undefined,
+        professionType,
+      }),
     { operationName: "get_services" },
   );
 
@@ -186,8 +126,14 @@ export async function GET(request: NextRequest) {
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
+  if (!result.data?.ok) {
+    return apiError(
+      "Failed to fetch services",
+      result.data?.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
 
-  return apiSuccess(result.data);
+  return apiSuccess(result.data.data);
 }
 
 /**
@@ -271,43 +217,23 @@ export const POST = withRole(["ADMIN"])(async (
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      // Check for duplicate name (name is not @unique, use findFirst)
-      const existing = await prisma.serviceCategory.findFirst({
-        where: { name, deletedAt: null },
-        select: { id: true },
-      });
-
-      if (existing) {
-        return null; // Signal duplicate
-      }
-
-      // Generate unique slug
-      const slug = await generateUniqueSlug("serviceCategory", name);
-
-      const service = await prisma.serviceCategory.create({
-        data: {
-          name,
-          slug,
-          description,
-          icon,
-          imageUrl,
-          professionType,
-          sortOrder,
-          isFeatured,
-          metaTitle,
-          metaDescription,
-          keywords,
-        },
-        select: serviceListSelect,
-      });
-
-      return service;
-    },
+    () =>
+      professionalSettingsService.createServiceCategory({
+        name,
+        description,
+        icon,
+        imageUrl,
+        professionType,
+        sortOrder,
+        isFeatured,
+        metaTitle,
+        metaDescription,
+        keywords,
+      }),
     { operationName: "create_service" },
   );
 
-  if (!result.success) {
+  if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
     return apiError(
       "Failed to create service category",
@@ -315,15 +241,21 @@ export const POST = withRole(["ADMIN"])(async (
     );
   }
 
-  if (result.data === null) {
+  if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
+    if (result.data.error === "conflict") {
+      return apiError(
+        "A service with this name already exists",
+        HttpStatus.CONFLICT,
+      );
+    }
     return apiError(
-      "A service with this name already exists",
-      HttpStatus.CONFLICT,
+      "Failed to create service category",
+      result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
 
-  const service = result.data!;
+  const service = result.data.data;
 
   logger.info("Service category created successfully", {
     correlationId,
@@ -331,6 +263,15 @@ export const POST = withRole(["ADMIN"])(async (
     serviceId: service.id,
   });
 
-  await IdempotencyService.complete(idempotencyKey, service);
+  try {
+    await IdempotencyService.complete(idempotencyKey, service);
+  } catch (error) {
+    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+    logger.error(
+      "Idempotency completion failed",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, outcome: "idempotency_complete_failed" },
+    );
+  }
   return apiSuccess(service, HttpStatus.CREATED);
 });

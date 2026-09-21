@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { Suspense } from "react";
-import { getAuditLogs, type AuditLogFilterInput } from "@/actions/admin";
+import { getAuditLogs, type AuditLogInput } from "@/actions/admin";
 
 export const dynamic = "force-dynamic";
 import {
@@ -174,7 +173,7 @@ async function AuditLogsList({
   const params = await searchParams;
   const page = Number(params.page) || 1;
 
-  const filters: Partial<AuditLogFilterInput> = {};
+  const filters: Partial<AuditLogInput> = {};
 
   if (params.entityType) {
     const validEntityTypes = [
@@ -190,7 +189,7 @@ async function AuditLogsList({
         params.entityType as (typeof validEntityTypes)[number],
       )
     ) {
-      filters.entityType =
+      filters.targetType =
         params.entityType as (typeof validEntityTypes)[number];
     }
   }
@@ -261,12 +260,12 @@ async function AuditLogsList({
                         {log.action}
                       </Badge>
                       <Badge variant="secondary" className="font-mono text-xs">
-                        {log.entityType}
+                        {log.targetType}
                       </Badge>
                     </div>
 
                     <p className="text-sm text-zinc-900 mb-1">
-                      {`${log.action} on ${log.entityType}`}
+                      {`${log.action} on ${log.targetType}`}
                     </p>
 
                     <div className="flex items-center gap-4 text-xs text-zinc-500">
@@ -285,9 +284,9 @@ async function AuditLogsList({
                           minute: "2-digit",
                         })}
                       </span>
-                      {log.entityId && (
+                      {log.targetId && (
                         <span className="font-mono text-zinc-400">
-                          ID: {log.entityId.slice(0, 8)}...
+                          ID: {log.targetId.slice(0, 8)}...
                         </span>
                       )}
                     </div>

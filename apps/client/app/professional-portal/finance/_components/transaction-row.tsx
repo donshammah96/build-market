@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import type { FinanceTransaction } from "@/lib/finance-client";
+import type { FinanceTransaction } from "@/lib/facades/finance-client";
 
 export interface TransactionRowProps {
   transaction: FinanceTransaction;

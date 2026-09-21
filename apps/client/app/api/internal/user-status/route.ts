@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma, UserRole } from "@build/db";
 import {
   initializeCorrelationId,
   getClientLogger,
@@ -9,8 +8,7 @@ import {
   getRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
-
-const logger = getClientLogger();
+import { userProfileService } from "@/app/lib/domains/user-profile/service";
 
 /**
  * GET /api/internal/user-status
@@ -35,7 +33,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     req.headers.get("x-internal-secret"),
   );
   if (secretError) {
-    logger.warn("Internal user-status forbidden: invalid secret", {
+    getClientLogger().warn("Internal user-status forbidden: invalid secret", {
       correlationId,
     });
     return secretError;
@@ -58,58 +56,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Missing clerkId" }, { status: 400 });
   }
 
-  try {
-    // Use findUnique on the unique clerkId index, exclude soft-deleted users
-    const user = await prisma.user.findUnique({
-      where: { clerkId, deletedAt: null },
-      select: {
-        id: true,
-        role: true,
-        status: true,
-        isProfileComplete: true,
-        professionalProfile: {
-          select: { userId: true },
-        },
-      },
-    });
+  const statusResult =
+    await userProfileService.getInternalUserStatusByClerkId(clerkId);
 
-    if (!user) {
-      return NextResponse.json({
-        isOnboarded: false,
-        role: null,
-        status: null,
-      });
-    }
-
-    const userStatus = (user as { status?: string }).status ?? null;
-    const professionalMissingProfile =
-      user.role === UserRole.PROFESSIONAL && !user.professionalProfile;
-    const isOnboarding = userStatus === "ONBOARDING";
-
-    // Professional users must have a profile before they are considered onboarded.
-    if (professionalMissingProfile) {
-      logger.warn("Professional user exists but has no professional profile", {
-        correlationId,
-        actorRole: user.role,
-        hasProfessionalProfile: Boolean(user.professionalProfile),
-      });
-    }
-
-    const isOnboarded = !isOnboarding && !professionalMissingProfile;
-
-    return NextResponse.json({
-      isOnboarded,
-      role: user.role,
-      status: userStatus,
-    });
-  } catch (error) {
-    logger.error(
+  if (!statusResult.ok) {
+    getClientLogger().error(
       "Internal user-status check failed",
-      error instanceof Error ? error : new Error(String(error)),
+      new Error(statusResult.message ?? "Database check failed"),
       { correlationId, hasClerkId: Boolean(clerkId) },
     );
 
-    // Return "not onboarded" so middleware handles gracefully.
     return NextResponse.json(
       {
         isOnboarded: false,
@@ -120,6 +76,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       { status: 500 },
     );
   }
+
+  if (statusResult.data.professionalMissingProfile) {
+    getClientLogger().warn(
+      "Professional user exists but has no professional profile",
+      {
+        correlationId,
+        actorRole: statusResult.data.role,
+        hasProfessionalProfile: false,
+      },
+    );
+  }
+
+  return NextResponse.json({
+    isOnboarded: statusResult.data.isOnboarded,
+    role: statusResult.data.role,
+    status: statusResult.data.status,
+  });
 }
 
 // Force dynamic to prevent caching of database queries

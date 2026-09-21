@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Suspense } from "react";
 import {
   getPlatformAnalytics,

@@ -7,6 +7,7 @@
  * - Anonymization batch processing (processes pending anonymizations)
  * - Asset cleanup (deletes orphaned assets after grace period)
  * - Onboarding upload cleanup (marks expired staged uploads as EXPIRED)
+ * - Newsletter sweep (reconciles stuck newsletter signups)
  *
  * Usage:
  * import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
@@ -16,11 +17,7 @@
  */
 
 import { envConfig } from "@/app/lib/infrastructure/env";
-import {
-  scheduleExportCleanup,
-  createCleanupWorker,
-  getCleanupQueue,
-} from "./export-cleanup";
+import { scheduleExportCleanup, getCleanupQueue } from "./export-cleanup";
 import {
   type ExportJobData,
   getExportQueue,
@@ -28,28 +25,25 @@ import {
 } from "./export-queue";
 import {
   scheduleDataRetentionEnforcement,
-  createDataRetentionWorker,
   getRetentionQueue,
 } from "./data-retention";
 import {
   scheduleAnonymizationBatch,
-  createAnonymizationBatchWorker,
   getAnonymizationQueue,
 } from "./anonymization-batch";
-import {
-  scheduleAssetCleanup,
-  createAssetCleanupWorker,
-  getAssetCleanupQueue,
-} from "./asset-cleanup";
+import { scheduleAssetCleanup, getAssetCleanupQueue } from "./asset-cleanup";
 import {
   scheduleOnboardingUploadCleanup,
-  createOnboardingUploadCleanupWorker,
   getOnboardingUploadCleanupQueue,
 } from "./onboarding-upload-cleanup";
-import { Worker } from "bullmq";
+import {
+  scheduleNewsletterSweep,
+  getNewsletterSweepQueue,
+} from "./newsletter-sweep";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
-// Track all workers for graceful shutdown
-let workers: Worker[] = [];
+const logger = new StructuredLogger("job-orchestrator");
+
 let isInitialized = false;
 let startedAt: Date | undefined;
 
@@ -68,13 +62,13 @@ export interface GDPRJobOrchestrator {
 }
 
 /**
- * Initialize all GDPR schedulers and workers
+ * Initialize all GDPR schedulers
  */
 export async function initializeAllSchedulers(): Promise<void> {
   // Guard 1: BullMQ requires a Redis TCP endpoint. Skip entirely when
   // REDIS_URL is not configured (local dev without Redis, CI smoke gate).
   if (!envConfig.redis.url) {
-    console.info(
+    logger.info(
       "[JobOrchestrator] REDIS_URL not set — background job queues disabled.",
     );
     return;
@@ -83,18 +77,18 @@ export async function initializeAllSchedulers(): Promise<void> {
   // Guard 2: Belt-and-suspenders for CI environments that set
   // DISABLE_BACKGROUND_JOBS=true explicitly.
   if (envConfig.isCI && envConfig.jobs.disableBackgroundJobs) {
-    console.info(
+    logger.info(
       "[JobOrchestrator] DISABLE_BACKGROUND_JOBS=true — skipping queue initialisation in CI.",
     );
     return;
   }
 
   if (isInitialized) {
-    console.log("[JobOrchestrator] Already initialized, skipping");
+    logger.info("[JobOrchestrator] Already initialized, skipping");
     return;
   }
 
-  console.log("[JobOrchestrator] Initializing all GDPR schedulers...");
+  logger.info("[JobOrchestrator] Initializing all GDPR schedulers...");
 
   try {
     // 1. Schedule all jobs
@@ -104,58 +98,40 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleAnonymizationBatch(),
       scheduleAssetCleanup(),
       scheduleOnboardingUploadCleanup(),
+      scheduleNewsletterSweep(),
     ]);
 
-    console.log("[JobOrchestrator] All jobs scheduled");
-
-    // 2. Create workers — order must match the workerNames tuple in
-    //    healthCheck() and getSchedulerStatus() so index-based lookups remain
-    //    correct.
-    workers = [
-      createCleanupWorker(),
-      createDataRetentionWorker(),
-      createAnonymizationBatchWorker(),
-      createAssetCleanupWorker(),
-      createOnboardingUploadCleanupWorker(),
-    ];
-
-    console.log("[JobOrchestrator] All workers created");
+    logger.info(
+      "[JobOrchestrator] All schedulers registered; consumer execution handled by standalone apps/workers daemon",
+    );
 
     isInitialized = true;
     startedAt = new Date();
 
-    console.log(
+    logger.info(
       "[JobOrchestrator] GDPR job orchestrator initialized successfully",
     );
   } catch (error) {
-    console.error("[JobOrchestrator] Failed to initialize schedulers:", error);
+    logger.error(
+      "[JobOrchestrator] Failed to initialize schedulers:",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
 
 /**
- * Gracefully shutdown all schedulers and workers
+ * Gracefully shutdown all schedulers
  */
 export async function shutdownAllSchedulers(): Promise<void> {
   if (!isInitialized) {
-    console.log("[JobOrchestrator] Not initialized, nothing to shutdown");
+    logger.info("[JobOrchestrator] Not initialized, nothing to shutdown");
     return;
   }
 
-  console.log("[JobOrchestrator] Shutting down all GDPR schedulers...");
+  logger.info("[JobOrchestrator] Shutting down all GDPR schedulers...");
 
   try {
-    // Close all workers
-    await Promise.all(
-      workers.map(async (worker) => {
-        try {
-          await worker.close();
-        } catch (error) {
-          console.error("[JobOrchestrator] Error closing worker:", error);
-        }
-      }),
-    );
-
     // Close all queues
     await Promise.all([
       getCleanupQueue().close(),
@@ -164,15 +140,18 @@ export async function shutdownAllSchedulers(): Promise<void> {
       getAssetCleanupQueue().close(),
       getOnboardingUploadCleanupQueue().close(),
       getExportQueue().close(),
+      getNewsletterSweepQueue().close(),
     ]);
 
-    workers = [];
     isInitialized = false;
     startedAt = undefined;
 
-    console.log("[JobOrchestrator] All schedulers shut down");
+    logger.info("[JobOrchestrator] All schedulers shut down");
   } catch (error) {
-    console.error("[JobOrchestrator] Error during shutdown:", error);
+    logger.error(
+      "[JobOrchestrator] Error during shutdown:",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -193,6 +172,10 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
       name: "Onboarding Upload Cleanup",
       queue: getOnboardingUploadCleanupQueue(),
     },
+    {
+      name: "Newsletter Sweep",
+      queue: getNewsletterSweepQueue(),
+    },
   ];
 
   for (const { name, queue } of queues) {
@@ -202,7 +185,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
       schedulers.push({
         name,
-        isRunning: workers.some((w) => w.isRunning()),
+        isRunning: isInitialized,
         nextRun: job?.next ? new Date(job.next) : undefined,
       });
     } catch (error) {
@@ -230,8 +213,12 @@ export async function triggerJob(
     | "data-retention"
     | "anonymization-batch"
     | "asset-cleanup"
-    | "onboarding-upload-cleanup",
+    | "onboarding-upload-cleanup"
+    | "newsletter-sweep",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
+  const correlationId = CorrelationIdManager.generate();
+  CorrelationIdManager.set(correlationId);
+
   try {
     let queue;
     let jobName;
@@ -257,6 +244,10 @@ export async function triggerJob(
         queue = getOnboardingUploadCleanupQueue();
         jobName = "cleanup-expired-staged-uploads";
         break;
+      case "newsletter-sweep":
+        queue = getNewsletterSweepQueue();
+        jobName = "reconcile-stuck-newsletter-syncs";
+        break;
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
     }
@@ -270,13 +261,22 @@ export async function triggerJob(
       },
     );
 
-    console.log(
+    logger.info(
       `[JobOrchestrator] Manually triggered ${jobType} job: ${job.id}`,
+      {
+        correlationId,
+        jobType,
+        jobId: job.id,
+      },
     );
 
     return { success: true, jobId: job.id };
   } catch (error) {
-    console.error(`[JobOrchestrator] Failed to trigger ${jobType}:`, error);
+    logger.error(
+      `[JobOrchestrator] Failed to trigger ${jobType}:`,
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, jobType },
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -286,10 +286,6 @@ export async function triggerJob(
 
 /**
  * Health check for all schedulers.
- *
- * Worker names must match the order in which workers are created in
- * initializeAllSchedulers(). If you add or reorder workers there, update
- * this tuple accordingly.
  */
 export async function healthCheck(): Promise<{
   healthy: boolean;
@@ -297,7 +293,6 @@ export async function healthCheck(): Promise<{
 }> {
   const details: Record<string, { healthy: boolean; message: string }> = {};
 
-  // Check if initialized
   if (!isInitialized) {
     return {
       healthy: false,
@@ -307,43 +302,23 @@ export async function healthCheck(): Promise<{
     };
   }
 
-  // Worker names must stay in sync with the workers[] creation order.
-  const workerNames = [
-    "export-cleanup",
-    "data-retention",
-    "anonymization",
-    "asset-cleanup",
-    "onboarding-upload-cleanup",
-  ] as const;
+  const queueEntries = [
+    { name: "export-cleanup", queue: getCleanupQueue() },
+    { name: "data-retention", queue: getRetentionQueue() },
+    { name: "anonymization", queue: getAnonymizationQueue() },
+    { name: "asset-cleanup", queue: getAssetCleanupQueue() },
+    {
+      name: "onboarding-upload-cleanup",
+      queue: getOnboardingUploadCleanupQueue(),
+    },
+    { name: "newsletter-sweep", queue: getNewsletterSweepQueue() },
+  ];
 
-  for (let i = 0; i < workerNames.length; i++) {
-    const name = workerNames[i];
-    const worker = workers[i];
-
-    if (!name) {
-      continue;
-    }
-
-    if (!worker) {
-      details[name] = {
-        healthy: false,
-        message: "Worker not found",
-      };
-      continue;
-    }
-
-    try {
-      const running = worker.isRunning();
-      details[name] = {
-        healthy: running,
-        message: running ? "Worker running" : "Worker stopped",
-      };
-    } catch (error) {
-      details[name] = {
-        healthy: false,
-        message: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
+  for (const { name } of queueEntries) {
+    details[name] = {
+      healthy: isInitialized,
+      message: isInitialized ? "Scheduler registered" : "Scheduler stopped",
+    };
   }
 
   const healthy = Object.values(details).every((d) => d.healthy);

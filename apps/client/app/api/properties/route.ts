@@ -8,12 +8,14 @@ import {
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import {
   checkRateLimit,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   BatchCreatePropertiesSchema,
   CreatePropertySchema,
@@ -169,9 +171,9 @@ export const POST = withAuth(
     const actorRole = actorRoleLabel(userRole);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
-    const identifier = getRateLimitIdentifier(req);
+    const identifier = getActorRateLimitIdentifier(dbUserId, "property-write");
     const rateLimitResult = await checkRateLimit(
-      `properties-write:${identifier}`,
+      identifier,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -305,8 +307,7 @@ export const POST = withAuth(
       "property",
       dbUserId,
       "POST",
-      undefined,
-      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -410,7 +411,14 @@ export const POST = withAuth(
       return errorResponse!;
     }
 
-    await IdempotencyService.complete(idempotencyKey, domainResult.data);
+    await safeIdempotencyComplete(idempotencyKey, domainResult.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
     const response = apiSuccess(
       domainResult.data,
       HttpStatus.CREATED,

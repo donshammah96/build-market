@@ -114,8 +114,8 @@ vi.mock("@/app/lib/queues/upload-processing.queue", () => ({
   enqueueImageUploadProcessingJob: mockEnqueueImageUploadProcessingJob,
 }));
 
-vi.mock("@/app/workers/uploads/processor", () => ({
-  processImageUploadJob: mockProcessImageUploadJob,
+vi.mock("@/app/lib/domains/uploads/inline-processor", () => ({
+  processImageUploadInline: mockProcessImageUploadJob,
 }));
 
 vi.mock("@/app/lib/infrastructure/env", () => ({
@@ -309,7 +309,9 @@ describe("POST /api/uploads", () => {
 
     expect(response.status).toBe(202);
     expect(body.success).toBe(true);
-    expect(mockProcessImageUploadJob).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockProcessImageUploadJob).toHaveBeenCalledTimes(1);
+    });
     expect(mockEnqueueImageUploadProcessingJob).not.toHaveBeenCalled();
   });
 });

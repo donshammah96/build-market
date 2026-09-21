@@ -21,7 +21,6 @@ import {
 import { notificationsService } from "@/app/lib/domains/notifications";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/notifications";
 
 type NotificationsAdapterOutcome =
@@ -48,7 +47,7 @@ function createNotificationsOutcomeLogger(
     httpStatus: number,
     details: NotificationsOutcomeLogFields = {},
   ) => {
-    logger.info("Notifications adapter outcome", {
+    getClientLogger().info("Notifications adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -175,7 +174,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch notifications", result.error, {
+      getClientLogger().error("Failed to fetch notifications", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -279,7 +278,7 @@ export const PATCH = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to update notification", result.error, {
+      getClientLogger().error("Failed to update notification", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -387,16 +386,20 @@ export const DELETE = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to delete notification(s)", result.error, {
-        correlationId,
-        operationName,
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        actorRole,
-        outcome: "failed",
-        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
-        durationMs: Date.now() - requestStartedAt,
-      });
+      getClientLogger().error(
+        "Failed to delete notification(s)",
+        result.error,
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "failed",
+          httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
       logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
       return apiError(
         "Failed to delete notification(s)",

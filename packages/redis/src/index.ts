@@ -7,11 +7,15 @@ export { RedisCache, redisCache } from "./cache.js";
 
 // Rate limiting
 export {
+  checkRateLimit,
   checkSlidingWindowRateLimit,
   createRateLimiter,
   resetLimiterCache,
 } from "./rate-limit.js";
 export type {
+  RateLimitAlgorithm,
+  RateLimitParams,
+  RateLimitResult,
   SlidingWindowRateLimitParams,
   SlidingWindowRateLimitResult,
   RateLimiterOptions,

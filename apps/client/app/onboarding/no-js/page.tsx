@@ -4,7 +4,7 @@ import {
   readOnboardingNoJsSession,
   setOnboardingNoJsRole,
 } from "@/app/lib/infrastructure/onboarding-nojs-session";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 type NoJsRolePageProps = {
   searchParams?: Promise<{

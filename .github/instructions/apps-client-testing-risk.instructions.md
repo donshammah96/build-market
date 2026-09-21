@@ -5,7 +5,7 @@ applyTo: "apps/client/__tests__/**"
 
 # Client Test Risk Coverage
 
-Last aligned with canonical on: 2026-04-11.
+Last aligned with canonical on: 2026-08-15.
 Previous alignment: 2026-03-30.
 Change rationale: Autopsy report 2026-04-11 identified two test contract
 failures that allowed confirmed production defects to pass as clean: mock

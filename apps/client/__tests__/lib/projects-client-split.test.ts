@@ -32,7 +32,7 @@ describe("projects client context split", () => {
       ),
     );
 
-    const { projectsClient } = await import("@/lib/projects-client");
+    const { projectsClient } = await import("@/lib/facades/projects-client");
 
     await projectsClient.getProjects({ page: 1 });
     await projectsClient.getPortalProjects();
@@ -55,7 +55,7 @@ describe("projects client context split", () => {
       ),
     );
 
-    const { projectsClient } = await import("@/lib/projects-client");
+    const { projectsClient } = await import("@/lib/facades/projects-client");
 
     const result = await projectsClient.getProject(
       "11111111-1111-4111-8111-111111111111",

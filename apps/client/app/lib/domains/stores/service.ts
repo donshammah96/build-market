@@ -8,7 +8,6 @@ import { storesRepository } from "@/app/lib/domains/stores/repository";
 import type {
   AddStoreDocumentInput,
   CreateStoreInput,
-  DomainResult,
   MyStoreWithStats,
   StoreActor,
   StoreDeleteOptimisticInput,
@@ -21,7 +20,15 @@ import type {
   StoreDetail,
   StoreDocumentItem,
   StoreListItem,
+  StoreResult,
 } from "@/app/lib/domains/stores/contracts";
+import {
+  toMyStoreWithStatsDto,
+  toStoreDto,
+  toStoreDetailDto,
+  toStoreDocumentItemDto,
+  toStoreListItemDto,
+} from "@/app/lib/domains/stores/mappers";
 import {
   buildConflictResponse,
   isOptimisticRetryEnabled,
@@ -84,7 +91,7 @@ function toStoreCreateInput(
   };
 }
 
-async function ensureCanCreate(userId: string): Promise<DomainResult<true>> {
+async function ensureCanCreate(userId: string): Promise<StoreResult<true>> {
   const user = await storesRepository.findUserForStoreCreation(userId);
   const allowed = storesRepository.assertCanCreateStores(user);
   if (!allowed.ok) {
@@ -109,7 +116,7 @@ async function ensureCanCreate(userId: string): Promise<DomainResult<true>> {
 export const storesService = {
   async listStores(
     filters: StoreQueryInput,
-  ): Promise<DomainResult<StoreListResult>> {
+  ): Promise<StoreResult<StoreListResult>> {
     const { category, storeType, city, verified, featured, page, limit } =
       filters;
     const pageNum = parseInt(page, 10);
@@ -133,7 +140,7 @@ export const storesService = {
     return {
       ok: true,
       data: {
-        stores,
+        stores: stores.map(toStoreListItemDto),
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -151,7 +158,7 @@ export const storesService = {
       ipAddress?: string;
       userAgent?: string;
     },
-  ): Promise<DomainResult<StoreDetail>> {
+  ): Promise<StoreResult<StoreDetail>> {
     const store = await storesRepository.findStoreById(storeId);
     if (!store) {
       return {
@@ -180,12 +187,12 @@ export const storesService = {
       }
     }
 
-    return { ok: true, data: store };
+    return { ok: true, data: toStoreDetailDto(store) };
   },
 
   async listMyStores(
     actor: StoreActor | string,
-  ): Promise<DomainResult<MyStoreWithStats[]>> {
+  ): Promise<StoreResult<MyStoreWithStats[]>> {
     const userId = getStoreActorUserId(actor);
     const stores = await storesRepository.listMyStoresBase(userId);
     const storeIds = stores.map((s) => s.id);
@@ -210,30 +217,12 @@ export const storesService = {
 
     return {
       ok: true,
-      data: stores.map((store) => ({
-        id: store.id,
-        name: store.name,
-        slug: store.slug,
-        description: store.description,
-        logoUrl: store.logoUrl,
-        verified: store.verified,
-        verificationStatus: store.verificationStatus,
-        rejectionReason: store.rejectionReason,
-        rating: store.rating != null ? Number(store.rating) : null,
-        reviewCount: store.reviewCount,
-        isOpen: store.isOpen,
-        featured: store.featured,
-        version: store.version ?? 0,
-        createdAt: store.createdAt,
-        updatedAt: store.updatedAt,
-        totalProducts: store._count.products,
-        totalOrders: store._count.orders,
-        totalReviews: store._count.reviews,
-        pendingOrders: pendingOrdersMap.get(store.id) || 0,
-        totalRevenue: revenueMap.get(store.id) || 0,
-        recentProducts: store.products,
-        views: 0,
-      })),
+      data: stores.map((store) =>
+        toMyStoreWithStatsDto(store, {
+          pendingOrders: pendingOrdersMap.get(store.id) || 0,
+          totalRevenue: revenueMap.get(store.id) || 0,
+        }),
+      ),
     };
   },
 
@@ -241,7 +230,7 @@ export const storesService = {
     actor: StoreActor | string,
     data: CreateStoreInput,
     options?: { ipAddress?: string; userAgent?: string },
-  ): Promise<DomainResult<StoreDetail>> {
+  ): Promise<StoreResult<StoreDetail>> {
     const userId = getStoreActorUserId(actor);
     const allowed = await ensureCanCreate(userId);
     if (!allowed.ok) return allowed;
@@ -264,7 +253,7 @@ export const storesService = {
         userAgent: options?.userAgent,
       });
 
-      return { ok: true, data: store };
+      return { ok: true, data: toStoreDetailDto(store) };
     } catch (error) {
       if (!storesRepository.isUniqueConstraint(error)) {
         throw error;
@@ -285,7 +274,7 @@ export const storesService = {
         userAgent: options?.userAgent,
       });
 
-      return { ok: true, data: retryStore };
+      return { ok: true, data: toStoreDetailDto(retryStore) };
     }
   },
 
@@ -293,7 +282,7 @@ export const storesService = {
     actor: StoreActor | string,
     storesData: CreateStoreInput[],
     options?: { ipAddress?: string; userAgent?: string },
-  ): Promise<DomainResult<{ stores: StoreListItem[]; count: number }>> {
+  ): Promise<StoreResult<{ stores: StoreListItem[]; count: number }>> {
     const userId = getStoreActorUserId(actor);
     const allowed = await ensureCanCreate(userId);
     if (!allowed.ok) return allowed;
@@ -326,13 +315,16 @@ export const storesService = {
 
     return {
       ok: true,
-      data: { stores: createdStores, count: createdStores.length },
+      data: {
+        stores: createdStores.map(toStoreListItemDto),
+        count: createdStores.length,
+      },
     };
   },
 
   async updateStoreOptimistic(
     input: StoreUpdateOptimisticInput,
-  ): Promise<DomainResult<StoreUpdateResultEnvelope>> {
+  ): Promise<StoreResult<StoreUpdateResultEnvelope>> {
     const result = await updateStoreWithOptimisticLock(
       input.storeId,
       input.actor.userId,
@@ -369,7 +361,7 @@ export const storesService = {
     return {
       ok: true,
       data: {
-        data: result.data.store as StoreDetail,
+        data: toStoreDetailDto(result.data.store),
         meta: {
           version: result.newVersion,
           eventVersion: result.data.eventVersion,
@@ -380,7 +372,7 @@ export const storesService = {
 
   async deleteStoreOptimistic(
     input: StoreDeleteOptimisticInput,
-  ): Promise<DomainResult<StoreDeleteResultEnvelope>> {
+  ): Promise<StoreResult<StoreDeleteResultEnvelope>> {
     const result = await deleteStoreWithOptimisticLock(
       input.storeId,
       input.actor.userId,
@@ -418,7 +410,7 @@ export const storesService = {
       data: {
         message: "Store deleted successfully",
         storeId: input.storeId,
-        deletedAt: new Date().toISOString(),
+        deletedAt: toStoreDto(new Date()) as unknown as string,
         version: result.newVersion,
       },
     };
@@ -428,7 +420,7 @@ export const storesService = {
     storeId: string,
     actor: StoreActor | string,
     type?: StoreDocumentType,
-  ): Promise<DomainResult<{ documents: StoreDocumentItem[] }>> {
+  ): Promise<StoreResult<{ documents: StoreDocumentItem[] }>> {
     const userId = getStoreActorUserId(actor);
     const ownership = await storesRepository.findStoreOwner(storeId);
     if (!ownership) {
@@ -449,14 +441,17 @@ export const storesService = {
     }
 
     const documents = await storesRepository.listDocuments(storeId, type);
-    return { ok: true, data: { documents } };
+    return {
+      ok: true,
+      data: { documents: documents.map(toStoreDocumentItemDto) },
+    };
   },
 
   async addStoreDocument(
     storeId: string,
     actor: StoreActor | string,
     data: AddStoreDocumentInput,
-  ): Promise<DomainResult<StoreDocumentItem>> {
+  ): Promise<StoreResult<StoreDocumentItem>> {
     const userId = getStoreActorUserId(actor);
     const ownership = await storesRepository.findStoreOwner(storeId);
     if (!ownership) {
@@ -502,14 +497,14 @@ export const storesService = {
       uploadedById: userId,
     });
 
-    return { ok: true, data: document };
+    return { ok: true, data: toStoreDocumentItemDto(document) };
   },
 
   async removeStoreDocument(
     storeId: string,
     documentId: string,
     actor: StoreActor | string,
-  ): Promise<DomainResult<{ success: true }>> {
+  ): Promise<StoreResult<{ success: true }>> {
     const userId = getStoreActorUserId(actor);
     const ownership = await storesRepository.findStoreOwner(storeId);
     if (!ownership) {

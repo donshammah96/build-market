@@ -6,6 +6,8 @@
  */
 
 import { sendEmail as baseSendEmail } from "@/lib/infrastructure/mailer";
+import { omitUndefined } from "@/lib/utils";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 
 export type DPOEscalationMetadata = Record<string, unknown>;
 export interface IncidentSeverityLevel {
@@ -60,10 +62,12 @@ export async function sendEmail(options: EmailOptions) {
         to: recipient,
         subject: options.subject,
         html: options.html,
-        attachments: options.attachments?.map((attachment) => ({
-          filename: attachment.filename,
-          content: attachment.content,
-        })),
+        ...omitUndefined({
+          attachments: options.attachments?.map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.content,
+          })),
+        }),
       }),
     ),
   );
@@ -203,7 +207,7 @@ export async function sendODPCNotificationEmail(
     description,
   } = data;
 
-  const odpcEmail = process.env.ODPC_EMAIL || "dpo/odpc.go.ke";
+  const odpcEmail = adminEnvConfig.ODPC_EMAIL ?? "dpo/odpc.go.ke";
   const subject = `MANDATORY NOTIFICATION: Data Breach - ${incidentId}`;
 
   const body = `
@@ -266,7 +270,7 @@ export async function sendDPOEscalationEmail(
   severity: string,
   metadata: DPOEscalationMetadata,
 ): Promise<void> {
-  const dpoEmail = process.env.DPO_EMAIL || "security/buildmarket.co.ke";
+  const dpoEmail = adminEnvConfig.DPO_EMAIL ?? "security/buildmarket.co.ke";
 
   await sendEmail({
     to: dpoEmail,

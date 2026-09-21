@@ -1,15 +1,16 @@
-// @ts-nocheck
 import { NextResponse } from "next/server";
-import { env } from "../infrastructure/env";
+import { adminEnvConfig } from "../infrastructure/env";
 
 /**
  * Allowed origins for CORS
  */
 const getAllowedOrigins = (): string[] => {
-  const origins = [env.appUrl];
+  const origins = [
+    adminEnvConfig.APP_URL || adminEnvConfig.CLIENT_APP_URL || "",
+  ];
 
   // Add localhost origins in development
-  if (env.isDev) {
+  if (adminEnvConfig.NODE_ENV === "development") {
     origins.push(
       "http://localhost:3000",
       "http://localhost:3030",
@@ -18,7 +19,7 @@ const getAllowedOrigins = (): string[] => {
     );
   }
 
-  return origins;
+  return origins.filter(Boolean);
 };
 
 /**

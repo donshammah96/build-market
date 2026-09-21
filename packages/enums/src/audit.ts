@@ -130,6 +130,7 @@ export const AUDIT_ACTIONS = [
   "RETENTION_POLICY_ENFORCED",
   "AUTO_ANONYMIZATION_EXECUTED",
   "BREACH_NOTIFICATION_SENT",
+  "EVIDENCE_VIEWED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -156,6 +157,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   RETENTION_POLICY_ENFORCED: "Retention Policy Enforced",
   AUTO_ANONYMIZATION_EXECUTED: "Auto Anonymization Executed",
   BREACH_NOTIFICATION_SENT: "Breach Notification Sent",
+  EVIDENCE_VIEWED: "Evidence Viewed",
 };
 
 export function isAuditAction(value: unknown): value is AuditAction {

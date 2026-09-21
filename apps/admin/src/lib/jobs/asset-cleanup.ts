@@ -10,37 +10,65 @@
 import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
-import { AssetCleanupService } from "@/lib/gdpr/services/asset-cleanup.service";
+import { AssetCleanupService } from "@/lib/domains/gdpr/asset-cleanup/service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
+
+const logger = new StructuredLogger("asset-cleanup-job");
 
 // Configuration
 const ASSET_CLEANUP_CRON_PATTERN =
-  process.env.ASSET_CLEANUP_CRON || "0 5 * * *"; // 5 AM daily
-const CLEANUP_BATCH_SIZE = parseInt(
-  process.env.CLEANUP_BATCH_SIZE || "100",
-  10,
-);
-const S3_DISABLED = process.env.S3_DISABLED === "true";
+  adminEnvConfig.ASSET_CLEANUP_CRON ?? "0 5 * * *"; // 5 AM daily
+const CLEANUP_BATCH_SIZE = adminEnvConfig.CLEANUP_BATCH_SIZE ?? 100;
+const S3_DISABLED = adminEnvConfig.S3_DISABLED;
 
 const assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
   connection: createRedisConnection() as any,
 });
 
-// Initialize S3 client if enabled
-let s3Client: S3Client | null = null;
+// Structural type avoids inheritance chain resolution issues with pnpm virtual store.
+// S3Client is still used to construct the instance; we only need `send` at call sites.
+type S3Sender = { send(command: DeleteObjectCommand): Promise<unknown> };
+let s3Client: S3Sender | null = null;
 if (!S3_DISABLED) {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const accessKeyId =
+    adminEnvConfig.R2_ACCESS_KEY_ID ??
+    adminEnvConfig.AWS_ACCESS_KEY_ID ??
+    adminEnvConfig.S3_ACCESS_KEY_ID;
+  const secretAccessKey =
+    adminEnvConfig.R2_SECRET_ACCESS_KEY ??
+    adminEnvConfig.AWS_SECRET_ACCESS_KEY ??
+    adminEnvConfig.S3_SECRET_ACCESS_KEY;
+  const endpoint = adminEnvConfig.R2_ENDPOINT ?? adminEnvConfig.S3_URL;
+  const region =
+    adminEnvConfig.R2_REGION ??
+    adminEnvConfig.AWS_REGION ??
+    adminEnvConfig.S3_REGION ??
+    "auto";
 
-  if (accessKeyId && secretAccessKey) {
+  if (accessKeyId && secretAccessKey && endpoint) {
+    // S3Client satisfies S3Sender at runtime (it inherits `send` from @smithy/smithy-client's
+    // Client base class). The cast bridges a language server type resolution gap in pnpm
+    // virtual stores where the inheritance chain for `send` is not visible to the IDE.
     s3Client = new S3Client({
-      region: process.env.AWS_REGION || "af-south-1",
+      region,
+      endpoint,
       credentials: { accessKeyId, secretAccessKey },
-    });
+    }) as unknown as S3Sender;
   }
 }
 
-const ASSET_BUCKET = process.env.S3_ASSET_BUCKET || "buildmarket-assets";
+const ASSET_BUCKET =
+  adminEnvConfig.R2_ASSET_BUCKET ??
+  adminEnvConfig.STORAGE_BUCKET ??
+  adminEnvConfig.S3_ASSET_BUCKET ??
+  "buildmarket-assets";
 
 interface AssetCleanupMetrics {
   totalExpired: number;
@@ -57,6 +85,8 @@ interface AssetCleanupMetrics {
  * Schedule the asset cleanup job
  */
 export async function scheduleAssetCleanup() {
+  const correlationId = CorrelationIdManager.generate();
+
   try {
     await assetCleanupQueue.add(
       "cleanup-expired-assets",
@@ -74,11 +104,17 @@ export async function scheduleAssetCleanup() {
       },
     );
 
-    console.log(
-      `[AssetCleanup] Scheduled with pattern: ${ASSET_CLEANUP_CRON_PATTERN}`,
-    );
+    logger.info("Asset cleanup job scheduled successfully", {
+      correlationId,
+      cronPattern: ASSET_CLEANUP_CRON_PATTERN,
+      batchSize: CLEANUP_BATCH_SIZE,
+    });
   } catch (error) {
-    console.error("[AssetCleanup] Failed to schedule job:", error);
+    logger.error(
+      "Failed to schedule asset cleanup job",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId },
+    );
     throw error;
   }
 }
@@ -87,12 +123,13 @@ export async function scheduleAssetCleanup() {
  * Delete an asset from S3
  */
 async function deleteFromS3(s3Key: string): Promise<boolean> {
-  if (!s3Client || !s3Key) {
+  const client = s3Client;
+  if (!client || !s3Key) {
     return false;
   }
 
   try {
-    await s3Client.send(
+    await client.send(
       new DeleteObjectCommand({
         Bucket: ASSET_BUCKET,
         Key: s3Key,
@@ -100,7 +137,11 @@ async function deleteFromS3(s3Key: string): Promise<boolean> {
     );
     return true;
   } catch (error) {
-    console.error(`[AssetCleanup] Failed to delete S3 object ${s3Key}:`, error);
+    logger.error(
+      "Failed to delete S3 object",
+      error instanceof Error ? error : new Error(String(error)),
+      { s3Key },
+    );
     return false;
   }
 }
@@ -112,10 +153,17 @@ export function createAssetCleanupWorker() {
   const worker = new Worker(
     "gdpr-asset-cleanup",
     async (job: Job) => {
+      validateJobPayload("gdpr-asset-cleanup", job.name, job.data);
       if (job.name !== "cleanup-expired-assets") {
-        console.warn(`[AssetCleanup] Unexpected job type: ${job.name}`);
+        logger.warn("Received unexpected job type", {
+          jobName: job.name,
+          jobId: job.id,
+        });
         return;
       }
+
+      const correlationId = CorrelationIdManager.generate();
+      CorrelationIdManager.set(correlationId);
 
       const metrics: AssetCleanupMetrics = {
         totalExpired: 0,
@@ -127,7 +175,10 @@ export function createAssetCleanupWorker() {
         startTime: Date.now(),
       };
 
-      console.log("[AssetCleanup] Starting asset cleanup job");
+      logger.info("Starting asset cleanup job", {
+        correlationId,
+        jobId: job.id,
+      });
 
       try {
         const now = new Date();
@@ -150,9 +201,10 @@ export function createAssetCleanupWorker() {
 
         await job.updateProgress(10);
 
-        console.log(
-          `[AssetCleanup] Found ${expiredAssets.length} expired assets`,
-        );
+        logger.info("Found expired assets", {
+          correlationId,
+          count: expiredAssets.length,
+        });
 
         // Process each asset
         for (let i = 0; i < expiredAssets.length; i++) {
@@ -193,7 +245,10 @@ export function createAssetCleanupWorker() {
               metrics.deletedFromDB++;
               metrics.bytesFreed += asset.size || 0;
 
-              console.log(`[AssetCleanup] Deleted orphaned asset ${asset.id}`);
+              logger.info("Deleted orphaned asset", {
+                correlationId,
+                assetId: asset.id,
+              });
             } else {
               // Asset is still referenced - transfer to system user
               await prisma.asset.update({
@@ -206,14 +261,17 @@ export function createAssetCleanupWorker() {
 
               metrics.transferredToSystem++;
 
-              console.log(
-                `[AssetCleanup] Transferred asset ${asset.id} to system (refCount: ${refCount})`,
-              );
+              logger.info("Transferred asset to system user", {
+                correlationId,
+                assetId: asset.id,
+                refCount,
+              });
             }
           } catch (error) {
-            console.error(
-              `[AssetCleanup] Error processing asset ${asset.id}:`,
-              error,
+            logger.error(
+              "Error processing asset",
+              error instanceof Error ? error : new Error(String(error)),
+              { correlationId, assetId: asset.id },
             );
             metrics.errors++;
           }
@@ -226,12 +284,23 @@ export function createAssetCleanupWorker() {
         await job.updateProgress(95);
 
         metrics.endTime = Date.now();
-        const duration = metrics.endTime - metrics.startTime;
+        const durationMs = metrics.endTime - metrics.startTime;
 
-        console.log("[AssetCleanup] Job completed", {
-          ...metrics,
-          durationMs: duration,
-          bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
+        logger.info("Asset cleanup job completed", {
+          correlationId,
+          jobId: job.id,
+          metrics: {
+            totalExpired: metrics.totalExpired,
+            deletedFromS3: metrics.deletedFromS3,
+            deletedFromDB: metrics.deletedFromDB,
+            transferredToSystem: metrics.transferredToSystem,
+            errors: metrics.errors,
+            bytesFreed: metrics.bytesFreed,
+            startTime: metrics.startTime,
+            endTime: metrics.endTime,
+            durationMs,
+            bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
+          },
         });
 
         // Log audit entry for compliance
@@ -256,7 +325,11 @@ export function createAssetCleanupWorker() {
           metrics,
         };
       } catch (error) {
-        console.error("[AssetCleanup] Job failed:", error);
+        logger.error(
+          "Asset cleanup job failed",
+          error instanceof Error ? error : new Error(String(error)),
+          { correlationId, jobId: job.id, metrics },
+        );
 
         await prisma.auditLog.create({
           data: {
@@ -281,16 +354,44 @@ export function createAssetCleanupWorker() {
     },
   );
 
-  worker.on("completed", (job) => {
-    console.log(`[AssetCleanup] Job ${job.id} completed`);
+  worker.on("completed", (job: Job) => {
+    logger.info("Job completed", { jobId: job.id });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
-  worker.on("failed", (job, error) => {
-    console.error(`[AssetCleanup] Job ${job?.id} failed:`, error);
+  worker.on("failed", (job: Job | undefined, error: Error) => {
+    logger.error(
+      "Job failed",
+      error instanceof Error ? error : new Error(String(error)),
+      { jobId: job?.id },
+    );
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
-  worker.on("error", (error) => {
-    console.error("[AssetCleanup] Worker error:", error);
+  worker.on("error", (error: Error) => {
+    logger.error(
+      "Worker error",
+      error instanceof Error ? error : new Error(String(error)),
+    );
   });
 
   return worker;

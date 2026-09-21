@@ -24,7 +24,7 @@ import {
   StepProgress,
   CompactStepProgress,
 } from "@/components/ui/step-progress";
-import { onboardingClient } from "@/lib/onboarding-client";
+import { onboardingClient } from "@/lib/facades/onboarding-client";
 import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import {
   ProfessionStep,
@@ -33,12 +33,15 @@ import {
   PropertyStep,
   CredentialsStep,
   DocumentsStep,
+  ConsentStep,
   ReviewStep,
   getActiveSteps,
   ProfessionalWizardData,
   professionalDraftSchema,
 } from "./professional-wizard";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+import { useProfessionalFunnelTracking } from "@/app/lib/analytics/use-professional-funnel-tracking";
+import { PROFESSIONAL_FUNNEL_EVENTS } from "@/app/lib/analytics/professional-funnel-events";
 
 // SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive onboarding draft state in sessionStorage.
 
@@ -60,6 +63,48 @@ const STORAGE_KEYS = {
 
 const StorePayloadSchema = StoreOnboardingSchema.omit({ role: true });
 const PropertyPayloadSchema = PropertyOnboardingSchema.omit({ role: true });
+
+// ============================================================================
+// DRAFT PERSISTENCE SECURITY
+// ============================================================================
+
+/**
+ * Fields that MUST NOT be persisted in sessionStorage drafts.
+ * These contain sensitive identifiers, document references, or consent
+ * records that must be re-entered on each session for security and
+ * legal compliance.
+ */
+const DRAFT_DENYLIST: ReadonlySet<string> = new Set([
+  "licenseNumber",
+  "boardRegistrationNumber",
+  "kraPin",
+  "idNumber",
+  "nationalId",
+  "passportNumber",
+  "uploadId",
+  "previewUrl",
+  "documents",
+  "consents",
+  "certificates",
+  "idDocuments",
+]);
+
+/**
+ * Recursively strip sensitive fields from an object before persisting.
+ * Returns a shallow clone with denied keys removed.
+ */
+function stripSensitiveFields(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (DRAFT_DENYLIST.has(key)) continue;
+    // Strip fields matching sensitive patterns
+    if (/\b(pin|passport|national.?id)\b/i.test(key)) continue;
+    result[key] = value;
+  }
+  return result;
+}
 
 // Theme-aware styles
 const createTheme = (_variant: ProfessionalFormVariant) => {
@@ -138,56 +183,58 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       animate={{ opacity: 1, scale: 1 }}
       className={
         isDark
-          ? "bg-onboarding-surface/82 backdrop-blur-md border border-onboarding-primary/28 p-8 max-w-md mx-auto text-center rounded-xl"
-          : "bg-white border border-border shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
+          ? "bg-zinc-900/90 backdrop-blur-2xl border border-zinc-800 p-8 sm:p-10 max-w-md mx-auto text-center rounded-3xl shadow-2xl"
+          : "bg-white border border-border shadow-lg p-8 sm:p-10 max-w-md mx-auto text-center rounded-3xl"
       }
     >
-      <div className="mb-4 text-onboarding-primary">
-        <Award
-          className={`w-12 h-12 inline-block ${isDark ? "drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "drop-shadow-md"}`}
-        />
+      <div className="mb-6 flex justify-center">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-[0_0_24px_rgba(16,185,129,0.25)]">
+          <Award className="w-8 h-8" />
+        </div>
       </div>
       <h3
         className={
           isDark
-            ? "font-['Syne'] text-2xl text-white mb-2 drop-shadow-lg"
-            : "font-semibold text-2xl text-foreground mb-2"
+            ? "font-['Syne'] text-2xl font-bold text-white mb-2"
+            : "font-semibold text-2xl text-zinc-900 mb-2"
         }
       >
-        {isCompletion ? "Profile Updated!" : "Thanks — application received"}
+        {isCompletion ? "Profile Updated!" : "Application Received"}
       </h3>
       <p
         className={
-          isDark ? "text-onboarding-ink/62 mb-6" : "text-muted-foreground mb-6"
+          isDark
+            ? "text-zinc-400 text-sm mb-8 leading-relaxed"
+            : "text-zinc-500 text-sm mb-8 leading-relaxed"
         }
       >
         {isCompletion
-          ? "Your profile has been updated successfully. You're all set to start connecting with clients!"
-          : "Our team will review your documents and contact you within 3 business days for verification."}
+          ? "Your profile has been updated successfully. You are all set to start connecting with clients!"
+          : "Our compliance team will review your verified documents and contact you within 3 business days."}
       </p>
-      <div className="flex gap-4 justify-center">
+      <div className="flex flex-col gap-3">
         <button
           onClick={onGoDashboard}
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm border-b border-onboarding-primary/50 pb-1 text-onboarding-primary hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
-              : "text-sm border-b border-success/50 pb-1 text-success hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              ? "w-full py-3.5 px-6 rounded-xl font-semibold text-sm bg-emerald-500 text-zinc-950 hover:bg-emerald-400 transition-all duration-200 active:scale-[0.98] shadow-[0_4px_20px_rgba(16,185,129,0.25)] flex items-center justify-center gap-2 disabled:opacity-50"
+              : "w-full py-3.5 px-6 rounded-xl font-semibold text-sm bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
           }
         >
-          {isNavigating && <Loader2 className="h-3 w-3 animate-spin" />}
-          Go to Dashboard
+          {isNavigating && <Loader2 className="h-4 w-4 animate-spin" />}
+          Proceed to Dashboard
         </button>
         <button
           onClick={onEdit}
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm text-onboarding-ink/58 hover:text-onboarding-ink transition-colors disabled:opacity-50"
-              : "text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              ? "text-sm text-zinc-400 hover:text-white transition-colors py-2 disabled:opacity-50"
+              : "text-sm text-zinc-500 hover:text-zinc-900 transition-colors py-2 disabled:opacity-50"
           }
         >
-          {isCompletion ? "Make more changes" : "Edit application"}
+          {isCompletion ? "Make more changes" : "Edit application details"}
         </button>
       </div>
     </motion.div>
@@ -211,6 +258,7 @@ const ProfessionalForm: React.FC<Props> = ({
   const storageKey = STORAGE_KEYS[mode];
   const theme = createTheme(variant);
   const analytics = useOnboardingAnalytics();
+  const trackFunnel = useProfessionalFunnelTracking();
   // Respect the user's OS/browser reduced-motion preference for step animations.
   const prefersReducedMotion = useReducedMotion() ?? false;
   const stepVariants = useMemo(
@@ -292,16 +340,16 @@ const ProfessionalForm: React.FC<Props> = ({
   // PERSISTENCE
   // ========================================
 
-  // Save to sessionStorage when form data changes (excluding files)
+  // Save to sessionStorage when form data changes (excluding files and sensitive fields)
   useEffect(() => {
     if (formData.profession) {
-      const dataToSave = {
+      const dataToSave = stripSensitiveFields({
         ...formData,
         certificates: undefined,
         idDocuments: undefined,
         stores: formData.stores,
         properties: formData.properties,
-      };
+      } as Record<string, unknown>);
       // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive professional onboarding draft state.
       sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
@@ -396,7 +444,7 @@ const ProfessionalForm: React.FC<Props> = ({
   }, [shouldSubmit, isSubmitting]);
 
   // ========================================
-  // FILE UPLOAD HELPER
+  // FILE UPLOAD HELPER (bounded concurrency + retry)
   // ========================================
 
   const uploadFiles = useCallback(
@@ -411,50 +459,87 @@ const ProfessionalForm: React.FC<Props> = ({
       const results: Array<{ uploadId: string; previewUrl: string }> = [];
       const totalFiles = files.length;
       let uploadedIndex = 0;
+      const MAX_CONCURRENT = 2;
+      const MAX_RETRIES = 1;
 
-      for (const file of files) {
-        if (signal?.aborted) {
-          throw new DOMException("Upload cancelled", "AbortError");
-        }
+      // Process files in batches of MAX_CONCURRENT
+      for (
+        let batchStart = 0;
+        batchStart < files.length;
+        batchStart += MAX_CONCURRENT
+      ) {
+        const batch = files.slice(batchStart, batchStart + MAX_CONCURRENT);
 
-        onProgress?.(uploadedIndex, totalFiles, file.name);
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            if (signal?.aborted) {
+              throw new DOMException("Upload cancelled", "AbortError");
+            }
 
-        try {
-          const res = await onboardingClient.uploadFiles(
-            [file],
-            fieldName,
-            signal,
-          );
+            onProgress?.(uploadedIndex, totalFiles, file.name);
 
-          if (!res.success) {
-            throw new Error(res.error || "Upload failed");
-          }
+            let lastError: Error | null = null;
 
-          const uploadedResult = res.data?.[0];
+            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+              try {
+                const res = await onboardingClient.uploadFiles(
+                  [file],
+                  fieldName,
+                  signal,
+                );
 
-          if (uploadedResult?.uploadId) {
-            results.push({
-              uploadId: uploadedResult.uploadId,
-              previewUrl: uploadedResult.previewUrl || "",
+                if (!res.success) {
+                  throw new Error(res.error || "Upload failed");
+                }
+
+                const uploadedResult = res.data?.[0];
+
+                if (uploadedResult?.uploadId) {
+                  trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.uploadSucceeded, {
+                    source: fieldName,
+                  });
+                  return {
+                    uploadId: uploadedResult.uploadId,
+                    previewUrl: uploadedResult.previewUrl || "",
+                  };
+                }
+                throw new Error("No uploadId returned from server");
+              } catch (err) {
+                if (err instanceof Error && err.name === "AbortError") {
+                  throw err;
+                }
+                lastError = err instanceof Error ? err : new Error(String(err));
+                // Only retry on non-abort errors
+                if (attempt < MAX_RETRIES) {
+                  // Brief delay before retry
+                  await new Promise((r) => setTimeout(r, 500));
+                }
+              }
+            }
+
+            // All retries exhausted
+            console.error(`Failed to upload ${file.name}:`, lastError);
+            trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.uploadFailed, {
+              source: fieldName,
+              errorCode: lastError?.message || "Upload failed",
             });
-          } else {
-            throw new Error("No uploadId returned from server");
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === "AbortError") {
-            throw err;
-          }
-          console.error(`Failed to upload ${file.name}:`, err);
-          toast.error(`Failed to upload "${file.name}"`);
-        }
+            toast.error(`Failed to upload "${file.name}"`);
+            return null;
+          }),
+        );
 
-        uploadedIndex++;
+        for (const result of batchResults) {
+          if (result) {
+            results.push(result);
+          }
+          uploadedIndex++;
+        }
       }
 
       onProgress?.(totalFiles, totalFiles, "");
       return results;
     },
-    [],
+    [trackFunnel],
   );
 
   // ========================================
@@ -531,9 +616,8 @@ const ProfessionalForm: React.FC<Props> = ({
         getRegulatoryAuthorityCode(formData.profession || "") ||
         "OTHER";
 
-      // STAFF FIX: Unified License Mapping
       const finalLicenseNumber =
-        formData.boardRegistrationNumber || formData.licenseNumber || "PENDING";
+        formData.boardRegistrationNumber || formData.licenseNumber || undefined;
 
       const stores = formData.stores?.length
         ? formData.stores.map((store, index) => {
@@ -568,13 +652,17 @@ const ProfessionalForm: React.FC<Props> = ({
         yearsExperience: formData.yearsExperience,
         website: formData.website,
         bio: formData.bio,
-        license: {
-          authority,
-          licenseNumber: finalLicenseNumber,
-          certificateUrl:
-            uploadedDocuments.find((d) => d.category === "EDUCATION_CERT")
-              ?.previewUrl || "",
-        },
+        ...(finalLicenseNumber
+          ? {
+              license: {
+                authority,
+                licenseNumber: finalLicenseNumber,
+                certificateUrl:
+                  uploadedDocuments.find((d) => d.category === "EDUCATION_CERT")
+                    ?.previewUrl || "",
+              },
+            }
+          : { licensePending: true }),
         documents: uploadedDocuments,
         ...(stores && {
           stores,
@@ -590,6 +678,12 @@ const ProfessionalForm: React.FC<Props> = ({
       // 6. Cleanup & Success States
       clearSavedData();
       setSuccess(true);
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.submitSucceeded, {
+        role: "professional",
+      });
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.pendingVerificationViewed, {
+        status: "pending",
+      });
       toast.success(
         mode === "completion"
           ? "Profile updated successfully!"
@@ -601,6 +695,12 @@ const ProfessionalForm: React.FC<Props> = ({
       if (onSuccess) onSuccess(payload);
       else if (onAuthSuccess) onAuthSuccess(payload);
     } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to submit application";
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.submitFailed, {
+        role: "professional",
+        errorCode: errorMessage,
+      });
       toast.error(
         err instanceof Error
           ? err.message
@@ -619,6 +719,7 @@ const ProfessionalForm: React.FC<Props> = ({
     clearSavedData,
     onSuccess,
     onAuthSuccess,
+    trackFunnel,
   ]);
 
   // ========================================
@@ -626,12 +727,16 @@ const ProfessionalForm: React.FC<Props> = ({
   // ========================================
   const handleNext = useCallback(() => {
     if (currentStepIndex < activeSteps.length - 1) {
+      const currentStep = activeSteps[currentStepIndex];
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.wizardStepCompleted, {
+        step: currentStep,
+      });
       setDirection(1);
       setCurrentStepIndex((prev) => prev + 1);
     } else {
       handleSubmitForm();
     }
-  }, [currentStepIndex, activeSteps.length, handleSubmitForm]);
+  }, [currentStepIndex, activeSteps, handleSubmitForm, trackFunnel]);
 
   const handleGoDashboard = useCallback(() => {
     setNavigating(true);
@@ -701,6 +806,8 @@ const ProfessionalForm: React.FC<Props> = ({
         return <CredentialsStep {...stepProps} />;
       case "documents":
         return <DocumentsStep {...stepProps} />;
+      case "consent":
+        return <ConsentStep {...stepProps} />;
       case "review":
         return <ReviewStep {...stepProps} />;
       default:

@@ -10,35 +10,66 @@ import path from "path";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
+import { StructuredLogger } from "@build/resilience";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+
+const logger = new StructuredLogger("export-processor");
+
+// Structural type avoids inheritance chain resolution issues with pnpm virtual store.
+// S3Client satisfies this at runtime (inherits `send` from @smithy/smithy-client's Client).
+type S3Sender = {
+  send(command: DeleteObjectCommand | GetObjectCommand): Promise<unknown>;
+};
 
 export class ExportProcessor {
-  private s3Client: S3Client | null = null;
+  // Structural type avoids inheritance chain resolution issues with pnpm virtual store.
+  // S3Client satisfies this at runtime (inherits `send` from @smithy/smithy-client's Client).
+  private s3Client: S3Sender | null = null;
   private readonly bucketName: string;
   private readonly exportDir: string;
-  private readonly s3Disabled: boolean;
+  private s3Disabled: boolean;
 
   constructor() {
-    this.s3Disabled = process.env.S3_DISABLED === "true";
-    this.bucketName = process.env.AWS_S3_BUCKET || "uploads-bucket";
+    this.s3Disabled = adminEnvConfig.S3_DISABLED ?? false;
+    this.bucketName =
+      adminEnvConfig.R2_EXPORT_BUCKET ??
+      adminEnvConfig.S3_EXPORT_BUCKET ??
+      adminEnvConfig.EXPORTS_BUCKET_NAME ??
+      "buildmarket-exports";
     this.exportDir = path.join(process.cwd(), "exports");
 
     // Initialize S3 client only if not disabled
     if (!this.s3Disabled) {
-      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const accessKeyId =
+        adminEnvConfig.R2_ACCESS_KEY_ID ??
+        adminEnvConfig.AWS_ACCESS_KEY_ID ??
+        adminEnvConfig.S3_ACCESS_KEY_ID;
+      const secretAccessKey =
+        adminEnvConfig.R2_SECRET_ACCESS_KEY ??
+        adminEnvConfig.AWS_SECRET_ACCESS_KEY ??
+        adminEnvConfig.S3_SECRET_ACCESS_KEY;
+      const endpoint = adminEnvConfig.R2_ENDPOINT ?? adminEnvConfig.S3_URL;
+      const region =
+        adminEnvConfig.R2_REGION ??
+        adminEnvConfig.AWS_REGION ??
+        adminEnvConfig.S3_REGION ??
+        "auto";
 
-      if (!accessKeyId || !secretAccessKey) {
-        console.warn(
-          "[ExportProcessor] AWS credentials not configured. " +
-            "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or set S3_DISABLED=true for local storage.",
+      if (!accessKeyId || !secretAccessKey || !endpoint) {
+        logger.warn(
+          "S3-compatible storage configuration missing. " +
+            "Set R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY (or AWS/S3 aliases), or set S3_DISABLED=true for local storage.",
         );
         // Allow graceful degradation to local storage
         this.s3Disabled = true;
       } else {
+        // S3Client satisfies S3Sender at runtime. Cast bridges the language server
+        // inheritance resolution gap in pnpm virtual stores.
         this.s3Client = new S3Client({
-          region: process.env.AWS_REGION || "us-east-1",
+          region,
+          endpoint,
           credentials: { accessKeyId, secretAccessKey },
-        });
+        }) as unknown as S3Sender;
       }
     }
 
@@ -116,15 +147,18 @@ export class ExportProcessor {
     });
 
     // Handle archive warnings/errors
-    archive.on("warning", (err) => {
+    archive.on("warning", (err: NodeJS.ErrnoException) => {
       if (err.code === "ENOENT") {
-        console.warn("Archive warning:", err);
+        logger.warn("Archive warning", {
+          code: err.code,
+          message: err.message,
+        });
       } else {
         throw err;
       }
     });
 
-    archive.on("error", (err) => {
+    archive.on("error", (err: Error) => {
       throw err;
     });
 
@@ -278,7 +312,8 @@ export class ExportProcessor {
     const fileStream = createReadStream(tempPath);
 
     const upload = new Upload({
-      client: this.s3Client,
+      // Upload requires the full S3Client type; cast from S3Sender is safe at runtime.
+      client: this.s3Client as unknown as S3Client,
       params: {
         Bucket: this.bucketName,
         Key: s3Key,
@@ -289,8 +324,6 @@ export class ExportProcessor {
           "user-id": user.id,
           "generated-at": new Date().toISOString(),
         },
-        // Server-side encryption
-        ServerSideEncryption: "AES256",
       },
       queueSize: 4, // concurrent upload parts
       partSize: 5 * 1024 * 1024, // 5MB parts
@@ -302,7 +335,7 @@ export class ExportProcessor {
         const percent = Math.round(
           ((progress.loaded || 0) / (progress.total || 1)) * 100,
         );
-        console.log(`[ExportProcessor] S3 Upload: ${percent}%`);
+        logger.debug("S3 upload progress", { exportId, percent });
       },
     );
 
@@ -315,9 +348,14 @@ export class ExportProcessor {
       Key: s3Key,
     });
 
-    fileUrl = await getSignedUrl(this.s3Client, command, {
-      expiresIn: 7 * 24 * 60 * 60,
-    });
+    // getSignedUrl requires the full S3Client type; cast from S3Sender is safe at runtime.
+    fileUrl = await getSignedUrl(
+      this.s3Client as unknown as S3Client,
+      command,
+      {
+        expiresIn: 7 * 24 * 60 * 60,
+      },
+    );
 
     // Cleanup local temp file
     fs.unlinkSync(tempPath);
@@ -342,7 +380,10 @@ export class ExportProcessor {
   // Cleanup method for expired exports
   async deleteExportFiles(exportId: string, s3Key: string) {
     if (this.s3Disabled || !this.s3Client) {
-      console.warn(`[ExportProcessor] S3 disabled, cannot delete ${s3Key}`);
+      logger.warn("S3 disabled, cannot delete export file", {
+        exportId,
+        s3Key,
+      });
       return;
     }
 
@@ -354,11 +395,12 @@ export class ExportProcessor {
         }),
       );
 
-      console.log(`[ExportProcessor] Deleted S3 object ${s3Key}`);
+      logger.info("Deleted S3 export object", { exportId, s3Key });
     } catch (error) {
-      console.error(
-        `[ExportProcessor] Failed to delete S3 object ${s3Key}:`,
-        error,
+      logger.error(
+        "Failed to delete S3 export object",
+        error instanceof Error ? error : new Error(String(error)),
+        { exportId, s3Key },
       );
     }
   }

@@ -4,19 +4,19 @@ import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/lib/workers/export/processor";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("export-cleanup-job");
 
 // Configuration from environment variables
-const CLEANUP_CRON_PATTERN = process.env.EXPORT_CLEANUP_CRON || "0 2 * * *"; // Default: 2 AM daily
-const CLEANUP_BATCH_SIZE = parseInt(
-  process.env.EXPORT_CLEANUP_BATCH_SIZE || "100",
-  10,
-);
-const CLEANUP_MAX_RETRIES = parseInt(
-  process.env.EXPORT_CLEANUP_MAX_RETRIES || "3",
-  10,
-);
+const CLEANUP_CRON_PATTERN = adminEnvConfig.EXPORT_CLEANUP_CRON ?? "0 2 * * *"; // Default: 2 AM daily
+const CLEANUP_BATCH_SIZE = adminEnvConfig.EXPORT_CLEANUP_BATCH_SIZE ?? 100;
+const CLEANUP_MAX_RETRIES = adminEnvConfig.EXPORT_CLEANUP_MAX_RETRIES ?? 3;
 
 const cleanupQueue = new Queue("maintenance-jobs", {
   connection: createRedisConnection() as any,
@@ -73,6 +73,7 @@ export function createCleanupWorker() {
   const worker = new Worker(
     "maintenance-jobs",
     async (job: Job) => {
+      validateJobPayload("maintenance-jobs", job.name, job.data);
       // Job validation
       if (job.name !== "cleanup-expired-exports") {
         logger.warn("Received unexpected job type", {
@@ -143,7 +144,6 @@ export function createCleanupWorker() {
             logger.debug("Cleaning up export", {
               correlationId,
               exportId: exportRecord.id,
-              userId: exportRecord.userId,
               s3Key: exportRecord.s3Key,
             });
 
@@ -191,7 +191,6 @@ export function createCleanupWorker() {
             logger.info("Export cleaned up successfully", {
               correlationId,
               exportId: exportRecord.id,
-              userId: exportRecord.userId,
             });
           } catch (error) {
             metrics.failureCount++;
@@ -202,7 +201,6 @@ export function createCleanupWorker() {
               {
                 correlationId,
                 exportId: exportRecord.id,
-                userId: exportRecord.userId,
                 s3Key: exportRecord.s3Key,
               },
             );
@@ -252,7 +250,12 @@ export function createCleanupWorker() {
           correlationId,
           jobId: job.id,
           metrics: {
-            ...metrics,
+            totalFound: metrics.totalFound,
+            successCount: metrics.successCount,
+            failureCount: metrics.failureCount,
+            bytesFreed: metrics.bytesFreed,
+            startTime: metrics.startTime,
+            endTime: metrics.endTime,
             durationMs,
             durationSeconds: Math.round(durationMs / 1000),
             bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
@@ -307,14 +310,23 @@ export function createCleanupWorker() {
   process.on("SIGINT", () => shutdown("SIGINT"));
 
   // Worker event handlers
-  worker.on("completed", (job, result) => {
+  worker.on("completed", (job: Job, result: unknown) => {
     logger.info("Cleanup job completed", {
       jobId: job.id,
       result,
     });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
-  worker.on("failed", (job, error) => {
+  worker.on("failed", (job: Job | undefined, error: Error) => {
     logger.error(
       "Cleanup job failed",
       error instanceof Error ? error : new Error(String(error)),
@@ -326,9 +338,21 @@ export function createCleanupWorker() {
           : 0,
       },
     );
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
-  worker.on("error", (error) => {
+  worker.on("error", (error: Error) => {
     logger.error(
       "Worker error occurred",
       error instanceof Error ? error : new Error(String(error)),

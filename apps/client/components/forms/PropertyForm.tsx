@@ -52,7 +52,7 @@ export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "status",
   "features",
 ] as const;
-import { uploadForCredential } from "@/lib/upload-client";
+import { uploadForCredential } from "@/lib/facades/upload-client";
 import { isLocalUpload } from "@/lib/utils/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";
@@ -2572,8 +2572,7 @@ export default function PropertyForm({
                     errors.features?.message ||
                       (
                         errors.features as
-                          | { root?: { message?: string } }
-                          | undefined
+                          { root?: { message?: string } } | undefined
                       )?.root?.message,
                   ) !== undefined
                 }
@@ -2610,13 +2609,11 @@ export default function PropertyForm({
           error={
             (
               errors.images as
-                | { message?: string; root?: { message?: string } }
-                | undefined
+                { message?: string; root?: { message?: string } } | undefined
             )?.message ||
             (
               errors.images as
-                | { message?: string; root?: { message?: string } }
-                | undefined
+                { message?: string; root?: { message?: string } } | undefined
             )?.root?.message
           }
         />

@@ -1,11 +1,18 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions", "fullTextSearchPostgres"] // Enable FTS
+  // "native" covers local dev (macOS / glibc Linux / Windows). 
+  // "linux-musl-openssl-3.0.x" is the Alpine musl target used by apps/workers' Dockerfile (node:24-alpine).
+  // `prisma generate` runs inside the alpine builder stage and packages this engine for musl libc with libssl.so.3.
+  //
+  // To inspect the Alpine libssl version:
+  //   docker run --rm node:24-alpine sh -c "ls -la /usr/lib/libssl.so.*"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
   provider   = "postgresql"
-  extensions = [citext]
+  extensions = [pg_stat_statements(schema: "extensions"), pgcrypto(schema: "extensions"), sslinfo(schema: "extensions"), uuid_ossp(map: "uuid-ossp", schema: "extensions")]
 }
 
 // ========================================================
@@ -38,6 +45,8 @@ enum ClientType {
 
 enum AdminRole {
   SUPER_ADMIN // Full system access
+  OPS_ADMIN // Operations admin managing workflows and queues
+  VERIFICATION_ADMIN // Specialist manual verification reviewer
   CONTENT_MODERATOR // Can approve portfolios/properties, no payments
   SUPPORT_AGENT // Can view messages for dispute resolution
   FINANCE_MANAGER // Can process refunds, view transactions
@@ -423,6 +432,51 @@ enum CalendarEventType {
   INSPECTION_INTERNAL
 }
 
+enum MarketplaceLandOwnershipStatus {
+  OWNED_TITLED
+  OWNED_ALLOTMENT_LETTER
+  FAMILY_LAND
+  LEASED
+  PURCHASING_IN_PROGRESS
+  NONE
+}
+
+enum MarketplaceArchitecturalStage {
+  NO_PLANS
+  CONCEPT_ONLY
+  APPROVED_DRAWINGS
+  COUNTY_APPROVED
+  UNDER_CONSTRUCTION
+}
+
+enum MarketplaceBudgetReadiness {
+  UNVERIFIED_ESTIMATE
+  SELF_DECLARED_WITH_RANGE
+  PROOF_OF_FUNDS
+  FINANCING_APPROVED
+  FINANCING_PENDING
+}
+
+enum MarketplaceLeadStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_INFO
+  QUALIFIED
+  DISQUALIFIED
+  ROUTED
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum MarketplaceLeadDocumentType {
+  TITLE_DEED
+  ALLOTMENT_LETTER
+  PROOF_OF_FUNDS
+  APPROVED_DRAWINGS
+  COUNTY_APPROVAL
+}
+
 enum CalendarEventStatus {
   SCHEDULED
   CONFIRMED
@@ -474,6 +528,7 @@ enum TransactionStatus {
   REVERSED
   REFUNDED
   CANCELLED
+  COMPLETED
 }
 
 enum EscrowStatus {
@@ -507,6 +562,76 @@ enum QuoteStatus {
   REJECTED
   EXPIRED
   REVISED
+}
+
+// --- SUBSCRIPTION & TIERS ---
+enum SubscriptionTierKey {
+  FREE
+  GROWTH
+  BUSINESS
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  CANCELED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum TrustTier {
+  UNVERIFIED
+  ID_VERIFIED
+  SKILLS_VERIFIED
+  LICENSE_VERIFIED
+  ELITE
+}
+
+enum BadgeType {
+  FOUNDING_PRO
+  FAST_RESPONDER
+  RISING_TALENT
+  TOP_RATED
+  ELITE_PRO
+}
+
+enum BoostType {
+  PROFILE_BOOST_7D
+  PROFILE_BOOST_30D
+  CATEGORY_FEATURED
+  HOMEPAGE_FEATURED
+}
+
+enum LeadCreditTxnType {
+  GRANT_MONTHLY
+  GRANT_PROMO
+  PURCHASE
+  CONSUME
+  REFUND
+  EXPIRE
+}
+
+enum MpesaTransactionPurpose {
+  PROJECT_PAYMENT
+  ESCROW_FUNDING
+  SUBSCRIPTION_RENEWAL
+  LEAD_CREDIT_PURCHASE
+  BOOST_PURCHASE
+}
+
+enum CpdActivityType {
+  NCA_SEMINAR
+  BORAQS_WORKSHOP
+  EBK_TRAINING
+  INSTITUTIONAL_COURSE
+  HEALTH_AND_SAFETY
+  OTHER
 }
 
 // --- COMMUNICATION & SOCIAL ---
@@ -730,6 +855,9 @@ enum AuditAction {
   RETENTION_POLICY_ENFORCED
   AUTO_ANONYMIZATION_EXECUTED
   BREACH_NOTIFICATION_SENT
+  DOCUMENT_VIEWED
+  DOCUMENT_DOWNLOADED
+  EVIDENCE_VIEWED
 }
 
 enum LegalBasis {
@@ -816,11 +944,17 @@ model SystemSettings {
   kraTaxPinValidation Boolean @default(false)
 
   // Verification & Compliance
+  verificationSlaHours        Int     @default(48)
   enforceStrictVerification   Boolean @default(true)
   enforceProfessionalLicenses Boolean @default(true)
   enableAutoVerifyNCA         Boolean @default(false)
   enableAutoVerifyEPRA        Boolean @default(false) // Renamed from ERC
   enableAutoVerifyBORAQS      Boolean @default(false)
+  enableAutoVerifyEBK         Boolean @default(false)
+  enableAutoVerifyEARB        Boolean @default(false)
+  enableAutoVerifyVRB         Boolean @default(false)
+  enableAutoVerifyISK         Boolean @default(false)
+
   enforcePropertyDocuments    Boolean @default(true)
   enableLandRegistryCheck     Boolean @default(false)
   enforceStorePermits         Boolean @default(true)
@@ -861,6 +995,8 @@ model IdempotencyKey {
   storeId    String?
   propertyId String?
   userId     String
+  actorClerkId String?
+  appUserId    String?
   expiresAt  DateTime
   createdAt  DateTime          @default(now())
 
@@ -868,6 +1004,8 @@ model IdempotencyKey {
   property Property? @relation(fields: [propertyId], references: [id])
 
   @@index([key, scope])
+  @@index([scope, actorClerkId, status])
+  @@index([appUserId])
   @@index([expiresAt]) // For cleanup jobs
 }
 
@@ -875,6 +1013,64 @@ enum IdempotencyStatus {
   PENDING
   COMPLETED
   FAILED
+}
+
+enum OnboardingWorkflowState {
+  NOT_STARTED
+  ROLE_SELECTED
+  PROFILE_SUBMITTED
+  COMPLETED
+  PENDING_VERIFICATION
+  FAILED_RETRYABLE
+}
+
+model OnboardingState {
+  userId          String                  @id
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state           OnboardingWorkflowState @default(NOT_STARTED)
+  role            UserRole?
+  currentStep     Int                     @default(1)
+  completedAt     DateTime?
+  lastErrorCode   String?
+  version         Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  transitions     OnboardingTransition[]
+
+  @@index([state, role])
+  @@index([updatedAt])
+}
+
+model OnboardingTransition {
+  id              String                  @id @default(uuid())
+  userId          String
+  onboardingState OnboardingState         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  idempotencyKey  String                  @unique
+  fromState       OnboardingWorkflowState
+  toState         OnboardingWorkflowState
+  actorClerkId    String
+  correlationId   String
+  reason          String?
+  createdAt       DateTime                @default(now())
+
+  @@index([userId, createdAt])
+  @@index([actorClerkId, createdAt])
+}
+
+model AuthOutboxEvent {
+  id             String   @id @default(uuid())
+  aggregateType  String
+  aggregateId    String
+  eventType      String
+  payload        Json     @db.JsonB
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  nextAttemptAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([aggregateType, aggregateId])
 }
 
 model User {
@@ -890,7 +1086,7 @@ model User {
 
   // Status
   role              UserRole   @default(CLIENT)
-  status            UserStatus @default(ACTIVE)
+  status            UserStatus @default(ONBOARDING)
   isProfileComplete Boolean    @default(false)
   isEmailVerified   Boolean    @default(false)
   isPhoneVerified   Boolean    @default(false)
@@ -947,9 +1143,11 @@ model User {
   clientProfile       ClientProfile?
   professionalProfile ProfessionalProfile?
   adminProfile        AdminProfile?
+  onboardingState     OnboardingState?
 
   // Assets ownership (centralized)
-  uploads Asset[] @relation("Uploader")
+  uploads       Asset[]        @relation("Uploader")
+  directUploads DirectUpload[]
 
   // Auth tokens management
   refreshTokens RefreshToken[]
@@ -965,6 +1163,10 @@ model User {
   analytics            UserAnalytics[]
   verifiedCertificates ProfessionalDocument[] @relation("DocumentVerifier")
   verifiedLicenses     ProfessionalLicense[]  @relation("LicenseVerifier")
+  regulatorVerificationDecisions RegulatorVerificationDecision[] @relation("RegulatorVerificationDecisionMaker")
+  regulatorVerificationEvidenceViews RegulatorVerificationEvidenceView[] @relation("RegulatorVerificationEvidenceViewer")
+  verifiedStores       Store[]                @relation("StoreVerifier")
+  verifiedProperties   Property[]             @relation("PropertyVerifier")
   calendarEvents       CalendarEvent[]        @relation("ClientCalendarEvents")
   notifications        Notification[]
   adminAuditLogs       AdminAuditLog[]        @relation("AdminActions") // Relation to logs created by this admin
@@ -982,6 +1184,11 @@ model User {
   uploadedIdeaBookAttachments IdeaBookAttachment[]
   uploadedPropertyAttachments PropertyAttachment[]
   leads                       Lead[]
+  marketplaceLeads            MarketplaceLead[]      @relation("ClientMarketplaceLeads")
+  newsletterSubscribers       NewsletterSubscriber[]
+
+  stagingTestRunId            String?
+  stagingTestRun              StagingTestRun?        @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
 
   @@index([clerkId])
   @@index([email])
@@ -991,6 +1198,7 @@ model User {
   @@index([phone])
   @@index([status, scheduledDeletionAt])
   @@index([anonymizedAt])
+  @@index([stagingTestRunId])
   @@map("users") // Explicit naming convention
 }
 
@@ -1023,7 +1231,7 @@ model AdminProfile {
 }
 
 model AdminAuditLog {
-  id      String  @id @default(uuid())
+  id      String  @default(uuid())
   adminId String?
   admin   User?   @relation("AdminActions", fields: [adminId], references: [id], onDelete: SetNull)
 
@@ -1046,10 +1254,11 @@ model AdminAuditLog {
 
   createdAt DateTime @default(now())
 
-  @@index([adminId])
-  @@index([action])
-  @@index([targetType, targetId])
-  @@index([severity])
+  @@id([id, createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([severity, createdAt])
 }
 
 // ========================================================
@@ -1173,6 +1382,10 @@ model ProfessionalProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  trustTier           TrustTier @default(UNVERIFIED)
+  trustTierUpdatedAt  DateTime?
+  eliteRecalculatedAt DateTime?
+
   documents       ProfessionalDocument[]
   portfolios      Portfolio[]
   licenses        ProfessionalLicense[]
@@ -1181,19 +1394,32 @@ model ProfessionalProfile {
   orders          Order[]                   @relation("ProfessionalOrders")
   reviews         Review[]                  @relation("ProfessionalReviews")
   calendarEvents  CalendarEvent[]
-  leads           Lead[]
-  transactions    ProfessionalTransaction[]
+  leads                     Lead[]
+  marketplaceRoutingEvents  MarketplaceLeadRoutingEvent[] @relation("ProfessionalMarketplaceRouting")
+  transactions              ProfessionalTransaction[]
   quotes          Quote[]
   properties      Property[]                @relation("AgentProperties")
   offeredServices ProfessionalService[]
   teamMembers     TeamMember[] // For agencies/companies
 
+  subscription   ProfessionalSubscription?
+  leadWallet     LeadCreditWallet?
+  badges         ProfessionalBadge[]
+  boosts         ProfileBoost[]
+  cpdRecords     ProfessionalCpdRecord[]
+  notificationSettings ProfessionalNotificationSettings?
+
+  stagingTestRunId     String?
+  stagingTestRun       StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([slug])
+  @@index([trustTier])
   @@index([profession, county, verificationStatus]) // Main search index
   @@index([kraPin])
   @@index([rating, reviewCount])
   @@index([availability])
   @@index([location]) // PostGIS index (if using PostGIS extension)
+  @@index([stagingTestRunId])
 }
 
 model ProfessionalLicense {
@@ -1232,6 +1458,8 @@ model ProfessionalLicense {
   verifiedBy         User?     @relation("LicenseVerifier", fields: [verifiedById], references: [id])
   verificationMethod String? // "MANUAL", "API_NCA", "API_EBK"
   notes              String?   @db.Text
+
+  verificationCases RegulatorVerificationCase[]
 
   @@unique([professionalId, authority, licenseNumber])
   @@index([authority, licenseNumber]) // For duplicate detection
@@ -1440,10 +1668,14 @@ model Project {
   quotes                   Quote[]
   savedInIdeaBooks         SavedProject[]
 
+  stagingTestRunId         String?
+  stagingTestRun           StagingTestRun?     @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([clientId, status])
   @@index([professionalId, status])
   @@index([county])
   @@index([title, description]) // PostgreSQL FTS index
+  @@index([stagingTestRunId])
 }
 
 model ProjectMilestone {
@@ -1574,8 +1806,9 @@ model EscrowTransaction {
   status EscrowStatus @default(PENDING_FUNDING)
 
   // Funding
-  fundedAt   DateTime?
-  fundingRef String?   @unique // M-Pesa transaction code
+  fundedAt      DateTime?
+  fundingRef    String?   @unique // M-Pesa transaction code
+  settlementKey String?   @unique
 
   // Release
   releasedAt   DateTime?
@@ -1624,6 +1857,11 @@ model LedgerEntry {
 // CENTRALIZED ASSET MANAGEMENT (Deduplication)
 // ========================================================
 
+enum AssetVisibility {
+  PUBLIC
+  PRIVATE
+}
+
 model Asset {
   id String @id @default(uuid())
 
@@ -1635,12 +1873,14 @@ model Asset {
   originalName String
   mimeType     String
   size         Int
-  checksum     String @unique // SHA-256 for deduplication
+  checksum     String // SHA-256 for per-uploader deduplication
 
   // Storage (abstracted)
-  bucket       String // e.g., "buildmarket-prod"
-  key          String  @unique // S3/MinIO key
-  cdnUrl       String
+  bucket     String // e.g., "buildmarket-prod"
+  key        String          @unique // S3/MinIO key
+  cdnUrl     String?
+  visibility AssetVisibility @default(PUBLIC)
+
   thumbnailUrl String? // Generated for images
 
   // Image metadata
@@ -1666,6 +1906,8 @@ model Asset {
   quoteAttachments    QuoteAttachment[]    @relation("QuoteAttachmentAssets")
   reviewImages        ReviewImage[]        @relation("ReviewImageAssets")
   ideaBookAttachments IdeaBookAttachment[] @relation("IdeaBookAttachmentAssets")
+  directUploads       DirectUpload[]
+  cpdEvidenceRecords  ProfessionalCpdRecord[] @relation("CpdEvidenceAssets")
 
   // Usage tracking
   downloadCount Int       @default(0)
@@ -1677,15 +1919,63 @@ model Asset {
   deletedAt   DateTime?
   deleteAfter DateTime? // For temp uploads
 
+  @@unique([uploaderId, checksum, visibility])
   @@index([uploaderId])
   @@index([checksum]) // Deduplication lookup
   @@index([createdAt])
 }
 
+enum DirectUploadStatus {
+  PRESIGNED
+  CONFIRMED
+  EXPIRED
+  FAILED
+}
+
+model DirectUpload {
+  id String @id @default(uuid())
+
+  uploaderId String
+  uploader   User   @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  originalName String
+  mimeType     String
+  size         Int
+  checksum     String
+
+  bucket     String
+  key        String          @unique
+  visibility AssetVisibility @default(PRIVATE)
+
+  status        DirectUploadStatus @default(PRESIGNED)
+  expiresAt     DateTime
+  confirmedAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
+
+  temporary   Boolean   @default(false)
+  deleteAfter DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([uploaderId, status])
+  @@index([expiresAt])
+  @@index([checksum])
+}
+
 enum OnboardingUploadStatus {
   STAGED
+  ATTACHED
   CONSUMED
   EXPIRED
+  DELETED
+  QUARANTINED
+  SCAN_PENDING
+  SCAN_FAILED
 }
 
 model OnboardingUpload {
@@ -1838,6 +2128,8 @@ model Store {
   verificationStatus VerificationStatus @default(PENDING)
   verificationNotes  String?
   verifiedAt         DateTime?
+  verifiedById       String?
+  verifiedBy         User?              @relation("StoreVerifier", fields: [verifiedById], references: [id])
   rejectionReason    String?
 
   featured    Boolean @default(false)
@@ -2116,6 +2408,8 @@ model Property {
 
   verified           Boolean            @default(false)
   verifiedAt         DateTime?
+  verifiedById       String?
+  verifiedBy         User?              @relation("PropertyVerifier", fields: [verifiedById], references: [id])
   submittedAt        DateTime?
   rejectionReason    String?
   verificationStatus VerificationStatus @default(PENDING)
@@ -2357,6 +2651,7 @@ model ProfessionalTransaction {
   project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
   leadId         String?
   subscriptionId String?
+  subscription   ProfessionalSubscription? @relation("SubscriptionTransactions", fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   description String
   type        TransactionType
@@ -2380,7 +2675,188 @@ model ProfessionalTransaction {
   updatedAt    DateTime          @updatedAt
 
   @@index([professionalId])
+  @@index([subscriptionId])
   @@index([referenceCode])
+}
+
+// ========================================================
+// 9b. PROFESSIONAL TIERS, SUBSCRIPTIONS & ENTITLEMENTS
+// ========================================================
+
+model SubscriptionPlan {
+  id          String              @id @default(uuid())
+  key         SubscriptionTierKey @unique
+  name        String
+  description String?             @db.Text
+
+  priceMonthlyKES Decimal  @db.Decimal(10, 2)
+  priceAnnualKES  Decimal? @db.Decimal(10, 2)
+
+  maxPortfolioProjects         Int?
+  maxPortfolioImagesPerProject Int?
+  maxTeamMembers               Int?
+  monthlyLeadCredits           Int     @default(0)
+  leadCreditDiscountPct        Int     @default(0)
+  boostsIncludedPerMonth       Int     @default(0)
+  platformFeePct               Decimal @db.Decimal(5, 2)
+
+  // Canonical entitlement map read by @build/entitlements — source of truth
+  // for anything not modeled as its own column above.
+  featureFlags Json @db.JsonB
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions ProfessionalSubscription[]
+}
+
+model ProfessionalSubscription {
+  id             String              @id @default(uuid())
+  professionalId String              @unique // one active subscription per professional
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  planId String
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status          SubscriptionStatus @default(TRIALING)
+  billingInterval BillingInterval    @default(MONTHLY)
+
+  currentPeriodStart DateTime  @default(now())
+  currentPeriodEnd   DateTime?
+  graceEndsAt        DateTime?
+  canceledAt         DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+
+  isFoundingPro          Boolean   @default(false)
+  foundingProDiscountPct Int?
+  foundingProUntil       DateTime?
+
+  lastMpesaCheckoutRequestId String?
+  lastPaymentAttemptAt       DateTime?
+  lastPaymentFailReason      String?
+
+  transactions ProfessionalTransaction[] @relation("SubscriptionTransactions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, currentPeriodEnd])
+  @@index([planId])
+}
+
+model LeadCreditWallet {
+  professionalId String              @id
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  balance        Int                 @default(0)
+  updatedAt      DateTime            @updatedAt
+
+  ledger LeadCreditLedgerEntry[]
+}
+
+model LeadCreditLedgerEntry {
+  id             String           @id @default(uuid())
+  professionalId String
+  wallet         LeadCreditWallet @relation(fields: [professionalId], references: [professionalId], onDelete: Cascade)
+
+  type                 LeadCreditTxnType
+  amount               Int // positive = credit, negative = debit
+  balanceAfter         Int
+  relatedLeadId        String? // MarketplaceLead.id or MarketplaceLeadRoutingEvent.id
+  relatedTransactionId String? // ProfessionalTransaction.id, if purchased with money
+  settlementKey        String?          @unique
+  note                 String?
+
+  createdAt DateTime @default(now())
+
+  @@index([professionalId, createdAt])
+}
+
+model ProfessionalBadge {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  type             BadgeType
+  awardedAt        DateTime  @default(now())
+  revokedAt        DateTime?
+  criteriaSnapshot Json?     @db.JsonB
+
+  @@unique([professionalId, type])
+  @@index([professionalId])
+}
+
+model ProfileBoost {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  type              BoostType
+  startsAt          DateTime
+  endsAt            DateTime
+  paidTransactionId String?
+  includedInPlan    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([professionalId, startsAt, endsAt])
+  @@index([endsAt]) // expiry-sweep job
+}
+
+model ProfessionalCpdRecord {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  activityType  CpdActivityType
+  providerName  String
+  activityTitle String
+  pointsEarned  Int                 @default(1)
+  completedAt   DateTime
+  
+  evidenceAssetId String?
+  evidenceAsset   Asset?            @relation("CpdEvidenceAssets", fields: [evidenceAssetId], references: [id], onDelete: SetNull)
+
+  verified   Boolean   @default(false)
+  verifiedAt DateTime?
+  verifiedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([professionalId, completedAt])
+  @@index([verified])
+}
+
+model ProfessionalNotificationSettings {
+  id             String              @id @default(uuid())
+  professionalId String              @unique
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  whatsappEnabled Boolean  @default(false) // Opt-in required for Meta WhatsApp API compliance
+  smsEnabled      Boolean  @default(true)
+  emailEnabled    Boolean  @default(true)
+  optedInAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EnterpriseApiClient {
+  id           String    @id @default(uuid())
+  name         String
+  hashedApiKey String    @unique
+  scopes       String[]  // e.g. ["directory:read", "market-data:read"]
+  rateLimitRpm Int       @default(60)
+  isActive     Boolean   @default(true)
+  contactEmail String
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  @@index([hashedApiKey])
+  @@index([isActive])
 }
 
 // ========================================================
@@ -2423,11 +2899,96 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([professionalId])
   @@index([status])
   @@index([county])
   @@index([professionalId, status, priority]) // CRM pipeline view
   @@index([status, createdAt]) // Lead aging reports
+  @@index([stagingTestRunId])
+}
+
+// ========================================================
+// 10B. MARKETPLACE PRE-QUALIFIED LEADS
+// ========================================================
+
+model MarketplaceLead {
+  id            String                @id @default(cuid())
+  clientId      String
+  client        User                  @relation("ClientMarketplaceLeads", fields: [clientId], references: [id], onDelete: Cascade)
+  status        MarketplaceLeadStatus @default(DRAFT)
+  projectCounty String
+  projectType   String
+  title         String?
+  description   String?               @db.Text
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
+  qualification MarketplaceLeadQualification?
+  documents     MarketplaceLeadDocument[]
+  routingEvents MarketplaceLeadRoutingEvent[]
+
+  @@index([clientId])
+  @@index([status, projectCounty])
+  @@index([createdAt])
+  @@index([stagingTestRunId])
+}
+
+model MarketplaceLeadQualification {
+  id                  String                          @id @default(cuid())
+  leadId              String                          @unique
+  lead                MarketplaceLead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  landOwnershipStatus MarketplaceLandOwnershipStatus?
+  architecturalStage  MarketplaceArchitecturalStage?
+  budgetReadiness     MarketplaceBudgetReadiness?
+  budgetRangeMin      Int?
+  budgetRangeMax      Int?
+
+  confidenceScore     Float?
+  confidenceLabel     String?                         // "high" | "medium" | "low"
+  scoringRuleVersion  String?                         // e.g. "leads-v3"
+  breakdownJson       Json?                           @db.JsonB
+  scoredAt            DateTime?
+  reviewedBy          String?                         // staff userId, if manually reviewed
+  reviewNotes         String?
+
+  updatedAt           DateTime                        @updatedAt
+}
+
+model MarketplaceLeadDocument {
+  id         String                      @id @default(cuid())
+  leadId     String
+  lead       MarketplaceLead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type       MarketplaceLeadDocumentType
+  fileKey    String
+  scanStatus String                      @default("pending") // pending | clean | infected | failed
+  scannedAt  DateTime?
+  createdAt  DateTime                    @default(now())
+
+  @@index([leadId])
+  @@index([scanStatus])
+}
+
+model MarketplaceLeadRoutingEvent {
+  id                 String              @id @default(cuid())
+  leadId             String
+  lead               MarketplaceLead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  professionalId     String
+  professional       ProfessionalProfile @relation("ProfessionalMarketplaceRouting", fields: [professionalId], references: [userId], onDelete: Cascade)
+  matchScore         Float
+  confidenceLabel    String              // "high" | "medium" | "low"
+  routedAt           DateTime            @default(now())
+  outcome            String?             // accepted | declined | expired | won | lost
+  outcomeAt          DateTime?
+  contactDisclosedAt DateTime?
+
+  @@index([professionalId, routedAt])
+  @@index([leadId])
 }
 
 model CalendarEvent {
@@ -2486,11 +3047,15 @@ model MessageThread {
 
   isArchived Boolean @default(false)
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   participants ThreadParticipant[]
   messages     Message[]
   // Note: Index on participants removed (cannot index relation fields)
 
   @@index([lastMessageAt])
+  @@index([stagingTestRunId])
 }
 
 model ThreadParticipant {
@@ -2630,9 +3195,14 @@ model Review {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
+  @@unique([reviewerId, projectId])
   @@index([status])
   @@index([professionalId])
   @@index([storeId])
+  @@index([stagingTestRunId])
 }
 
 model ReviewImage {
@@ -2787,7 +3357,7 @@ model UserAnalytics {
 }
 
 model AnalyticsEvent {
-  id         String              @id @default(uuid())
+  id         String              @default(uuid())
   ownerId    String
   entityType AnalyticsEntityType
   entityId   String?
@@ -2800,6 +3370,7 @@ model AnalyticsEvent {
   metadata   Json?
   createdAt  DateTime            @default(now())
 
+  @@id([id, createdAt])
   @@index([ownerId, createdAt])
 }
 
@@ -2819,6 +3390,8 @@ model MpesaTransaction {
   userId          String
   projectId       String?
   escrowId        String?
+  subscriptionId  String?
+  purpose         MpesaTransactionPurpose @default(PROJECT_PAYMENT)
   transactionType MpesaTransactionType
 
   // Financials
@@ -2835,6 +3408,8 @@ model MpesaTransaction {
   // Callback tracking
   callbackReceivedAt DateTime?
   callbackPayload    Json?
+  callbackEventCount Int      @default(0)
+  metadata           Json?    @db.JsonB
 
   // Reversal handling
   reversalTransactionId String?
@@ -2844,14 +3419,82 @@ model MpesaTransaction {
   retryCount  Int       @default(0)
   nextRetryAt DateTime?
 
+  // Privacy & Search
+  phoneSearchHash String? // HMAC-SHA256 search fingerprint
+
+  // Reconciliation & Leases
+  reconciliationAttempts      Int       @default(0)
+  reconciliationNextAttemptAt DateTime?
+  reconciliationClaimedAt     DateTime?
+  reconciliationClaimId       String?
+  lastProviderQueryAt         DateTime?
+  lastProviderQueryCode       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([userId, status])
   @@index([checkoutRequestId])
+  @@index([subscriptionId])
   @@index([mpesaReceiptNumber])
   @@index([status, createdAt]) // Reconciliation queries
   @@index([nextRetryAt]) // Retry job queue
+  @@index([status, checkoutRequestId, reconciliationNextAttemptAt])
+  @@index([reconciliationClaimedAt])
+  @@index([phoneSearchHash])
+  @@index([stagingTestRunId])
+}
+
+// Cold storage archive for settled M-Pesa transactions (>180 days)
+model MpesaTransactionArchive {
+  id String @default(uuid())
+
+  // Request tracking (idempotency snapshot)
+  merchantRequestId String?
+  checkoutRequestId String?
+  idempotencyKey    String
+
+  // Context
+  userId          String
+  projectId       String?
+  escrowId        String?
+  transactionType MpesaTransactionType
+
+  // Financials
+  amount      Decimal @db.Decimal(10, 2)
+  phoneNumber String
+
+  // Status flow
+  status             TransactionStatus
+  resultCode         String?
+  resultDesc         String?
+  mpesaReceiptNumber String?
+  transactionDate    DateTime?
+
+  // Callback tracking
+  callbackReceivedAt DateTime?
+  callbackPayload    Json?
+
+  // Reversal handling
+  reversalTransactionId String?
+  isReversed            Boolean @default(false)
+
+  // Retries
+  retryCount  Int       @default(0)
+  nextRetryAt DateTime?
+
+  createdAt  DateTime
+  updatedAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@id([id, archivedAt])
+  @@index([userId, status, archivedAt])
+  @@index([checkoutRequestId, archivedAt])
+  @@index([mpesaReceiptNumber, archivedAt])
+  @@index([archivedAt])
 }
 
 // M-Pesa B2C (Business to Customer) - Payouts to professionals
@@ -2861,6 +3504,7 @@ model MpesaB2C {
   professionalId String
   amount         Decimal @db.Decimal(10, 2)
   phoneNumber    String
+  idempotencyKey  String  @unique
 
   // Status
   status           TransactionStatus @default(PENDING)
@@ -2868,6 +3512,10 @@ model MpesaB2C {
   originatorConvId String?
   resultCode       String?
   resultDesc       String?
+  callbackReceivedAt DateTime?
+  callbackPayload    Json?
+  retryCount         Int      @default(0)
+  nextRetryAt        DateTime?
 
   // Completion
   transactionId String?   @unique // M-Pesa transaction ID
@@ -2875,6 +3523,36 @@ model MpesaB2C {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([professionalId, status])
+}
+
+// Append-only provider callback receipt. The raw payload is redacted before
+// persistence; payloadHash supports incident correlation without logging or
+// storing secrets and unbounded provider data in application logs.
+model MpesaCallbackEvent {
+  id                String   @id @default(uuid())
+  providerEventKey  String   @unique
+  callbackType      String
+  transactionId     String?
+  payoutId          String?
+  checkoutRequestId String?
+  conversationId    String?
+  payloadHash       String
+  redactedPayload   Json?    @db.JsonB
+  processingStatus  String   @default("RECEIVED")
+  receivedAt        DateTime @default(now())
+  processedAt       DateTime?
+  createdAt         DateTime @default(now())
+
+  stagingTestRunId  String?
+  stagingTestRun    StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
+  @@index([callbackType, receivedAt])
+  @@index([transactionId, processingStatus])
+  @@index([payoutId, processingStatus])
+  @@index([stagingTestRunId])
 }
 
 // ========================================================
@@ -2901,7 +3579,7 @@ model ConsentRecord {
 }
 
 model AuditLog {
-  id String @id @default(uuid())
+  id String @default(uuid())
 
   // Who
   actorId        String? // null = system
@@ -2926,6 +3604,7 @@ model AuditLog {
 
   createdAt DateTime @default(now())
 
+  @@id([id, createdAt])
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
@@ -2980,3 +3659,345 @@ model DataExport {
   userAgent   String
   metadata    Json?    @db.JsonB
 }
+
+model FailedNotification {
+  id              String                   @id @default(uuid())
+  entityType      String // "professional", "store", "property", "certificate", "license"
+  entityId        String
+  recipientUserId String
+  newStatus       String // e.g., VerificationStatus string
+  reason          String?                  @db.Text
+  notes           String?                  @db.Text
+  attemptCount    Int                      @default(0)
+  lastAttemptAt   DateTime?
+  nextRetryAt     DateTime
+  lastError       String                   @db.Text
+  createdAt       DateTime                 @default(now())
+  status          FailedNotificationStatus @default(PENDING)
+
+  @@index([status, nextRetryAt])
+  @@index([entityType, entityId])
+  @@map("failed_notifications")
+}
+
+enum FailedNotificationStatus {
+  PENDING
+  COMPLETED
+  DEAD_LETTER
+}
+
+enum NewsletterSubscriberStatus {
+  PENDING_CONFIRMATION // signed up, confirmation email sent, not yet clicked
+  SUBSCRIBED // confirmed, active
+  UNSUBSCRIBED // user-initiated unsubscribe
+  BOUNCED // ESP reported a hard bounce — never re-add without re-confirmation
+  COMPLAINED // ESP reported a spam complaint — permanently suppressed
+}
+
+enum NewsletterEspSyncStatus {
+  PENDING // not yet synced to the ESP
+  SYNCED // successfully synced
+  FAILED // sync attempt failed, will retry (see espNextRetryAt)
+  DEAD_LETTER // exhausted retries — needs manual/ops follow-up
+}
+
+model NewsletterSubscriber {
+  id    String @id @default(uuid())
+  email String @unique @db.Citext
+
+  // Best-effort link only — subscribing does not require an account and
+  // must keep working if this is null.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  status NewsletterSubscriberStatus @default(PENDING_CONFIRMATION)
+  source String                     @default("footer") // "footer", "checkout", "professional_onboarding", ...
+
+  // Consent audit trail (GDPR / Kenya DPA / CAN-SPAM)
+  consentIpAddress String?
+  consentUserAgent String? @db.Text
+
+  // Double opt-in confirmation. Store a hash, never the raw token — same
+  // reasoning as password reset tokens.
+  confirmationTokenHash      String?   @unique
+  confirmationTokenExpiresAt DateTime?
+  confirmedAt                DateTime?
+  lastConfirmationSentAt     DateTime?
+  confirmationEmailStatus    String?   @default("PENDING") // "PENDING" | "SENT" | "FAILED"
+  confirmationEmailLastError String?   @db.Text
+
+  // Unsubscribe
+  unsubscribeTokenHash String?   @unique
+  unsubscribedAt       DateTime?
+  unsubscribeReason    String?
+
+  // ESP sync state — mirrors FailedNotification's retry-tracking pattern.
+  espProvider      String? // "resend" | "mailchimp" | "stub"
+  espContactId     String? // provider's contact ID once synced
+  espSyncStatus    NewsletterEspSyncStatus @default(PENDING)
+  espSyncAttempts  Int                     @default(0)
+  espLastSyncError String?                 @db.Text
+  espLastSyncAt    DateTime?
+  espNextRetryAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([status])
+  @@index([espSyncStatus, espNextRetryAt])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("newsletter_subscribers")
+}
+
+model UploadScanEvent {
+  id            String   @id @default(uuid())
+  scanRequestId String   @unique
+  uploadId      String
+  status        String   // "CLEAN" | "INFECTED" | "ERROR"
+  virusName     String?
+  engineVersion String
+  createdAt     DateTime @default(now())
+
+  @@index([uploadId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("upload_scan_events")
+}
+
+// ========================================================
+// 20. REGULATOR VERIFICATION (PHASE 9 - PROFESSIONAL ONBOARDING)
+// ========================================================
+// Durable, queryable record of every regulator verification attempt made by
+// RegulatorVerificationGateway. This is the system of record for evidence,
+// confidence scoring, manual-fallback routing, and dead-letter handling -
+// the license-verification BullMQ queue and manual operator workflow both
+// read/write through this model rather than trusting worker logs alone.
+
+enum RegulatorVerificationCaseStatus {
+  QUEUED // enqueued, not yet picked up by a worker
+  PROCESSING // a worker has claimed this attempt (msg.working() equivalent)
+  AUTO_VERIFIED
+  AUTO_REJECTED
+  NEEDS_MANUAL_REVIEW
+  REGULATOR_UNAVAILABLE
+  LOW_CONFIDENCE
+  MANUALLY_VERIFIED // operator decision recorded via RegulatorVerificationDecision
+  MANUALLY_REJECTED
+  DEAD_LETTER // attempt budget exhausted, requires manual intervention to requeue
+  EXPIRED
+  APPROVED
+  REJECTED
+  PENDING
+}
+
+enum RegulatorVerificationDecisionOutcome {
+  APPROVE
+  REJECT
+  REQUEST_MORE_INFO
+}
+
+model RegulatorVerificationCase {
+  id             String               @id @default(uuid())
+  professionalId String
+  licenseId      String?
+  license        ProfessionalLicense? @relation(fields: [licenseId], references: [id], onDelete: SetNull)
+
+  authority     LicenseAuthority
+  licenseNumber String
+
+  // Dedupe key mirrors buildRegulatorVerificationJobId() in gateway.ts so the
+  // BullMQ jobId and this row's uniqueness constraint can never diverge.
+  dedupeKey String @unique
+
+  status RegulatorVerificationCaseStatus @default(QUEUED)
+
+  // Queue/backoff bookkeeping (mirrors AuthOutboxEvent conventions)
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(5)
+  nextAttemptAt DateTime @default(now())
+  deadLetteredAt DateTime?
+  deadLetterReason String?
+
+  // Latest RegulatorVerificationResult snapshot
+  confidence                 Float?
+  confidenceReasons          Json?   @db.JsonB // string[]
+  confidenceAlgorithmVersion String?
+  confidenceBreakdown        Json?   @db.JsonB
+  evidence                   Json?   @db.JsonB // RegulatorEvidenceSnapshot
+  retryable                  Boolean @default(false)
+  retryAfterSeconds          Int?
+  manualFallbackReason       String?
+
+  correlationId String?
+  requestedAt   DateTime  @default(now())
+  completedAt   DateTime?
+
+  decisions     RegulatorVerificationDecision[]
+  evidenceViews RegulatorVerificationEvidenceView[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt]) // worker poll / DLQ dashboard
+  @@index([authority, licenseNumber]) // duplicate/history lookup for operators
+  @@index([professionalId])
+  @@index([status, deadLetteredAt])
+}
+
+// Cold storage archive for closed regulator verification cases (>180 days)
+model RegulatorVerificationCaseArchive {
+  id             String               @default(uuid())
+  professionalId String
+  licenseId      String?
+
+  authority     LicenseAuthority
+  licenseNumber String
+
+  dedupeKey String
+
+  status RegulatorVerificationCaseStatus
+
+  attempts         Int      @default(0)
+  maxAttempts      Int      @default(5)
+  nextAttemptAt    DateTime
+  deadLetteredAt   DateTime?
+  deadLetterReason String?
+
+  confidence                 Float?
+  confidenceReasons          Json?   @db.JsonB
+  confidenceAlgorithmVersion String?
+  confidenceBreakdown        Json?   @db.JsonB
+  evidence                   Json?   @db.JsonB
+  retryable                  Boolean @default(false)
+  retryAfterSeconds          Int?
+  manualFallbackReason       String?
+
+  correlationId String?
+  requestedAt   DateTime
+  completedAt   DateTime?
+
+  createdAt  DateTime
+  updatedAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@id([id, archivedAt])
+  @@index([authority, licenseNumber, archivedAt])
+  @@index([professionalId, archivedAt])
+  @@index([archivedAt])
+}
+
+// Immutable manual decision trail. Never updated in place - a correction is a
+// new row - so this table doubles as the audit log required for high-risk
+// four-eyes approval (a case needs two DISTINCT adminId rows with matching
+// outcome before its RegulatorVerificationCase.status is allowed to flip to
+// MANUALLY_VERIFIED/MANUALLY_REJECTED when highRiskReview = true).
+model RegulatorVerificationDecision {
+  id     String                    @id @default(uuid())
+  caseId String
+  case   RegulatorVerificationCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  adminId    String
+  admin      User    @relation("RegulatorVerificationDecisionMaker", fields: [adminId], references: [id])
+  adminName  String // snapshot, matches AdminAuditLog convention
+  adminEmail String // snapshot
+
+  outcome      RegulatorVerificationDecisionOutcome
+  reasonCode   String // required, e.g. "NAME_MISMATCH_CONFIRMED_SAME_PERSON"
+  reasonNotes  String? @db.Text
+  highRiskReview Boolean @default(false) // true when confidence < threshold or explicit regulator rejection is being overridden
+  isSecondApprover Boolean @default(false) // true when this row satisfies the four-eyes requirement
+
+  createdAt DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([adminId, createdAt])
+}
+
+// Append-only evidence view audit trail for regulator verification cases.
+model RegulatorVerificationEvidenceView {
+  id     String                    @id @default(uuid())
+  caseId String
+  case   RegulatorVerificationCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  viewerId   String
+  viewer     User   @relation("RegulatorVerificationEvidenceViewer", fields: [viewerId], references: [id])
+  viewerRole String // snapshot, matches AdminAuditLog convention
+  unredacted Boolean // true if this view included evidence.rawRecord
+
+  createdAt DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([viewerId, createdAt])
+  @@map("regulator_verification_evidence_views")
+}
+
+// ========================================================
+// 14. STAGING TEST RUN & FIXTURE OWNERSHIP
+// ========================================================
+
+model StagingTestRun {
+  id            String    @id @default(uuid())
+  scenario      String
+  state         String    @default("ACTIVE") // ACTIVE, CLEANING, CLEANED, EXPIRED
+  gitSha        String
+  workflowRunId String?
+  actorLabel    String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  cleanedAt     DateTime?
+
+  users               User[]
+  profiles            ProfessionalProfile[]
+  leads               Lead[]
+  projects            Project[]
+  reviews             Review[]
+  mpesaTransactions   MpesaTransaction[]
+  mpesaCallbackEvents MpesaCallbackEvent[]
+  outboundDeliveries  StagingTestOutboundDelivery[]
+  marketplaceLeads    MarketplaceLead[]
+  messageThreads      MessageThread[]
+  identityLeases      StagingTestIdentityLease[]
+
+  @@index([state, expiresAt])
+  @@index([scenario, createdAt])
+  @@map("staging_test_runs")
+}
+
+model StagingTestOutboundDelivery {
+  id               String         @id @default(uuid())
+  stagingTestRunId String
+  stagingTestRun   StagingTestRun @relation(fields: [stagingTestRunId], references: [id], onDelete: Cascade)
+  channel          String         // EMAIL, SMS, WHATSAPP, PUSH
+  recipientHash    String
+  templateId       String?
+  subject          String?
+  redactedMetadata Json           @db.JsonB
+  createdAt        DateTime       @default(now())
+
+  @@index([stagingTestRunId, channel])
+  @@map("staging_test_outbound_deliveries")
+}
+
+model StagingTestIdentityLease {
+  id               String         @id @default(uuid())
+  stagingTestRunId String
+  stagingTestRun   StagingTestRun @relation(fields: [stagingTestRunId], references: [id], onDelete: Cascade)
+  slot             String
+  role             String         // CLIENT, PROFESSIONAL
+  userId           String
+  clerkId          String
+  state            String         @default("LEASED") // LEASED, RESETTING, READY, RELEASED, FAILED
+  leaseExpiresAt   DateTime
+  resetAt          DateTime?
+  releasedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([stagingTestRunId, slot])
+  @@index([stagingTestRunId])
+  @@index([slot, state])
+  @@map("staging_test_identity_leases")
+}
+

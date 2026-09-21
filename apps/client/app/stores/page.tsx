@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { StoreCategory } from "@prisma/client";
-import { storesClient } from "@/lib/stores-client";
+import { storesClient } from "@/lib/facades/stores-client";
 import { PublicStoreCard } from "./_components/public-store-card";
 import { StoreFilters } from "./_components/store-filters";
 import { Store as StoreIcon } from "lucide-react";

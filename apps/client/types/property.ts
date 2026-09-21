@@ -13,19 +13,14 @@ export type PropertyType = "SALE" | "RENT" | "LEASE";
 
 // Property classification - matches Prisma PropertyCategory enum
 export type PropertyCategory =
-  | "RESIDENTIAL"
-  | "COMMERCIAL"
-  | "LAND"
-  | "INDUSTRIAL";
+  "RESIDENTIAL" | "COMMERCIAL" | "LAND" | "INDUSTRIAL";
 
 // Property availability status - matches Prisma PropertyStatus enum
 export type PropertyStatus = "AVAILABLE" | "SOLD" | "RENTED" | "UNDER_OFFER";
 
 // Attachment types for property documents - matches Prisma AttachmentType enum (subset)
 export type PropertyAttachmentType =
-  | "TITLE_DEED"
-  | "OFFICIAL_SEARCH"
-  | "MANDATE_LETTER";
+  "TITLE_DEED" | "OFFICIAL_SEARCH" | "MANDATE_LETTER";
 
 // ============================================================================
 // LABELS - Human-readable labels

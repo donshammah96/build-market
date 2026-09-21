@@ -46,7 +46,6 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 // Comprehensive validation schema for rectification requests
@@ -145,11 +144,14 @@ export const POST = withAuth(
       );
 
       if (!success) {
-        logger.warn("Rate limit exceeded for rectification request", {
-          correlationId,
-          operationName: "user_data_rectification",
-          rateLimitKey,
-        });
+        getClientLogger().warn(
+          "Rate limit exceeded for rectification request",
+          {
+            correlationId,
+            operationName: "user_data_rectification",
+            rateLimitKey,
+          },
+        );
         return apiError(
           "Rate limit exceeded. Please try again later.",
           HttpStatus.TOO_MANY_REQUESTS,
@@ -167,7 +169,7 @@ export const POST = withAuth(
 
       const body = parseResult.data;
 
-      logger.info("Rectification request received", {
+      getClientLogger().info("Rectification request received", {
         correlationId,
         operationName: "user_data_rectification",
         fieldsRequested: Object.keys(body || {}),
@@ -176,7 +178,7 @@ export const POST = withAuth(
       // Validate request body
       const validationResult = RectificationRequestSchema.safeParse(body);
       if (!validationResult.success) {
-        logger.warn("Rectification validation failed", {
+        getClientLogger().warn("Rectification validation failed", {
           correlationId,
           operationName: "user_data_rectification",
           errors: validationResult.error.issues,
@@ -211,7 +213,7 @@ export const POST = withAuth(
       );
 
       if (!result.success || !result.data) {
-        logger.error(
+        getClientLogger().error(
           "Rectification failed",
           result.error || new Error("Unknown error"),
           {
@@ -235,7 +237,7 @@ export const POST = withAuth(
 
       const { changedFields } = result.data.data;
 
-      logger.info("Rectification completed successfully", {
+      getClientLogger().info("Rectification completed successfully", {
         correlationId,
         operationName: "user_data_rectification",
         changedFieldsCount: changedFields.length,
@@ -244,7 +246,7 @@ export const POST = withAuth(
 
       return apiSuccess(result.data.data, HttpStatus.OK);
     } catch (err) {
-      logger.error(
+      getClientLogger().error(
         "Rectification request error",
         err instanceof Error ? err : new Error(String(err)),
         {
@@ -292,7 +294,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
 
   try {
-    logger.info("Fetching rectification history", {
+    getClientLogger().info("Fetching rectification history", {
       correlationId,
       operationName: "fetch_rectification_history",
     });
@@ -322,7 +324,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!result.success) {
-      logger.error(
+      getClientLogger().error(
         "Failed to fetch rectification history",
         result.error || new Error("Unknown error"),
         {
@@ -338,7 +340,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     if (!result.data) {
-      logger.error(
+      getClientLogger().error(
         "Failed to fetch rectification history",
         result.error || new Error("Unknown error"),
         {
@@ -359,7 +361,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    logger.info("Rectification history fetched", {
+    getClientLogger().info("Rectification history fetched", {
       correlationId,
       operationName: "fetch_rectification_history",
       recordsReturned: result.data.data.data.length,
@@ -368,7 +370,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(result.data.data, HttpStatus.OK);
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Rectification history error",
       err instanceof Error ? err : new Error(String(err)),
       {

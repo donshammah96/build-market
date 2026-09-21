@@ -15,12 +15,7 @@ import type { UserProfileActor } from "./service";
 const logger = new StructuredLogger("user-profile-compliance");
 
 export type UserProfileComplianceErrorCode =
-  | "not_found"
-  | "forbidden"
-  | "bad_request"
-  | "conflict"
-  | "gone"
-  | "internal";
+  "not_found" | "forbidden" | "bad_request" | "conflict" | "gone" | "internal";
 
 export type UserProfileComplianceResult<T> = Result<
   T,

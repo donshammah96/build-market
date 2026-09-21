@@ -18,8 +18,6 @@ import {
 } from "@/app/lib/validation/idea-books-validation";
 import { ideaBooksService } from "@/app/lib/domains/idea-books";
 
-const logger = getClientLogger();
-
 type AttachmentParams = { id: string; attachmentId: string };
 
 function mapIdeaBooksError(error: {
@@ -162,7 +160,7 @@ export const PATCH = withAuth<AttachmentParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to update attachment", result.error, {
+      getClientLogger().error("Failed to update attachment", result.error, {
         correlationId,
         attachmentId,
       });
@@ -223,7 +221,7 @@ export const DELETE = withAuth<AttachmentParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to delete attachment", result.error, {
+      getClientLogger().error("Failed to delete attachment", result.error, {
         correlationId,
         attachmentId,
       });

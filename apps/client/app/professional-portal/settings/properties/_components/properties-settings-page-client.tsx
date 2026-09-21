@@ -49,7 +49,7 @@ import type {
   PropertyDocumentDto,
   CreatePropertyClientInput,
   MyPropertiesPayload,
-} from "@/lib/properties-client";
+} from "@/lib/facades/properties-client";
 
 const PropertyForm = dynamic(() => import("@/components/forms/PropertyForm"), {
   ssr: false,

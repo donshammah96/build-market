@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   UpdateThreadSchema,
   MESSAGING_CONFIG,
@@ -25,7 +26,6 @@ import {
 } from "@/app/lib/api/request-utils";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 type ThreadParams = { id: string };
 
 function toMessagingActor(context: {
@@ -69,7 +69,7 @@ export const GET = withAuth<ThreadParams>(
     );
 
     if (!result.success) {
-      logger.error("Project fetch failed", result.error, {
+      getClientLogger().error("Project fetch failed", result.error, {
         correlationId,
         threadId,
       });
@@ -140,11 +140,6 @@ export const PATCH = withAuth<ThreadParams>(
       actor.userId,
       "PATCH",
     );
-    if (!idempotencyCheck)
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     if (idempotencyCheck.status === "completed")
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     if (idempotencyCheck.status === "pending")
@@ -169,7 +164,7 @@ export const PATCH = withAuth<ThreadParams>(
 
     if (!result.success) {
       await IdempotencyService.fail(idempotencyKey).catch(() => {});
-      logger.error("Failed to update thread", result.error, {
+      getClientLogger().error("Failed to update thread", result.error, {
         correlationId,
         threadId,
       });
@@ -186,10 +181,7 @@ export const PATCH = withAuth<ThreadParams>(
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
-      await IdempotencyService.complete(
-        idempotencyKey,
-        serviceResult.data,
-      ).catch(() => {});
+      await safeIdempotencyComplete(idempotencyKey, serviceResult.data);
       return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
@@ -239,7 +231,7 @@ export const DELETE = withAuth<ThreadParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to delete thread", result.error, {
+      getClientLogger().error("Failed to delete thread", result.error, {
         correlationId,
         threadId,
       });

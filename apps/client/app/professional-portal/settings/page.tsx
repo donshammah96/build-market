@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/text-area";
 import Link from "next/link";
-import { profileClient } from "@/lib/profile-client";
+import { profileClient } from "@/lib/facades/profile-client";
 import { UpdateProfileSchema } from "@/app/lib/validation/profile-validation";
 import { ServiceSelector } from "@/components/forms/ServiceSelector";
 

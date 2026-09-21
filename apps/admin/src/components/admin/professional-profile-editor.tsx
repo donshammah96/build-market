@@ -37,12 +37,12 @@ interface ProfessionalProfileEditorProps {
   userId: string;
   initialData: {
     companyName: string;
-    licenseNumber?: string | null;
-    yearsExperience?: number | null;
-    bio?: string | null;
-    website?: string | null;
-    city?: string | null;
-    county?: string | null;
+    licenseNumber?: string | null | undefined;
+    yearsExperience?: number | null | undefined;
+    bio?: string | null | undefined;
+    website?: string | null | undefined;
+    city?: string | null | undefined;
+    county?: string | null | undefined;
   };
   canEdit?: boolean;
 }

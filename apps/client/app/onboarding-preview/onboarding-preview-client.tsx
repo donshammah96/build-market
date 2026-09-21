@@ -6,7 +6,7 @@ import {
   OnboardingView,
   type OnboardingRole,
 } from "@/app/onboarding/_components/OnboardingView";
-import { dashboardForRole } from "@/lib/links";
+import { dashboardForRole } from "@/lib/routes";
 
 const PREVIEW_DELAY_MS = 350;
 

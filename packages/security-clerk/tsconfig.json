@@ -1,0 +1,15 @@
+{
+  "extends": "@build/typescript-config/base.json",
+  "compilerOptions": {
+    "incremental": true,
+    "composite": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

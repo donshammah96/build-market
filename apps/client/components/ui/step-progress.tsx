@@ -68,14 +68,14 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
 
   const stateClasses = cn(
     isCompleted &&
-      "bg-(--color-onboarding-primary) text-[oklch(0.08_0.016_222)] border-2 border-(--color-onboarding-primary) shadow-[0_0_0_4px_oklch(0.70_0.21_162/0.18),0_0_20px_oklch(0.70_0.21_162/0.25)]",
+      "bg-emerald-500 text-zinc-950 font-bold border-2 border-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.35)]",
     isCurrent &&
       !isCompleted &&
-      "bg-(--color-onboarding-primary)/10 text-(--color-onboarding-primary) border-2 border-(--color-onboarding-primary) ring-4 ring-(--color-onboarding-primary)/20",
+      "bg-zinc-900 text-emerald-400 border-2 border-emerald-500 ring-4 ring-emerald-500/15 shadow-[0_0_20px_rgba(16,185,129,0.25)]",
     !isCompleted &&
       !isCurrent &&
       (isDark
-        ? "bg-white/[0.03] text-onboarding-ink/35 border-2 border-white/20"
+        ? "bg-zinc-900/60 text-zinc-500 border-2 border-zinc-800"
         : "bg-black/[0.02] text-foreground/45 border-2 border-black/10"),
   );
 
@@ -133,12 +133,15 @@ const StepConnector: React.FC<StepConnectorProps> = ({
     >
       {/* Background track */}
       <div
-        className={cn("absolute inset-0", isDark ? "bg-white/8" : "bg-black/8")}
+        className={cn(
+          "absolute inset-0",
+          isDark ? "bg-zinc-800" : "bg-black/8",
+        )}
       />
 
       {/* Animated fill */}
       <motion.div
-        className="absolute inset-0 bg-(--color-onboarding-primary)"
+        className="absolute inset-0 bg-emerald-500"
         initial={{ [isHorizontal ? "scaleX" : "scaleY"]: 0 }}
         animate={{
           [isHorizontal ? "scaleX" : "scaleY"]: isCompleted ? 1 : 0,
@@ -226,23 +229,15 @@ export function StepProgress({
                   >
                     <p
                       className={cn(
-                        "text-[10px] font-bold uppercase tracking-[0.12em] transition-colors",
-                        "font-['Syne']",
-                        isCompleted && "text-(--color-onboarding-primary)",
-                        isCurrent &&
-                          (isDark ? "text-onboarding-ink" : "text-foreground"),
-                        !isCompleted && !isCurrent && "text-onboarding-ink/35",
+                        "text-xs font-semibold tracking-wide transition-colors",
+                        isCompleted && "text-zinc-300",
+                        isCurrent && "text-emerald-400 font-bold",
+                        !isCompleted && !isCurrent && "text-zinc-500",
                       )}
                     >
                       {step.label}
                       {step.optional && (
-                        <span
-                          className={
-                            isDark
-                              ? "text-onboarding-ink/35 ml-1"
-                              : "text-foreground/45 ml-1"
-                          }
-                        >
+                        <span className="text-zinc-500 ml-1 font-normal lowercase">
                           (optional)
                         </span>
                       )}
@@ -305,16 +300,16 @@ export function CompactStepProgress({
       <div className="flex items-center justify-between mb-2">
         <span
           className={cn(
-            "text-[11px]",
-            isDark ? "text-onboarding-ink/45" : "text-foreground/45",
+            "text-xs font-medium",
+            isDark ? "text-zinc-400" : "text-foreground/60",
           )}
         >
           Step {currentStep + 1} of {totalSteps}
         </span>
         <span
           className={cn(
-            "text-[11px] font-semibold",
-            "text-(--color-onboarding-primary)",
+            "text-xs font-bold",
+            isDark ? "text-emerald-400" : "text-emerald-600",
           )}
         >
           {Math.round(progress)}%
@@ -323,11 +318,11 @@ export function CompactStepProgress({
       <div
         className={cn(
           "h-1.5 rounded-full overflow-hidden",
-          isDark ? "bg-white/8" : "bg-black/8",
+          isDark ? "bg-zinc-800" : "bg-black/8",
         )}
       >
         <motion.div
-          className="h-full bg-(--color-onboarding-primary) rounded-full"
+          className="h-full bg-linear-to-r from-emerald-600 to-emerald-400 rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.4, ease: "easeOut" }}
@@ -363,9 +358,10 @@ export function DotStepProgress({
             key={index}
             className={cn(
               "rounded-full transition-all duration-300",
-              isCurrent && "w-6 h-2 bg-(--color-onboarding-primary)",
-              isCompleted && !isCurrent && "w-2 h-2 bg-onboarding-primary/60",
-              !isCompleted && !isCurrent && "w-2 h-2 bg-white/25",
+              isCurrent &&
+                "w-6 h-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]",
+              isCompleted && !isCurrent && "w-2 h-2 bg-emerald-500/60",
+              !isCompleted && !isCurrent && "w-2 h-2 bg-zinc-800",
             )}
             layout
           />

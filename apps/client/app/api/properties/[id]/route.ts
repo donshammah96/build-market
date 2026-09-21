@@ -9,6 +9,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
@@ -18,6 +19,7 @@ import {
 } from "@/app/lib/api/request-utils";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   propertiesService,
   UpdatePropertySchema,
@@ -39,14 +41,13 @@ type PropertyParams = {
 async function checkPropertyRateLimit(
   req: NextRequest,
   operation: "read" | "write",
+  dbUserId?: string,
 ) {
-  const identifier = getRateLimitIdentifier(req);
+  const identifier = dbUserId
+    ? getActorRateLimitIdentifier(dbUserId, `property-${operation}`)
+    : getRateLimitIdentifier(req);
   const config = RateLimits[operation.toUpperCase() as keyof typeof RateLimits];
-  return checkRateLimit(
-    `property-${operation}:${identifier}`,
-    config.limit,
-    config.window,
-  );
+  return checkRateLimit(identifier, config.limit, config.window);
 }
 
 export async function GET(
@@ -203,7 +204,11 @@ export const PATCH = withAuth(
     }
 
     const propertyId = params.id;
-    const rateLimitResult = await checkPropertyRateLimit(req, "write");
+    const rateLimitResult = await checkPropertyRateLimit(
+      req,
+      "write",
+      context.dbUserId,
+    );
     if (!rateLimitResult.success) {
       const response = apiError(
         "Too many requests. Please try again later.",
@@ -344,8 +349,10 @@ export const PATCH = withAuth(
       "property",
       context.dbUserId,
       "PATCH",
-      propertyId,
-      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      {
+        entityConnect: { property: { connect: { id: propertyId } } },
+        ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -419,8 +426,6 @@ export const PATCH = withAuth(
 
       if (latestResult.error === "conflict") {
         const response = conflictResponse(
-          latestResult.message ??
-            "Property has been modified. Retry with the latest version.",
           (latestResult.details as { currentVersion?: number } | undefined)
             ?.currentVersion,
           correlationId,
@@ -457,7 +462,15 @@ export const PATCH = withAuth(
       return errorResponse!;
     }
 
-    await IdempotencyService.complete(idempotencyKey, latestResult.data);
+    await safeIdempotencyComplete(idempotencyKey, latestResult.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
     const response = apiSuccess(
       latestResult.data,
       HttpStatus.OK,
@@ -512,7 +525,11 @@ export const DELETE = withAuth(
     }
 
     const propertyId = params.id;
-    const rateLimitResult = await checkPropertyRateLimit(req, "write");
+    const rateLimitResult = await checkPropertyRateLimit(
+      req,
+      "write",
+      context.dbUserId,
+    );
     if (!rateLimitResult.success) {
       const response = apiError(
         "Too many requests. Please try again later.",
@@ -591,8 +608,10 @@ export const DELETE = withAuth(
       "property",
       context.dbUserId,
       "DELETE",
-      propertyId,
-      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      {
+        entityConnect: { property: { connect: { id: propertyId } } },
+        ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -654,8 +673,6 @@ export const DELETE = withAuth(
 
       if (result.error === "conflict") {
         const response = conflictResponse(
-          result.message ??
-            "Property has been modified. Retry with the latest version.",
           (result.details as { currentVersion?: number } | undefined)
             ?.currentVersion,
           correlationId,
@@ -689,7 +706,15 @@ export const DELETE = withAuth(
       return errorResponse!;
     }
 
-    await IdempotencyService.complete(idempotencyKey, result.data);
+    await safeIdempotencyComplete(idempotencyKey, result.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
     const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
     response.headers.set("ETag", `"${result.data.version}"`);
     logPropertiesRouteOutcome({

@@ -1,0 +1,286 @@
+/**
+ * Admin Design Token System
+ *
+ * All admin-specific design tokens are defined here as CSS custom properties.
+ * Import this file in globals.css to make tokens available application-wide.
+ *
+ * Token naming convention: --admin-{category}-{variant}
+ *
+ * Categories:
+ *   color     - Semantic colour tokens for admin-specific UI states
+ *   surface   - Elevated surface colours for cards, panels, dialogs
+ *   status    - Verification, approval, and rejection state colours
+ *   data      - Data table and list colour helpers
+ *   badge     - Role and permission badge colours
+ *   skeleton  - Loading skeleton animation colours
+ *   spacing   - Consistent spacing scale
+ *   radius    - Border radius scale
+ *   shadow    - Elevation shadow scale
+ *   duration  - Animation duration tokens
+ */
+
+/* ==========================================================================
+   Admin Colour Tokens (light mode)
+   ========================================================================== */
+
+:root {
+  /* Brand accent — used for primary actions, active nav, focus rings */
+  --admin-color-accent: oklch(0.55 0.22 264.38);
+  --admin-color-accent-hover: oklch(0.48 0.22 264.38);
+  --admin-color-accent-subtle: oklch(0.55 0.22 264.38 / 0.1);
+  --admin-color-accent-foreground: oklch(1 0 0);
+
+  /* Danger — destructive actions, critical errors */
+  --admin-color-danger: oklch(0.52 0.22 27);
+  --admin-color-danger-hover: oklch(0.45 0.22 27);
+  --admin-color-danger-subtle: oklch(0.52 0.22 27 / 0.1);
+  --admin-color-danger-foreground: oklch(1 0 0);
+
+  /* Warning — session expiry, stale data, rate-limit proximity */
+  --admin-color-warning: oklch(0.72 0.18 75);
+  --admin-color-warning-hover: oklch(0.65 0.18 75);
+  --admin-color-warning-subtle: oklch(0.72 0.18 75 / 0.12);
+  --admin-color-warning-foreground: oklch(0.2 0 0);
+
+  /* Success — confirmations, verified state */
+  --admin-color-success: oklch(0.6 0.18 145);
+  --admin-color-success-hover: oklch(0.53 0.18 145);
+  --admin-color-success-subtle: oklch(0.6 0.18 145 / 0.1);
+  --admin-color-success-foreground: oklch(1 0 0);
+
+  /* Info — neutral information */
+  --admin-color-info: oklch(0.62 0.14 230);
+  --admin-color-info-subtle: oklch(0.62 0.14 230 / 0.1);
+  --admin-color-info-foreground: oklch(1 0 0);
+
+  /* Text hierarchy */
+  --admin-color-text-primary: oklch(0.15 0 0);
+  --admin-color-text-secondary: oklch(0.42 0 0);
+  --admin-color-text-muted: oklch(0.6 0 0);
+  --admin-color-text-disabled: oklch(0.72 0 0);
+  --admin-color-text-inverse: oklch(0.98 0 0);
+}
+
+/* ==========================================================================
+   Admin Surface Tokens (light mode)
+   ========================================================================== */
+
+:root {
+  --admin-surface-page: oklch(0.975 0 0);
+  --admin-surface-card: oklch(1 0 0);
+  --admin-surface-card-hover: oklch(0.985 0 0);
+  --admin-surface-panel: oklch(0.97 0 0);
+  --admin-surface-overlay: oklch(0.15 0 0 / 0.5);
+  --admin-surface-skeleton: oklch(0.92 0 0);
+  --admin-surface-skeleton-shine: oklch(0.97 0 0);
+  --admin-surface-input: oklch(0.97 0 0);
+  --admin-surface-input-focus: oklch(1 0 0);
+
+  /* Sidebar */
+  --admin-surface-sidebar: oklch(0.18 0.01 264.38);
+  --admin-surface-sidebar-hover: oklch(0.22 0.01 264.38);
+  --admin-surface-sidebar-active: oklch(0.26 0.01 264.38);
+  --admin-surface-sidebar-foreground: oklch(0.85 0 0);
+  --admin-surface-sidebar-foreground-active: oklch(1 0 0);
+}
+
+/* ==========================================================================
+   Status Badge Tokens
+   ========================================================================== */
+
+:root {
+  /* Verification status */
+  --admin-status-verified-bg: oklch(0.6 0.18 145 / 0.12);
+  --admin-status-verified-fg: oklch(0.42 0.14 145);
+  --admin-status-verified-border: oklch(0.6 0.18 145 / 0.3);
+
+  --admin-status-pending-bg: oklch(0.72 0.18 75 / 0.12);
+  --admin-status-pending-fg: oklch(0.48 0.14 75);
+  --admin-status-pending-border: oklch(0.72 0.18 75 / 0.3);
+
+  --admin-status-rejected-bg: oklch(0.52 0.22 27 / 0.1);
+  --admin-status-rejected-fg: oklch(0.38 0.18 27);
+  --admin-status-rejected-border: oklch(0.52 0.22 27 / 0.25);
+
+  --admin-status-needs-correction-bg: oklch(0.62 0.14 230 / 0.1);
+  --admin-status-needs-correction-fg: oklch(0.42 0.12 230);
+  --admin-status-needs-correction-border: oklch(0.62 0.14 230 / 0.25);
+
+  /* Role badges */
+  --admin-badge-super-admin-bg: oklch(0.55 0.22 264.38 / 0.12);
+  --admin-badge-super-admin-fg: oklch(0.38 0.18 264.38);
+
+  --admin-badge-auditor-bg: oklch(0.6 0.18 145 / 0.1);
+  --admin-badge-auditor-fg: oklch(0.4 0.14 145);
+
+  --admin-badge-moderator-bg: oklch(0.72 0.18 75 / 0.1);
+  --admin-badge-moderator-fg: oklch(0.48 0.14 75);
+
+  --admin-badge-support-bg: oklch(0.62 0.14 230 / 0.1);
+  --admin-badge-support-fg: oklch(0.42 0.12 230);
+
+  --admin-badge-finance-bg: oklch(0.7 0.16 20 / 0.1);
+  --admin-badge-finance-fg: oklch(0.45 0.14 20);
+}
+
+/* ==========================================================================
+   Data Table Tokens
+   ========================================================================== */
+
+:root {
+  --admin-data-row-bg: oklch(1 0 0);
+  --admin-data-row-bg-alt: oklch(0.985 0 0);
+  --admin-data-row-bg-hover: oklch(0.55 0.22 264.38 / 0.04);
+  --admin-data-row-bg-selected: oklch(0.55 0.22 264.38 / 0.08);
+  --admin-data-header-bg: oklch(0.96 0 0);
+  --admin-data-border: oklch(0.9 0 0);
+  --admin-data-focus-ring: oklch(0.55 0.22 264.38 / 0.4);
+}
+
+/* ==========================================================================
+   Spacing Scale
+   ========================================================================== */
+
+:root {
+  --admin-spacing-xs: 0.25rem; /* 4px  */
+  --admin-spacing-sm: 0.5rem; /* 8px  */
+  --admin-spacing-md: 0.75rem; /* 12px */
+  --admin-spacing-lg: 1rem; /* 16px */
+  --admin-spacing-xl: 1.5rem; /* 24px */
+  --admin-spacing-2xl: 2rem; /* 32px */
+  --admin-spacing-3xl: 3rem; /* 48px */
+}
+
+/* ==========================================================================
+   Border Radius Scale
+   ========================================================================== */
+
+:root {
+  --admin-radius-sm: 0.25rem;
+  --admin-radius-md: 0.5rem;
+  --admin-radius-lg: 0.75rem;
+  --admin-radius-xl: 1rem;
+  --admin-radius-full: 9999px;
+}
+
+/* ==========================================================================
+   Elevation (Shadow) Scale
+   ========================================================================== */
+
+:root {
+  --admin-shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.05);
+  --admin-shadow-md:
+    0 4px 6px -1px oklch(0 0 0 / 0.07), 0 2px 4px -2px oklch(0 0 0 / 0.05);
+  --admin-shadow-lg:
+    0 10px 15px -3px oklch(0 0 0 / 0.08), 0 4px 6px -4px oklch(0 0 0 / 0.05);
+  --admin-shadow-xl:
+    0 20px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.05);
+  --admin-shadow-inner: inset 0 2px 4px 0 oklch(0 0 0 / 0.05);
+}
+
+/* ==========================================================================
+   Animation Tokens
+   ========================================================================== */
+
+:root {
+  --admin-duration-instant: 0ms;
+  --admin-duration-fast: 100ms;
+  --admin-duration-normal: 200ms;
+  --admin-duration-slow: 350ms;
+  --admin-duration-skeleton: 1.5s;
+  --admin-easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --admin-easing-in: cubic-bezier(0.4, 0, 1, 1);
+  --admin-easing-out: cubic-bezier(0, 0, 0.2, 1);
+  --admin-easing-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ==========================================================================
+   Dark Mode Overrides
+   ========================================================================== */
+
+.dark {
+  /* Brand accent */
+  --admin-color-accent: oklch(0.65 0.2 264.38);
+  --admin-color-accent-hover: oklch(0.72 0.2 264.38);
+  --admin-color-accent-subtle: oklch(0.65 0.2 264.38 / 0.15);
+
+  /* Danger */
+  --admin-color-danger: oklch(0.65 0.2 27);
+  --admin-color-danger-hover: oklch(0.72 0.2 27);
+  --admin-color-danger-subtle: oklch(0.65 0.2 27 / 0.15);
+
+  /* Warning */
+  --admin-color-warning: oklch(0.78 0.16 75);
+  --admin-color-warning-subtle: oklch(0.78 0.16 75 / 0.15);
+  --admin-color-warning-foreground: oklch(0.98 0 0);
+
+  /* Success */
+  --admin-color-success: oklch(0.68 0.16 145);
+  --admin-color-success-subtle: oklch(0.68 0.16 145 / 0.15);
+
+  /* Text hierarchy */
+  --admin-color-text-primary: oklch(0.95 0 0);
+  --admin-color-text-secondary: oklch(0.72 0 0);
+  --admin-color-text-muted: oklch(0.55 0 0);
+  --admin-color-text-disabled: oklch(0.42 0 0);
+  --admin-color-text-inverse: oklch(0.15 0 0);
+
+  /* Surfaces */
+  --admin-surface-page: oklch(0.12 0 0);
+  --admin-surface-card: oklch(0.16 0 0);
+  --admin-surface-card-hover: oklch(0.19 0 0);
+  --admin-surface-panel: oklch(0.14 0 0);
+  --admin-surface-overlay: oklch(0 0 0 / 0.65);
+  --admin-surface-skeleton: oklch(0.22 0 0);
+  --admin-surface-skeleton-shine: oklch(0.27 0 0);
+  --admin-surface-input: oklch(0.2 0 0);
+  --admin-surface-input-focus: oklch(0.24 0 0);
+
+  /* Sidebar dark overrides — sidebar is already dark in both modes */
+  --admin-surface-sidebar: oklch(0.1 0.01 264.38);
+  --admin-surface-sidebar-hover: oklch(0.14 0.01 264.38);
+  --admin-surface-sidebar-active: oklch(0.18 0.01 264.38);
+
+  /* Data table */
+  --admin-data-row-bg: oklch(0.16 0 0);
+  --admin-data-row-bg-alt: oklch(0.18 0 0);
+  --admin-data-row-bg-hover: oklch(0.65 0.2 264.38 / 0.06);
+  --admin-data-row-bg-selected: oklch(0.65 0.2 264.38 / 0.12);
+  --admin-data-header-bg: oklch(0.2 0 0);
+  --admin-data-border: oklch(0.26 0 0);
+
+  /* Shadows are lighter in dark mode */
+  --admin-shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.2);
+  --admin-shadow-md:
+    0 4px 6px -1px oklch(0 0 0 / 0.25), 0 2px 4px -2px oklch(0 0 0 / 0.2);
+  --admin-shadow-lg:
+    0 10px 15px -3px oklch(0 0 0 / 0.3), 0 4px 6px -4px oklch(0 0 0 / 0.2);
+  --admin-shadow-xl:
+    0 20px 25px -5px oklch(0 0 0 / 0.35), 0 8px 10px -6px oklch(0 0 0 / 0.2);
+}
+
+/* ==========================================================================
+   Skeleton Loading Animation
+   ========================================================================== */
+
+@keyframes admin-skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.admin-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--admin-surface-skeleton) 25%,
+    var(--admin-surface-skeleton-shine) 50%,
+    var(--admin-surface-skeleton) 75%
+  );
+  background-size: 200% 100%;
+  animation: admin-skeleton-shimmer var(--admin-duration-skeleton) ease-in-out
+    infinite;
+  border-radius: var(--admin-radius-sm);
+}

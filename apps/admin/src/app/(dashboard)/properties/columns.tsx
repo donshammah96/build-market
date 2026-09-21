@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import type { PropertyListItem } from "@/actions/admin/properties";
+import type { PropertyListItem } from "@/actions/admin";
 
 export type PropertyData = PropertyListItem;
 

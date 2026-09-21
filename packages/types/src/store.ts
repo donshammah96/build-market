@@ -4,7 +4,7 @@ import {
   StoreCategoryEnum,
   StoreTypeEnum,
   VerificationStatusEnum,
-} from "./auth";
+} from "./auth.js";
 
 // ========================================================
 // ENUMS

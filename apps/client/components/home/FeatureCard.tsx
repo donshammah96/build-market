@@ -114,7 +114,7 @@ const FeatureCard: FC<Feature> = memo(function FeatureCard({
         </div>
 
         {/* Content Area */}
-        <CardContent className="flex flex-col flex-grow p-6">
+        <CardContent className="flex flex-col grow p-6">
           <h3 className="text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">
             {title}
           </h3>

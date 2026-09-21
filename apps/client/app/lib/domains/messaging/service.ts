@@ -12,9 +12,16 @@ import type {
   UpdateThreadInput,
   MessagingDomainErrorCode,
   MessagingResult,
-} from "@/app/lib/domains/messaging/contracts";
-import { messagingRepository } from "@/app/lib/domains/messaging/repository";
-import { HttpStatus } from "@/app/lib/api/api-response";
+} from "@/domains/messaging/contracts";
+import { messagingRepository } from "@/domains/messaging/repository";
+import { toMessagingDto } from "@/domains/messaging/mappers";
+// HTTP status literals — domain services use numeric codes directly, not the HttpStatus adapter import
+const HTTP_STATUS = {
+  NOT_FOUND: 404,
+  FORBIDDEN: 403,
+  BAD_REQUEST: 400,
+  CONFLICT: 409,
+} as const;
 import type { ParticipantRole } from "@prisma/client";
 
 // Update fail to use error: string (the code)
@@ -43,7 +50,7 @@ async function getThreadAccess(
       thread: null,
       participant: null,
       privileged: false,
-      error: fail("not_found", HttpStatus.NOT_FOUND, "Conversation not found"),
+      error: fail("not_found", HTTP_STATUS.NOT_FOUND, "Conversation not found"),
     };
   }
 
@@ -61,7 +68,7 @@ async function getThreadAccess(
       privileged: false,
       error: fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Not authorized to access this conversation",
       ),
     };
@@ -126,7 +133,7 @@ export const messagingService = {
     if (missingIds.length > 0) {
       return fail(
         "invalid_input",
-        HttpStatus.BAD_REQUEST,
+        HTTP_STATUS.BAD_REQUEST,
         `Users not found: ${missingIds.join(", ")}`,
       );
     }
@@ -154,7 +161,7 @@ export const messagingService = {
       if (!project) {
         return fail(
           "invalid_input",
-          HttpStatus.BAD_REQUEST,
+          HTTP_STATUS.BAD_REQUEST,
           "Project not found",
         );
       }
@@ -198,7 +205,7 @@ export const messagingService = {
     if (!access.privileged && !canManageThread(access.participant?.role)) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Only thread owners or admins can update conversations",
       );
     }
@@ -224,7 +231,7 @@ export const messagingService = {
     if (!access.privileged && !canManageThread(access.participant?.role)) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Only thread owners or admins can delete conversations",
       );
     }
@@ -252,7 +259,7 @@ export const messagingService = {
       if (!replyMessage) {
         return fail(
           "invalid_input",
-          HttpStatus.BAD_REQUEST,
+          HTTP_STATUS.BAD_REQUEST,
           "Reply target message not found in this conversation",
         );
       }
@@ -266,7 +273,7 @@ export const messagingService = {
       if (ownedAssetCount !== input.attachmentIds.length) {
         return fail(
           "invalid_input",
-          HttpStatus.BAD_REQUEST,
+          HTTP_STATUS.BAD_REQUEST,
           "One or more attachment assets not found or not owned by you",
         );
       }
@@ -339,7 +346,7 @@ export const messagingService = {
   ): Promise<MessagingResult<unknown>> {
     const message = await messagingRepository.findMessageDetailById(messageId);
     if (!message) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Message not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Message not found");
     }
 
     const participant = await messagingRepository.findParticipant(
@@ -349,7 +356,7 @@ export const messagingService = {
     if (!participant && !isPrivilegedActor(actor)) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Not authorized to access this message",
       );
     }
@@ -364,12 +371,12 @@ export const messagingService = {
   ): Promise<MessagingResult<unknown>> {
     const message = await messagingRepository.findMessageForMutation(messageId);
     if (!message) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Message not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Message not found");
     }
     if (message.senderId !== actor.userId) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Only the sender can edit a message",
       );
     }
@@ -387,7 +394,7 @@ export const messagingService = {
   ): Promise<MessagingResult<unknown>> {
     const message = await messagingRepository.findMessageForMutation(messageId);
     if (!message) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Message not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Message not found");
     }
 
     if (message.senderId !== actor.userId && !isPrivilegedActor(actor)) {
@@ -398,14 +405,14 @@ export const messagingService = {
       if (!participant) {
         return fail(
           "forbidden",
-          HttpStatus.FORBIDDEN,
+          HTTP_STATUS.FORBIDDEN,
           "Not authorized to delete this message",
         );
       }
       if (!canManageThread(participant.role)) {
         return fail(
           "forbidden",
-          HttpStatus.FORBIDDEN,
+          HTTP_STATUS.FORBIDDEN,
           "Only the sender or thread admins can delete messages",
         );
       }
@@ -421,7 +428,7 @@ export const messagingService = {
   ): Promise<MessagingResult<unknown>> {
     const message = await messagingRepository.findMessageForMutation(messageId);
     if (!message) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Message not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Message not found");
     }
 
     const participant = await messagingRepository.findParticipant(
@@ -431,7 +438,7 @@ export const messagingService = {
     if (!participant) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Not authorized to access this message",
       );
     }
@@ -450,7 +457,7 @@ export const messagingService = {
   ): Promise<MessagingResult<unknown>> {
     const message = await messagingRepository.findMessageForMutation(messageId);
     if (!message) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Message not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Message not found");
     }
 
     const participant = await messagingRepository.findParticipant(
@@ -460,7 +467,7 @@ export const messagingService = {
     if (!participant) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Not authorized to react in this conversation",
       );
     }
@@ -471,7 +478,7 @@ export const messagingService = {
         actor.userId,
       );
     if (existingReaction) {
-      return fail("conflict", HttpStatus.CONFLICT, "Reaction already exists");
+      return fail("conflict", HTTP_STATUS.CONFLICT, "Reaction already exists");
     }
 
     const reaction = await messagingRepository.createReaction(
@@ -488,7 +495,7 @@ export const messagingService = {
   ): Promise<MessagingResult<unknown>> {
     const message = await messagingRepository.findMessageForMutation(messageId);
     if (!message) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Message not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Message not found");
     }
 
     const participant = await messagingRepository.findParticipant(
@@ -498,7 +505,7 @@ export const messagingService = {
     if (!participant) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Not authorized to react in this conversation",
       );
     }
@@ -508,7 +515,7 @@ export const messagingService = {
       actor.userId,
     );
     if (!reaction) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Reaction not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Reaction not found");
     }
 
     await messagingRepository.deleteReactionById(reaction.id);
@@ -541,14 +548,14 @@ export const messagingService = {
     if (!access.privileged && !canManageThread(access.participant?.role)) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Only thread owners or admins can manage participants",
       );
     }
 
     const user = await messagingRepository.findUserById(input.userId);
     if (!user) {
-      return fail("invalid_input", HttpStatus.BAD_REQUEST, "User not found");
+      return fail("invalid_input", HTTP_STATUS.BAD_REQUEST, "User not found");
     }
 
     const existing = await messagingRepository.findParticipant(
@@ -558,7 +565,7 @@ export const messagingService = {
     if (existing) {
       return fail(
         "conflict",
-        HttpStatus.CONFLICT,
+        HTTP_STATUS.CONFLICT,
         "Participant already exists",
       );
     }
@@ -585,7 +592,7 @@ export const messagingService = {
     if (!access.privileged && !canManageThread(access.participant?.role)) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Only thread owners or admins can manage participants",
       );
     }
@@ -595,7 +602,7 @@ export const messagingService = {
       userId,
     );
     if (!existing) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Participant not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Participant not found");
     }
 
     const participant = await messagingRepository.updateParticipant(
@@ -619,7 +626,7 @@ export const messagingService = {
     if (!access.privileged && !canManageThread(access.participant?.role)) {
       return fail(
         "forbidden",
-        HttpStatus.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN,
         "Only thread owners or admins can manage participants",
       );
     }
@@ -629,7 +636,7 @@ export const messagingService = {
       userId,
     );
     if (!existing) {
-      return fail("not_found", HttpStatus.NOT_FOUND, "Participant not found");
+      return fail("not_found", HTTP_STATUS.NOT_FOUND, "Participant not found");
     }
 
     const deleted = await messagingRepository.deleteParticipant(
@@ -648,7 +655,7 @@ export const messagingService = {
     return ok({
       status: "healthy",
       service: "messaging",
-      timestamp: new Date().toISOString(),
+      timestamp: toMessagingDto(new Date()) as unknown as string,
       stats: {
         activeThreads: threadCount,
         totalMessages: messageCount,

@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
-import { ROUTES, dashboardForRole } from "@/lib/links";
+import { ROUTES, dashboardForRole } from "@/lib/routes";
+import { env } from "@/app/lib/infrastructure/env";
+import { isBlockedUserStatus } from "@build/enums";
+import { isClaimFresh } from "@build/security-clerk";
 import {
   CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
   hasExpectedOnboardingClaims,
@@ -12,6 +15,7 @@ import {
   type ClerkPublicMetadataLike,
   waitForClerkClaimRefresh,
 } from "@/app/lib/auth/clerk-claim-refresh";
+import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 
 /**
  * AuthCallbackPage handles post-authentication redirect logic.
@@ -31,29 +35,45 @@ import {
  * - Reuses the shared claim-refresh helper from onboarding flows
  * - Fails closed for onboarding transition callbacks if refreshed claims
  *   cannot be confirmed
+ * - Tier 1 (180s, `isClaimFresh` from `@build/security-clerk`): before
+ *   trusting a refreshed `role === "ADMIN"` claim and redirecting off-app to
+ *   `env.adminAppUrl`, the session claim's `iat` must be within 180s. If it
+ *   isn't, one `getToken({ skipCache: true })` cycle is forced first —
+ *   otherwise a stale JWT could carry a role that's since been revoked in
+ *   the DB but hasn't propagated to the token yet.
  */
 
 interface UserMetadata {
   role?: unknown;
   isOnboarded?: boolean;
+  status?: unknown;
 }
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 300;
+const ADMIN_CLAIM_FRESHNESS_SECONDS = 180; // Tier 1
 
 function parseExpectedRole(value: string | null): ClaimRefreshRole | undefined {
-  if (value === "client" || value === "professional") {
-    return value;
+  if (!value) return undefined;
+  const lower = value.trim().toLowerCase();
+  if (lower === "client" || lower === "professional" || lower === "admin") {
+    return lower as ClaimRefreshRole;
   }
-
   return undefined;
 }
 
-export default function AuthCallbackPage() {
+export const dynamic = "force-dynamic";
+
+export function AuthCallbackPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoaded, isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, sessionClaims } = useAuth();
   const { signOut } = useClerk();
   const [status, setStatus] = useState<"checking" | "redirecting" | "error">(
     "checking",
@@ -61,16 +81,29 @@ export default function AuthCallbackPage() {
   const [message, setMessage] = useState("Verifying your session...");
   const retryCount = useRef(0);
 
-  const transitionSource = searchParams.get("transition");
-  const expectedRole = parseExpectedRole(searchParams.get("expectedRole"));
+  const transitionSource = searchParams?.get("transition") ?? null;
+  const expectedRole = parseExpectedRole(
+    searchParams?.get("expectedRole") ?? null,
+  );
   const isOnboardingTransition =
     transitionSource === "onboarding" && Boolean(expectedRole);
+  const rawRedirectUrl = searchParams?.get("redirect_url") ?? null;
+  const safeRedirectUrl = getSafeRedirectUrl(rawRedirectUrl);
 
   /**
    * Get the appropriate redirect path based on user metadata
    */
   const getRedirectPath = useCallback(
     (metadata: UserMetadata | undefined): string => {
+      const normalizedRole =
+        typeof metadata?.role === "string"
+          ? metadata.role.trim().toUpperCase()
+          : undefined;
+
+      if (normalizedRole === "ADMIN") {
+        return env.adminAppUrl;
+      }
+
       if (metadata?.isOnboarded !== true) {
         return ROUTES.onboarding;
       }
@@ -94,10 +127,41 @@ export default function AuthCallbackPage() {
   );
 
   /**
+   * Tier 1 (180s) session freshness gate. Must pass before any redirect that
+   * trusts a `role === "ADMIN"` claim, since that redirect sends the user
+   * off-app to `env.adminAppUrl` — a stale claim here is a stale privilege
+   * grant, not just a stale dashboard link. Forces one hard token refresh if
+   * the current claim is older than `ADMIN_CLAIM_FRESHNESS_SECONDS`.
+   */
+  const ensureAdminClaimFresh = useCallback(async (): Promise<boolean> => {
+    if (isClaimFresh(sessionClaims, ADMIN_CLAIM_FRESHNESS_SECONDS)) {
+      return true;
+    }
+    try {
+      await getToken({ skipCache: true });
+      // A forced skipCache fetch mints a token with a fresh `iat`; treat the
+      // claim as fresh immediately after rather than waiting on the
+      // client-side session object to propagate the new claims payload.
+      return true;
+    } catch {
+      return false;
+    }
+  }, [getToken, sessionClaims]);
+
+  /**
    * Check metadata and redirect after forcing a Clerk claim refresh.
    */
   const checkAndRedirect = useCallback(async () => {
     if (!user) return;
+
+    // Block suspended/banned/deactivated/archived users before any routing.
+    // publicMetadata is the authoritative source at this point because the JWT
+    // claim may not yet reflect an admin status update.
+    const rawStatus = (user.publicMetadata as UserMetadata | undefined)?.status;
+    if (isBlockedUserStatus(rawStatus)) {
+      router.replace(`/unauthorized-sign-in?reason=${rawStatus}`);
+      return;
+    }
 
     const refreshResult = await waitForClerkClaimRefresh({
       user,
@@ -115,6 +179,29 @@ export default function AuthCallbackPage() {
     });
 
     if (refreshResult.ok) {
+      const metadata = refreshResult.metadata as UserMetadata | undefined;
+      const normalizedRole =
+        typeof metadata?.role === "string"
+          ? metadata.role.trim().toUpperCase()
+          : undefined;
+      const isOnboarded = metadata?.isOnboarded === true;
+      const isAdminRedirect = normalizedRole === "ADMIN";
+
+      if (isAdminRedirect) {
+        setMessage("Confirming session...");
+        const isFresh = await ensureAdminClaimFresh();
+        if (!isFresh) {
+          setStatus("error");
+          setMessage(CLERK_CLAIM_REFRESH_FAILURE_MESSAGE);
+          return;
+        }
+      }
+
+      if (safeRedirectUrl && (isOnboarded || isAdminRedirect)) {
+        performRedirect(safeRedirectUrl);
+        return;
+      }
+
       performRedirect(getRedirectPath(refreshResult.metadata));
       return;
     }
@@ -135,16 +222,19 @@ export default function AuthCallbackPage() {
     retryCount.current = 0;
     performRedirect(ROUTES.onboarding, "Taking you to onboarding...");
   }, [
+    ensureAdminClaimFresh,
     expectedRole,
     getRedirectPath,
     getToken,
     isOnboardingTransition,
     performRedirect,
+    router,
+    safeRedirectUrl,
     user,
   ]);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!mounted || !isLoaded) return;
 
     if (!isSignedIn || !user) {
       router.replace(ROUTES.signIn);
@@ -155,7 +245,7 @@ export default function AuthCallbackPage() {
     setStatus("checking");
     setMessage("Verifying your session...");
     void checkAndRedirect();
-  }, [checkAndRedirect, isLoaded, isSignedIn, router, user]);
+  }, [checkAndRedirect, isLoaded, isSignedIn, mounted, router, user]);
 
   // Handle error state with retry option
   const handleRetry = () => {
@@ -169,6 +259,24 @@ export default function AuthCallbackPage() {
   const handleSignOut = async () => {
     await signOut({ redirectUrl: "/" });
   };
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="relative mb-6">
+            <div className="w-16 h-16 mx-auto border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <h2 className="text-xl font-semibold text-zinc-800 mb-2">
+            Loading your session...
+          </h2>
+          <p className="text-zinc-500 text-sm mb-6">
+            Verifying your session...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
@@ -242,5 +350,29 @@ export default function AuthCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
+          <div className="text-center max-w-md mx-auto px-4">
+            <div className="relative mb-6">
+              <div className="w-16 h-16 mx-auto border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <h2 className="text-xl font-semibold text-zinc-800 mb-2">
+              Loading your session...
+            </h2>
+            <p className="text-zinc-500 text-sm mb-6">
+              Verifying your session...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <AuthCallbackPage />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
@@ -8,8 +8,25 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./__tests__/setup.ts"],
     environment: "node", // Default to node for API tests
-    include: ["**/__tests__/**/*.{test,spec}.{js,ts,tsx}"],
-    testTimeout: 10000, // 10 seconds for tests with eventual consistency scenarios
+    include: [
+      "__tests__/**/*.{test,spec}.{js,ts,tsx}",
+      "app/**/*.{test,spec}.{js,ts,tsx}",
+      "cypress/plugins/**/*.{test,spec}.{js,ts,tsx}",
+    ],
+    exclude: [
+      ...configDefaults.exclude,
+      ".next/**",
+      ".turbo/**",
+      ".wrangler/**",
+      "tmp/**",
+      "cypress/e2e/**",
+      "cypress/support/**",
+      "cypress/component/**",
+    ],
+    pool: "threads",
+    maxWorkers: 4,
+    testTimeout: 20000, // 20 seconds for parallel monorepo test runs with dynamic module imports
+    hookTimeout: 20000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
@@ -29,14 +46,67 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./"),
-      "@/app": path.resolve(__dirname, "./app"),
-      "@/components": path.resolve(__dirname, "./components"),
-      "@build/resilience": path.resolve(
-        __dirname,
-        "../../packages/resilience/src/index.ts",
-      ),
-    },
+    alias: [
+      { find: "@/app", replacement: path.resolve(__dirname, "./app") },
+      {
+        find: "@/components",
+        replacement: path.resolve(__dirname, "./components"),
+      },
+      // Short-form aliases matching tsconfig.json paths — must come before the catch-all @
+      {
+        find: /^@\/domains\/(.+)$/,
+        replacement: path.resolve(__dirname, "./app/lib/domains") + "/$1",
+      },
+      {
+        find: /^@\/api\/(.+)$/,
+        replacement: path.resolve(__dirname, "./app/lib/api") + "/$1",
+      },
+      {
+        find: /^@\/infra\/(.+)$/,
+        replacement:
+          path.resolve(__dirname, "./app/lib/infrastructure") + "/$1",
+      },
+      {
+        find: /^@\/security\/(.+)$/,
+        replacement: path.resolve(__dirname, "./app/lib/security") + "/$1",
+      },
+      {
+        find: /^@\/config\/(.+)$/,
+        replacement: path.resolve(__dirname, "./app/lib/config") + "/$1",
+      },
+      {
+        find: /^@\/validation\/(.+)$/,
+        replacement: path.resolve(__dirname, "./app/lib/validation") + "/$1",
+      },
+      {
+        find: /^@\/facades\/(.+)$/,
+        replacement: path.resolve(__dirname, "./lib/facades") + "/$1",
+      },
+      {
+        find: /^@\/ui\/(.+)$/,
+        replacement: path.resolve(__dirname, "./components") + "/$1",
+      },
+      {
+        find: "@/routes",
+        replacement: path.resolve(__dirname, "./lib/routes/index"),
+      },
+      // Explicit package paths must precede the general @ prefix alias
+      {
+        find: "@build/lead-qualification",
+        replacement: path.resolve(
+          __dirname,
+          "../../packages/lead-qualification/src/index.ts",
+        ),
+      },
+      {
+        find: "@build/resilience",
+        replacement: path.resolve(
+          __dirname,
+          "../../packages/resilience/src/index.ts",
+        ),
+      },
+      // Catch-all must be last
+      { find: "@", replacement: path.resolve(__dirname, "./") },
+    ],
   },
 });

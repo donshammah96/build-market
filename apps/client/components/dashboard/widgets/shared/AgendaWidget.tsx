@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { dashboardKeys } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
-import { calendarClient } from "@/lib/calendar-client";
+import { calendarClient } from "@/lib/facades/calendar-client";
 
 // ============================================================================
 // TYPES

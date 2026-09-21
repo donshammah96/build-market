@@ -19,7 +19,6 @@ import {
   createStoreDocumentSchema,
 } from "@/app/lib/domains/stores";
 
-const logger = getClientLogger();
 const AUDIT_ACTION_PROFILE_UPDATED = "PROFILE_UPDATED";
 
 /*
@@ -66,7 +65,7 @@ export const GET = withAuth<{ id: string }>(
     const domainError =
       result.success && result.data && !result.data.ok ? result.data : null;
 
-    logger.error("Failed to fetch store documents", result.error, {
+    getClientLogger().error("Failed to fetch store documents", result.error, {
       correlationId,
       storeId: id,
     });
@@ -161,7 +160,9 @@ export const POST = withAuth<{ id: string }>(
           "StoreDocument",
           newDoc.id,
           { storeId: id, type, assetId },
-        ).catch((err) => logger.error("Failed to create audit log", err));
+        ).catch((err) =>
+          getClientLogger().error("Failed to create audit log", err),
+        );
         return { ok: true as const, data: newDoc };
       },
       { operationName: "create_store_document" },
@@ -171,7 +172,7 @@ export const POST = withAuth<{ id: string }>(
       return apiSuccess(result.data.data, HttpStatus.CREATED, correlationId);
     }
 
-    logger.error("Failed to create store document", result.error, {
+    getClientLogger().error("Failed to create store document", result.error, {
       correlationId,
       storeId: id,
     });

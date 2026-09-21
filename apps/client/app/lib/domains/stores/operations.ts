@@ -4,7 +4,6 @@
  * This is a domain-local copy of optimistic-lock helpers so stores domain
  * logic no longer depends on compatibility-layer services.
  */
-import { NextResponse } from "next/server";
 import { prisma } from "@build/db";
 import {
   Prisma,
@@ -13,16 +12,12 @@ import {
   StoreEventType,
 } from "@prisma/client";
 import { z } from "zod";
-import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   UpdateStoreSchema,
   storeDetailSelect,
-} from "@/app/lib/validation/stores-validation";
-import { StoreEventService } from "@/app/lib/domains/stores/events";
-import { getClientLogger } from "@/app/lib/api/resilient-api";
-import type { StoreOperationContext } from "@/app/lib/domains/stores/contracts";
-
-const logger = getClientLogger();
+} from "@/validation/stores-validation";
+import { StoreEventService } from "@/domains/stores/events";
+import type { StoreOperationContext } from "@/domains/stores/contracts";
 
 export type UpdateStoreData = z.infer<typeof UpdateStoreSchema>;
 
@@ -166,22 +161,28 @@ export async function updateStoreWithOptimisticLock(
       }
 
       if (store.professionalId !== userId) {
-        logger.warn("Unauthorized store update attempt", {
-          correlationId: context.correlationId,
-          actorPresent: Boolean(userId),
-          storeId,
-          ownerId: store.professionalId,
-        });
+        console.warn(
+          "Unauthorized store update attempt",
+          JSON.stringify({
+            correlationId: context.correlationId,
+            actorPresent: Boolean(userId),
+            storeId,
+            ownerId: store.professionalId,
+          }),
+        );
         return { success: false, error: "forbidden" };
       }
 
       if (store.version !== expectedVersion) {
-        logger.warn("Optimistic lock conflict", {
-          correlationId: context.correlationId,
-          storeId,
-          expectedVersion,
-          actualVersion: store.version,
-        });
+        console.warn(
+          "Optimistic lock conflict",
+          JSON.stringify({
+            correlationId: context.correlationId,
+            storeId,
+            expectedVersion,
+            actualVersion: store.version,
+          }),
+        );
         return { success: false, error: "conflict" };
       }
 
@@ -321,15 +322,11 @@ export async function deleteStoreWithOptimisticLock(
   );
 }
 
-export async function buildConflictResponse(
-  message: string,
-  storeId: string,
-): Promise<NextResponse> {
-  const currentVersion = await StoreEventService.getCurrentVersion(storeId);
-  const response = apiError(message, HttpStatus.CONFLICT);
-  response.headers.set("X-Store-Version", String(currentVersion));
-  return response;
-}
+/**
+ * Build 409 Conflict response for a store optimistic-lock conflict.
+ * @deprecated Implementation moved to @/app/lib/api/conflict-response.
+ */
+export { buildStoreConflictResponse as buildConflictResponse } from "@/api/conflict-response";
 
 export function isOptimisticRetryEnabled(req: {
   headers: { get(name: string): string | null };

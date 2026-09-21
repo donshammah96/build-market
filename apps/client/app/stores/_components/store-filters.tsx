@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { StoreCategory } from "@prisma/client";
-import { fromEnumKey } from "@/lib/links";
+import { fromEnumKey } from "@/lib/routes";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";

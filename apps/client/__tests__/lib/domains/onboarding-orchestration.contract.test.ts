@@ -4,7 +4,7 @@ import type {
   OnboardingIntent,
   ValidatedOnboardingData,
 } from "@/app/lib/domains/shared/onboarding-orchestration";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 vi.mock("server-only", () => ({}));
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ProfessionalRepository } from "@/app/lib/repositories/professional.repository";
+import { ProfessionalRepository } from "@/app/lib/domains/shared/repositories/professional.repository";
 import { PrismaClient } from "@prisma/client";
 
 const mockPrisma = {

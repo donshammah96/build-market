@@ -17,4 +17,4 @@ export type {
   MessagingParticipantRole,
   MessageStatus,
   ThreadStatus,
-} from "./contracts";
+} from "./contracts.js";

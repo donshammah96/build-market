@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { Suspense } from "react";
 import { getLeads, getLeadStats } from "@/actions/admin";
+import { LeadSource, ProjectType } from "@build/db";
 import { columns, LeadData } from "./columns";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,8 +108,8 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
     limit: 10,
     search,
     status: params.status,
-    source: params.source,
-    projectType: params.projectType,
+    source: params.source as LeadSource | undefined,
+    projectType: params.projectType as ProjectType | undefined,
     sortBy:
       (params.sortBy as "createdAt" | "status" | "clientName" | "updatedAt") ||
       "createdAt",

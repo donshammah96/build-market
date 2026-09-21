@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export default function LegacyDashboardRedirect() {
   redirect(ROUTES.userDashboard);

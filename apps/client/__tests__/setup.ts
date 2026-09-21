@@ -10,6 +10,8 @@ if (typeof window !== "undefined") {
 }
 
 // Setup mocks for Next.js modules
+vi.mock("server-only", () => ({}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),

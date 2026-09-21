@@ -28,9 +28,7 @@ import "server-only";
  */
 
 import { clerkClient } from "@clerk/nextjs/server";
-import { getClientLogger } from "@/app/lib/api/resilient-api";
-
-const logger = getClientLogger();
+import { recordClerkSyncLag } from "@/app/lib/auth/telemetry-metrics";
 
 export const CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE =
   "Unable to finalize account state. Please retry.";
@@ -56,6 +54,7 @@ export async function updateClerkOnboardingMetadata(
   metadata: ClerkOnboardingMetadata,
   context: { correlationId?: string; operation: string },
 ): Promise<void> {
+  const startTime = Date.now();
   try {
     const client = (await clerkClient()) as {
       users: {
@@ -68,13 +67,14 @@ export async function updateClerkOnboardingMetadata(
     await client.users.updateUserMetadata(clerkId, {
       publicMetadata: metadata,
     });
+    recordClerkSyncLag(Math.max(0, Date.now() - startTime));
   } catch (error) {
-    logger.error(
+    console.error(
       `Failed to update Clerk metadata during ${context.operation}`,
-      error instanceof Error ? error : new Error(String(error)),
       {
         correlationId: context.correlationId,
         hasClerkId: Boolean(clerkId),
+        error: error instanceof Error ? error.message : String(error),
       },
     );
 
@@ -99,14 +99,15 @@ export async function finalizeClerkOnboardingTransition(params: {
       try {
         await params.onFailure();
       } catch (failureError) {
-        logger.error(
+        console.error(
           `Failed to mark onboarding transition retryable during ${params.context.operation}`,
-          failureError instanceof Error
-            ? failureError
-            : new Error(String(failureError)),
           {
             correlationId: params.context.correlationId,
             hasClerkId: Boolean(params.clerkId),
+            error:
+              failureError instanceof Error
+                ? failureError.message
+                : String(failureError),
           },
         );
       }

@@ -1,40 +1,6 @@
-/**
- * TanStack Query hook for professional-portal withdrawal.
- *
- * Uses financeClient REST API under the hood.
+﻿/**
+ * @deprecated Import from "@/lib/facades/finance/useWithdraw" instead.
+ * This file is a backward-compat re-export stub maintained during the Phase 5 migration.
+ * @see @/lib/facades/finance/useWithdraw
  */
-import {
-  useMutation,
-  useQueryClient,
-  type UseMutationOptions,
-} from "@tanstack/react-query";
-import { financeClient } from "@/lib/finance-client";
-import type { RequestWithdrawalClientInput } from "@/lib/finance-client";
-import { unwrapApiResponse } from "@/lib/api-client-utils";
-
-export const financeKeys = {
-  all: ["finance"] as const,
-  stats: () => [...financeKeys.all, "stats"] as const,
-  transactions: () => [...financeKeys.all, "transactions"] as const,
-};
-
-export function useWithdraw(
-  options?: UseMutationOptions<
-    Awaited<ReturnType<typeof financeClient.requestWithdrawal>>["data"],
-    Error,
-    RequestWithdrawalClientInput
-  >,
-) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    ...options,
-    mutationFn: async (input) =>
-      unwrapApiResponse(await financeClient.requestWithdrawal(input)),
-    onSuccess: (data, variables, context, mutation) => {
-      queryClient.invalidateQueries({ queryKey: financeKeys.stats() });
-      queryClient.invalidateQueries({ queryKey: financeKeys.transactions() });
-      options?.onSuccess?.(data, variables, context, mutation);
-    },
-  });
-}
+export * from "@/lib/facades/finance/useWithdraw";

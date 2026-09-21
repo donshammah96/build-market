@@ -3,7 +3,7 @@
 import { memo, useMemo, useState } from "react";
 import VendorCard from "../vendors/VendorCard";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "../ui/button";
 import { VendorCardData, County } from "../../types/vendor";
 import {
@@ -139,24 +139,24 @@ export const VendorsSection = memo(function VendorsSection({
 
   return (
     <section
-      className="py-20 bg-white"
+      className="py-20 bg-muted/30 border-y border-border/60 transition-colors duration-300"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="vendors-heading"
     >
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-20">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-end mb-10 gap-6">
           <div
             className={cn(isInView && shouldAnimate && "animate-slide-in-left")}
           >
-            <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-amber-600 uppercase bg-amber-50 rounded-full">
+            <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-amber-800 dark:text-amber-400 uppercase bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/20 rounded-full">
               Marketplace
             </div>
             <h2
               id="vendors-heading"
-              className="text-3xl sm:text-4xl font-bold text-zinc-900 tracking-tight"
+              className="font-display text-3xl sm:text-4xl font-bold text-foreground tracking-tight"
             >
-              Top Rated <span className="text-emerald-600">Suppliers</span>
+              Top Rated <span className="text-primary">Suppliers</span>
             </h2>
           </div>
 
@@ -165,7 +165,7 @@ export const VendorsSection = memo(function VendorsSection({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-zinc-300 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+              className="rounded-full border-border bg-card text-foreground hover:border-primary hover:text-primary hover:bg-accent transition-colors shadow-2xs"
               onClick={() => api?.scrollPrev()}
               aria-label="Previous supplier"
             >
@@ -174,7 +174,7 @@ export const VendorsSection = memo(function VendorsSection({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-zinc-300 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+              className="rounded-full border-border bg-card text-foreground hover:border-primary hover:text-primary hover:bg-accent transition-colors shadow-2xs"
               onClick={() => api?.scrollNext()}
               aria-label="Next supplier"
             >
@@ -215,7 +215,7 @@ export const VendorsSection = memo(function VendorsSection({
           <Button
             variant="ghost"
             size="lg"
-            className="text-zinc-500 hover:text-emerald-600 transition-colors"
+            className="text-muted-foreground hover:text-primary transition-colors"
             asChild
           >
             <Link href={ROUTES.stores}>

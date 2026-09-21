@@ -5,6 +5,7 @@ import {
   type Result,
 } from "@/app/lib/errors/result";
 import { notificationsRepository } from "./repository";
+import { toNotificationDto } from "./mappers";
 import type {
   BatchDeleteInput,
   MarkReadInput,
@@ -24,7 +25,7 @@ type NotificationsResult<T> = Result<
 >;
 
 function serializeDate(value: Date | null): string | null {
-  return value ? value.toISOString() : null;
+  return value ? (toNotificationDto(value) as unknown as string) : null;
 }
 
 function mapListItem(item: {
@@ -45,7 +46,7 @@ function mapListItem(item: {
   return {
     ...item,
     readAt: serializeDate(item.readAt),
-    createdAt: item.createdAt.toISOString(),
+    createdAt: toNotificationDto(item.createdAt) as unknown as string,
     expiresAt: serializeDate(item.expiresAt),
   };
 }

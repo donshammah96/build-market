@@ -50,8 +50,7 @@ const BLOCKED_STATUSES: Record<string, { message: string; status: number }> = {
 const DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS = 300;
 
 type RecentAuthValidationResult =
-  | { ok: true }
-  | { ok: false; reason: "missing_claim" | "stale_claim" };
+  { ok: true } | { ok: false; reason: "missing_claim" | "stale_claim" };
 
 function parseNumericClaim(claim: unknown): number | null {
   if (typeof claim === "number" && Number.isFinite(claim)) {
@@ -243,6 +242,8 @@ export function withAuth<T = any>(
     }
     // --- END DEV AUTH BYPASS ---
 
+    let authResolution: { context: AuthContext; params?: T };
+
     try {
       // Get Clerk user ID
       const authResult = await auth();
@@ -390,7 +391,7 @@ export function withAuth<T = any>(
         );
       }
 
-      return finalizeResponse(await handler(req, context, params));
+      authResolution = { context, params };
     } catch (error) {
       const logger = getClientLogger();
       logger.error(
@@ -402,6 +403,10 @@ export function withAuth<T = any>(
         apiError("Authentication failed", HttpStatus.UNAUTHORIZED),
       );
     }
+
+    return finalizeResponse(
+      await handler(req, authResolution.context, authResolution.params),
+    );
   };
 
   return routeHandler;

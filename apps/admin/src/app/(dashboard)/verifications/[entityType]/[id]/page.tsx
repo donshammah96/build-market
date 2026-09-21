@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getVerificationDetails } from "@/actions/admin";
-import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 import { VerificationDetailView } from "@/components/admin/verification/VerificationDetailView";
 import { ActionErrorState } from "@/components/ui/action-error-state";
 import type { EntityType } from "@/actions/admin";

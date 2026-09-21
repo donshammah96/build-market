@@ -22,6 +22,7 @@ import {
   ListingsWidget,
   InquiriesWidget,
   PipelineWidget,
+  TierSystemWidget,
 } from "./widgets";
 
 // ============================================================================
@@ -109,6 +110,14 @@ const WIDGET_REGISTRY: Record<WidgetId, WidgetRendererFn> = {
 
   development_projects: (data) => (
     <ProjectsWidget projects={safeArray(data.projects)} />
+  ),
+
+  tier_system: (data: any) => (
+    <TierSystemWidget
+      subscription={data?.subscription}
+      leadWallet={data?.leadWallet}
+      badges={data?.badges}
+    />
   ),
 };
 

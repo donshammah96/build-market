@@ -1,125 +1,81 @@
-/**
- * GET /api/admin/verification-details/[id]
- * Get detailed information for verification review
- * Requires admin role
- */
-
 import { NextRequest } from "next/server";
-import { AuthContext, withAdminRole } from "@/lib/api/api-middleware";
-import { AdminRole } from "@build/db";
-import { apiError, HttpStatus } from "@/lib/api/api-response";
+import { AdminRole } from "@build/enums";
+import { type AuthContext, withAdminRole } from "@/lib/api/api-middleware";
+import { HttpStatus } from "@/lib/api/api-response";
 import {
-  initializeCorrelationId,
+  apiError,
   executeResilient,
   getClientLogger,
+  initializeCorrelationId,
 } from "@/lib/api/resilient-api";
 import {
-  checkRateLimit,
-  RateLimits,
-  getRateLimitIdentifier,
-} from "@/lib/api/rate-limit";
-import { getProfessionalVerificationDetails } from "@/lib/services/verification/professional-verification.service";
-import { getStoreVerificationDetails } from "@/lib/services/verification/store-verification.service";
-import { getPropertyVerificationDetails } from "@/lib/services/verification/property-verification.service";
-import { getAuditHistory } from "@/lib/services/verification/audit-service";
+  verificationService,
+  type VerificationEntityType,
+} from "@/lib/domains/verification";
 
 const logger = getClientLogger();
 
-/**
- * GET handler for verification details
- * Query params:
- * - entityType: professional | store | property (required)
- */
-export const GET = withAdminRole([AdminRole.SUPER_ADMIN])(async (
-  req: NextRequest,
-  context: AuthContext,
-  params: unknown,
-) => {
+export const GET = withAdminRole([
+  AdminRole.SUPER_ADMIN,
+  AdminRole.CONTENT_MODERATOR,
+])(async (req: NextRequest, context: AuthContext, params?: unknown) => {
   const correlationId = initializeCorrelationId(req);
-
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window,
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const { id } = params as { id: string };
-  const entityType = req.nextUrl.searchParams.get("entityType");
+  const { searchParams } = new URL(req.url);
+  const entityType = searchParams.get("entityType");
+  const routeParams = params as { id?: string } | undefined;
+  const entityId = routeParams?.id;
 
   if (
+    !entityId ||
     !entityType ||
     !["professional", "store", "property"].includes(entityType)
   ) {
     return apiError(
-      "Invalid or missing entityType parameter",
+      "A valid entity type and entity id are required",
       HttpStatus.BAD_REQUEST,
     );
   }
 
-  logger.info("Fetching verification details", {
+  logger.info("Verification details requested", {
     correlationId,
     adminId: context.dbUserId,
     entityType,
-    entityId: id,
+    entityId,
   });
 
   return executeResilient(
     async () => {
-      let details;
-      let auditEntityType: string;
-
-      switch (entityType) {
-        case "professional":
-          details = await getProfessionalVerificationDetails(id);
-          auditEntityType = "ProfessionalProfile";
-          break;
-
-        case "store":
-          details = await getStoreVerificationDetails(id);
-          auditEntityType = "Store";
-          break;
-
-        case "property":
-          details = await getPropertyVerificationDetails(id);
-          auditEntityType = "Property";
-          break;
-
-        default:
-          throw new Error("Invalid entity type");
+      if (!context.adminRole) {
+        throw new Error("Unauthorized: Admin role missing");
       }
 
-      if (!details) {
-        return apiError(
-          `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} not found`,
-          HttpStatus.NOT_FOUND,
-        );
+      const result = await verificationService.getVerificationDetails(
+        {
+          clerkId: context.clerkId,
+          dbUserId: context.dbUserId,
+          adminRole: context.adminRole,
+        },
+        {
+          entityType: entityType as VerificationEntityType,
+          entityId,
+        },
+      );
+
+      if (!result.ok) {
+        throw new Error(result.message);
       }
-
-      // Fetch audit history
-      const auditHistory = await getAuditHistory(auditEntityType, id, 20);
-
-      logger.info("Verification details fetched successfully", {
-        correlationId,
-        adminId: context.dbUserId,
-        entityType,
-        entityId: id,
-      });
 
       return {
-        data: {
-          ...details,
-          auditHistory,
-        },
+        success: true,
+        data: result.data,
       };
     },
     {
-      operationName: "get_verification_details",
-      successStatus: HttpStatus.OK,
+      operationName: "admin_verification_details",
+      criticality: "normal",
+      timeout: 10_000,
+      retry: { maxAttempts: 2 },
+      errorStatus: HttpStatus.BAD_REQUEST,
     },
   );
 });

@@ -39,7 +39,7 @@ import {
 import { StatCard } from "@/components/ui/StatCard";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { useMyStores, useCreateStore, useDeleteStore } from "@/hooks/useStores";
-import type { CreateStoreClientInput } from "@/lib/stores-client";
+import type { CreateStoreClientInput } from "@/lib/facades/stores-client";
 import type { MyStoreWithStats } from "@/app/lib/domains/stores/contracts";
 
 const StoreForm = dynamic(() => import("@/components/forms/StoreForm"), {

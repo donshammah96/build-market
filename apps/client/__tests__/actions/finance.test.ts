@@ -316,7 +316,7 @@ describe("finance actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith(
       "/professional-portal/finance",
     );
-    expect(IdempotencyService.fail).not.toHaveBeenCalled();
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
   });
 
   it("fails the idempotency record and returns a safe structured domain failure", async () => {

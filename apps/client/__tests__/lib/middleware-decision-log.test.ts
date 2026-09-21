@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 describe("middleware decision log", () => {
   afterEach(() => {

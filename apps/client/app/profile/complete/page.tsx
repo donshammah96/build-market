@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +29,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProfileStatus, ClientProfileData } from "@/hooks/useProfileStatus";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 interface FormData {
@@ -487,8 +486,6 @@ export default function CompleteClientProfilePage() {
           </div>
         </form>
       </main>
-
-      <Footer />
     </div>
   );
 }

@@ -15,7 +15,7 @@ import {
   type PolicyMilestoneContext,
   type PolicyProjectContext,
   type ProjectActor,
-  type DomainResult,
+  type ProjectResult,
 } from "@/app/lib/domains/projects/contracts";
 import { projectsRepository } from "@/app/lib/domains/projects/repository";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
@@ -89,7 +89,7 @@ function buildReleaseRef(escrowId: string): string {
 function fail(
   error: import("@/app/lib/domains/projects/contracts").DomainErrorCode,
   message?: string,
-): DomainResult<never> {
+): ProjectResult<never> {
   return { ok: false, error, message };
 }
 
@@ -161,13 +161,21 @@ export const projectsService = {
     );
   },
 
+  async getProjectVersion(projectId: string): Promise<number | null> {
+    return projectsRepository.getProjectVersion(projectId);
+  },
+
+  async getMilestoneVersion(milestoneId: string): Promise<number | null> {
+    return projectsRepository.getMilestoneVersion(milestoneId);
+  },
+
   async listProjects(input: {
     actor?: ProjectActor;
     userId: string;
     page: number;
     limit: number;
     status?: string;
-  }): Promise<DomainResult<ProjectListResultDto>> {
+  }): Promise<ProjectResult<ProjectListResultDto>> {
     const actor = resolveProjectActor(input);
     const { projects, pagination } = await projectsRepository.listActorProjects(
       {
@@ -185,7 +193,7 @@ export const projectsService = {
     actor?: ProjectActor;
     userId: string;
     role?: "CLIENT" | "PROFESSIONAL";
-  }): Promise<DomainResult<unknown>> {
+  }): Promise<ProjectResult<unknown>> {
     const actor = resolveProjectActor(input);
     const projects = await projectsRepository.listUserProjects({
       userId: actor.userId,
@@ -201,7 +209,7 @@ export const projectsService = {
     data: CreateProjectInput;
     ipAddress?: string;
     userAgent?: string;
-  }): Promise<DomainResult<unknown>> {
+  }): Promise<ProjectResult<unknown>> {
     const actor = resolveProjectActor(input);
     if (actor.role !== "PROFESSIONAL" && actor.role !== "ADMIN") {
       return fail("forbidden", "Only professionals can create projects");
@@ -246,7 +254,7 @@ export const projectsService = {
   async getProjectDetail(
     projectId: string,
     userIdOrActor: string | ProjectActor,
-  ): Promise<DomainResult<ProjectDetailResultDto>> {
+  ): Promise<ProjectResult<ProjectDetailResultDto>> {
     const actor =
       typeof userIdOrActor === "string"
         ? resolveProjectActor({ userId: userIdOrActor, role: "PROFESSIONAL" })
@@ -294,7 +302,7 @@ export const projectsService = {
     data: UpdateProjectInput;
     context: ProjectOperationContext;
     expectedVersion: number;
-  }): Promise<DomainResult<ProjectDetailResultDto>> {
+  }): Promise<ProjectResult<ProjectDetailResultDto>> {
     const actor = resolveProjectActor(input);
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
@@ -332,7 +340,7 @@ export const projectsService = {
     userId: string;
     context: ProjectOperationContext;
     expectedVersion: number;
-  }): Promise<DomainResult<{ projectId: string }>> {
+  }): Promise<ProjectResult<{ projectId: string }>> {
     const actor = resolveProjectActor(input);
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
@@ -364,7 +372,7 @@ export const projectsService = {
     projectId: string,
     milestoneId: string,
     userId: string,
-  ): Promise<DomainResult<MilestoneDetailResultDto>> {
+  ): Promise<ProjectResult<MilestoneDetailResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -403,7 +411,7 @@ export const projectsService = {
   async listMilestones(
     projectId: string,
     userIdOrActor: string | ProjectActor,
-  ): Promise<DomainResult<MilestoneListResultDto>> {
+  ): Promise<ProjectResult<MilestoneListResultDto>> {
     const actor =
       typeof userIdOrActor === "string"
         ? resolveProjectActor({ userId: userIdOrActor, role: "PROFESSIONAL" })
@@ -440,7 +448,7 @@ export const projectsService = {
     data: CreateMilestoneInput;
     ipAddress?: string;
     userAgent?: string;
-  }): Promise<DomainResult<MilestoneMutationResultDto>> {
+  }): Promise<ProjectResult<MilestoneMutationResultDto>> {
     const actor = resolveProjectActor(input);
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
@@ -511,7 +519,7 @@ export const projectsService = {
     data: UpdateMilestoneInput;
     context: ProjectOperationContext;
     expectedVersion: number;
-  }): Promise<DomainResult<{ milestone: unknown; newVersion: number }>> {
+  }): Promise<ProjectResult<{ milestone: unknown; newVersion: number }>> {
     const actor = resolveProjectActor(input);
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
@@ -557,7 +565,7 @@ export const projectsService = {
     milestoneId: string;
     context: ProjectOperationContext;
     expectedVersion: number;
-  }): Promise<DomainResult<{ milestoneId: string; newVersion: number }>> {
+  }): Promise<ProjectResult<{ milestoneId: string; newVersion: number }>> {
     const actor = resolveProjectActor(input);
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
@@ -598,7 +606,7 @@ export const projectsService = {
   async listEscrows(
     projectId: string,
     userId: string,
-  ): Promise<DomainResult<EscrowListResultDto>> {
+  ): Promise<ProjectResult<EscrowListResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -616,7 +624,7 @@ export const projectsService = {
     projectId: string,
     escrowId: string,
     userId: string,
-  ): Promise<DomainResult<EscrowDetailResultDto>> {
+  ): Promise<ProjectResult<EscrowDetailResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -644,7 +652,7 @@ export const projectsService = {
     escrowId: string,
     userId: string,
     disputeReason: string,
-  ): Promise<DomainResult<EscrowMutationResultDto>> {
+  ): Promise<ProjectResult<EscrowMutationResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -682,7 +690,7 @@ export const projectsService = {
     projectId: string,
     userId: string,
     typeFilter?: string,
-  ): Promise<DomainResult<ProjectDocumentListResultDto>> {
+  ): Promise<ProjectResult<ProjectDocumentListResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -722,7 +730,7 @@ export const projectsService = {
       ipAddress?: string;
       userAgent?: string;
     },
-  ): Promise<DomainResult<ProjectDocumentDetailResultDto>> {
+  ): Promise<ProjectResult<ProjectDocumentDetailResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -812,7 +820,7 @@ export const projectsService = {
     projectId: string,
     documentId: string,
     userId: string,
-  ): Promise<DomainResult<unknown>> {
+  ): Promise<ProjectResult<unknown>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -864,7 +872,7 @@ export const projectsService = {
     projectId: string,
     documentId: string,
     userId: string,
-  ): Promise<DomainResult<ProjectDocumentDetailResultDto>> {
+  ): Promise<ProjectResult<ProjectDocumentDetailResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -902,7 +910,7 @@ export const projectsService = {
     projectId: string,
     userId: string,
     filters?: { category?: string; milestoneId?: string },
-  ): Promise<DomainResult<ProjectImageListResultDto>> {
+  ): Promise<ProjectResult<ProjectImageListResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -945,7 +953,7 @@ export const projectsService = {
       ipAddress?: string;
       userAgent?: string;
     },
-  ): Promise<DomainResult<ProjectImagesCreateResultDto>> {
+  ): Promise<ProjectResult<ProjectImagesCreateResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -1018,7 +1026,7 @@ export const projectsService = {
     projectId: string,
     imageId: string,
     userId: string,
-  ): Promise<DomainResult<unknown>> {
+  ): Promise<ProjectResult<unknown>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -1056,7 +1064,7 @@ export const projectsService = {
     projectId: string,
     imageId: string,
     userId: string,
-  ): Promise<DomainResult<ProjectImageDetailResultDto>> {
+  ): Promise<ProjectResult<ProjectImageDetailResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       projectId,
       userId,
@@ -1088,7 +1096,7 @@ export const projectsService = {
 
   async approveMilestone(
     input: ApproveInput,
-  ): Promise<DomainResult<MilestoneMutationResultDto>> {
+  ): Promise<ProjectResult<MilestoneMutationResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
       input.userId,
@@ -1170,7 +1178,7 @@ export const projectsService = {
 
   async fundEscrow(
     input: FundInput,
-  ): Promise<DomainResult<EscrowMutationResultDto>> {
+  ): Promise<ProjectResult<EscrowMutationResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
       input.userId,
@@ -1237,7 +1245,7 @@ export const projectsService = {
 
   async releaseEscrow(
     input: ReleaseInput,
-  ): Promise<DomainResult<EscrowMutationResultDto>> {
+  ): Promise<ProjectResult<EscrowMutationResultDto>> {
     const participant = await projectsRepository.verifyParticipant(
       input.projectId,
       input.userId,

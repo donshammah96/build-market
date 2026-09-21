@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { Suspense } from "react";
 import {
   getDashboardStats,
   getVerificationStats,
@@ -12,12 +12,15 @@ import {
   PlusCircle,
   Server,
   AlertCircle,
-  ShieldCheck,
   Clock,
   CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { VerificationAlertWidget } from "@/components/admin/verification/VerificationAlertWidget";
+import {
+  SystemInfrastructureWidget,
+  SystemInfrastructureSkeleton,
+} from "@/components/admin/dashboard/SystemInfrastructureWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -170,51 +173,24 @@ export default async function DashboardPage() {
 
       {/* Secondary Section: System Health & Quick Actions */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* System Health Widget */}
         <Card className="col-span-1 lg:col-span-2 border-zinc-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base font-bold text-zinc-900 flex items-center gap-2">
-              <Link href="/sign-in/" className="text-blue-600 hover:underline">
-                Please sign in
-              </Link>
+              <Server className="h-4 w-4 text-emerald-500" />
+              System Infrastructure
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-md border border-zinc-200">
-                    <Server className="h-4 w-4 text-zinc-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900">
-                      Database Status
-                    </p>
-                    <p className="text-xs text-zinc-500">PostgreSQL (Neon)</p>
-                  </div>
-                </div>
-                <div className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                  Healthy
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-md border border-zinc-200">
-                    <ShieldCheck className="h-4 w-4 text-zinc-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900">
-                      Auth Service
-                    </p>
-                    <p className="text-xs text-zinc-500">Clerk</p>
-                  </div>
-                </div>
-                <div className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                  Online
-                </div>
-              </div>
-            </div>
+            {/*
+             * Suspense boundary: health probes (DB ping, Redis PING) run in
+             * parallel inside SystemInfrastructureWidget. Wrapping in Suspense
+             * means the critical metrics grid above renders immediately and the
+             * health widget streams in independently, eliminating head-of-line
+             * blocking from slow infrastructure probes.
+             */}
+            <Suspense fallback={<SystemInfrastructureSkeleton />}>
+              <SystemInfrastructureWidget />
+            </Suspense>
           </CardContent>
         </Card>
 
