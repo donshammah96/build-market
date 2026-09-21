@@ -86,7 +86,7 @@ const FAQSection = dynamic(
 const CTA = dynamic(
   () => import("@/components/home/CTA").then((mod) => ({ default: mod.CTA })),
   {
-    loading: () => <SectionSkeleton height="300px" bg="bg-primary" />,
+    loading: () => <SectionSkeleton height="300px" bg="bg-muted" />,
     ssr: true,
   },
 );
@@ -154,7 +154,7 @@ export default function Home() {
         <FAQSection />
       </Suspense>
 
-      <Suspense fallback={<SectionSkeleton height="300px" bg="bg-primary" />}>
+      <Suspense fallback={<SectionSkeleton height="300px" bg="bg-muted" />}>
         <CTA />
       </Suspense>
 

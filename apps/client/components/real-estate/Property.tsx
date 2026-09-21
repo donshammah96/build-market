@@ -152,7 +152,7 @@ export const Property = memo(function Property({
 
   return (
     <section
-      className="py-20 bg-zinc-50 border-y border-zinc-200"
+      className="py-20 bg-background"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="properties-heading"
     >
@@ -162,14 +162,17 @@ export const Property = memo(function Property({
           <div
             className={cn(isInView && shouldAnimate && "animate-slide-in-left")}
           >
-            <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-emerald-600 uppercase bg-emerald-50 rounded-full">
+            <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-emerald-600 dark:text-emerald-400 uppercase bg-emerald-500/10 border border-emerald-500/20 rounded-full">
               Real Estate
             </div>
             <h2
               id="properties-heading"
-              className="text-3xl sm:text-4xl font-bold text-zinc-900 tracking-tight"
+              className="font-display text-3xl sm:text-4xl font-bold text-foreground tracking-tight"
             >
-              Featured <span className="text-emerald-600">Properties</span>
+              Featured{" "}
+              <span className="text-emerald-600 dark:text-emerald-400">
+                Properties
+              </span>
             </h2>
           </div>
 
@@ -178,7 +181,7 @@ export const Property = memo(function Property({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-zinc-300 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+              className="rounded-full border-border bg-card text-foreground hover:border-primary hover:text-primary hover:bg-accent transition-colors shadow-2xs"
               onClick={() => api?.scrollPrev()}
               aria-label="Previous property"
             >
@@ -187,7 +190,7 @@ export const Property = memo(function Property({
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-zinc-300 hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+              className="rounded-full border-border bg-card text-foreground hover:border-primary hover:text-primary hover:bg-accent transition-colors shadow-2xs"
               onClick={() => api?.scrollNext()}
               aria-label="Next property"
             >
@@ -225,7 +228,11 @@ export const Property = memo(function Property({
         </Carousel>
 
         <div className="mt-8 text-center sm:hidden">
-          <Button variant="outline" className="w-full" asChild>
+          <Button
+            variant="outline"
+            className="w-full border-border text-foreground hover:bg-accent"
+            asChild
+          >
             <Link href="/properties">View All Properties</Link>
           </Button>
         </div>

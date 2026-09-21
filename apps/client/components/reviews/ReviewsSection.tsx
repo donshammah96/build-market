@@ -28,7 +28,7 @@ const TitleWithHighlight = memo(function TitleWithHighlight({
   return (
     <span className="block">
       {normalText}{" "}
-      <span className="text-emerald-600 relative inline-block">
+      <span className="text-emerald-600 dark:text-emerald-400 relative inline-block">
         {highlightText}
       </span>
     </span>
@@ -61,7 +61,7 @@ export const ReviewsSection = memo(function ReviewsSection({
 
   return (
     <section
-      className="bg-zinc-50/50 relative py-16 sm:py-24"
+      className="bg-muted/30 border-y border-border/60 relative py-16 sm:py-24 transition-colors duration-300"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="reviews-heading"
     >
@@ -73,11 +73,11 @@ export const ReviewsSection = memo(function ReviewsSection({
           >
             <h2
               id="reviews-heading"
-              className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-zinc-900 mb-2"
+              className="font-display text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-2"
             >
               <TitleWithHighlight text="Trusted by Kenyans everywhere" />
             </h2>
-            <p className="text-zinc-500 text-lg max-w-xl">
+            <p className="text-muted-foreground text-lg max-w-xl">
               From Runda to Riverside, see how we are helping homeowners build
               their dreams with confidence.
             </p>
@@ -90,7 +90,11 @@ export const ReviewsSection = memo(function ReviewsSection({
             )}
             style={{ animationDelay: "200ms" }}
           >
-            <Button variant="outline" className="group" asChild>
+            <Button
+              variant="outline"
+              className="group border-border text-foreground hover:bg-accent"
+              asChild
+            >
               <Link href={ROUTES.reviews}>
                 Read all stories
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />

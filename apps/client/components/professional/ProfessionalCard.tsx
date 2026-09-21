@@ -42,23 +42,23 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
       <div className="h-full p-1 hover-lift">
         <Card
           className={cn(
-            "h-full flex flex-col border overflow-hidden rounded-xl shadow-xs transition-all duration-300 hover:shadow-lg group",
+            "h-full flex flex-col border overflow-hidden rounded-xl shadow-xs transition-all duration-300 hover:shadow-xl group",
             isSponsored
-              ? "border-[#F2D18B] bg-[#FFFCF5] ring-1 ring-[#F2D18B]/50"
-              : "border-zinc-200 bg-white",
+              ? "border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/10 ring-1 ring-amber-500/20 hover:border-amber-500/60"
+              : "border-border/70 bg-card text-card-foreground hover:border-primary/40",
           )}
         >
           {/* Top Banner for Boosted / Sponsored placements */}
           {isSponsored && (
-            <div className="px-3 py-1.5 bg-[#FFF8E6] border-b border-[#F2D18B] flex items-center justify-between">
+            <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between text-amber-700 dark:text-amber-400">
               <SponsoredLabel size="sm" />
-              <span className="text-[10px] font-mono text-neutral-500">
+              <span className="text-[10px] font-mono text-muted-foreground">
                 Featured Partner
               </span>
             </div>
           )}
           {/* Hero Image (Portfolio Preview) */}
-          <div className="relative aspect-4/3 overflow-hidden bg-zinc-100 border-b border-zinc-100">
+          <div className="relative aspect-4/3 overflow-hidden bg-muted border-b border-border/60">
             <Link href={profileUrl} className="block h-full w-full">
               <div className="h-full w-full overflow-hidden">
                 <ImageWithFallback
@@ -74,16 +74,16 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
 
             {/* Floating Rating Badge */}
             {professional.rating && (
-              <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-black/5">
+              <div className="absolute top-3 left-3 bg-background/90 dark:bg-card/90 backdrop-blur-md px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs border border-border/60">
                 <Star
                   className="h-3.5 w-3.5 fill-amber-400 text-amber-400"
                   aria-hidden="true"
                 />
-                <span className="text-xs font-bold text-zinc-900">
+                <span className="text-xs font-bold text-foreground">
                   {professional.rating.toFixed(1)}
                 </span>
                 {professional.reviewCount && (
-                  <span className="text-xs text-zinc-500 font-medium">
+                  <span className="text-xs text-muted-foreground font-medium">
                     ({professional.reviewCount})
                   </span>
                 )}
@@ -108,18 +108,18 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="flex-1 min-w-0">
                 <Link href={profileUrl} className="group/title">
-                  <h3 className="font-bold text-zinc-900 text-lg truncate group-hover/title:text-emerald-700 transition-colors">
+                  <h3 className="font-bold text-foreground text-lg truncate group-hover/title:text-primary transition-colors">
                     {fullName}
                   </h3>
                 </Link>
-                <p className="text-sm text-zinc-500 font-medium truncate">
+                <p className="text-sm text-muted-foreground font-medium truncate">
                   {displayTitle}
                 </p>
               </div>
               <Link href={profileUrl}>
-                <Avatar className="h-10 w-10 border-2 border-white shadow-sm -mt-2">
+                <Avatar className="h-10 w-10 border-2 border-border/80 shadow-xs -mt-2">
                   <AvatarImage src={professional.profileImage} alt="" />
-                  <AvatarFallback className="bg-zinc-100 text-zinc-500 font-bold">
+                  <AvatarFallback className="bg-muted text-muted-foreground font-bold">
                     {fullName.charAt(0)}
                   </AvatarFallback>
                 </Avatar>
@@ -127,14 +127,17 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
             </div>
 
             {/* Location & Experience */}
-            <div className="flex items-center gap-3 text-xs text-zinc-500 mb-5">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-5">
               {professional.location && (
                 <div className="flex items-center gap-1 min-w-0">
-                  <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <MapPin
+                    className="h-3.5 w-3.5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                   <span className="truncate">{professional.location}</span>
                 </div>
               )}
-              <div className="h-3 w-px bg-zinc-200" aria-hidden="true" />
+              <div className="h-3 w-px bg-border" aria-hidden="true" />
               <span className="whitespace-nowrap">
                 {professional.yearsExperience}+ Years Exp.
               </span>
@@ -150,23 +153,23 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
                 <Badge
                   key={service.id || i}
                   variant="secondary"
-                  className="text-[10px] bg-zinc-50 text-zinc-600 border border-zinc-100 font-medium hover:bg-zinc-100"
+                  className="text-[10px] bg-secondary text-secondary-foreground border border-border/50 font-medium hover:bg-secondary/80"
                 >
                   {service.name}
                 </Badge>
               ))}
               {serviceCount > 3 && (
-                <span className="text-[10px] text-zinc-400 self-center pl-1">
+                <span className="text-[10px] text-muted-foreground self-center pl-1">
                   +{serviceCount - 3} more
                 </span>
               )}
             </div>
 
             {/* Footer Actions */}
-            <div className="mt-auto pt-4 border-t border-zinc-100 flex items-center gap-3">
+            <div className="mt-auto pt-4 border-t border-border/60 flex items-center gap-3">
               <Button
                 variant="default"
-                className="flex-1 bg-zinc-900 hover:bg-emerald-600 text-white h-9 text-xs font-medium transition-colors"
+                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground h-9 text-xs font-medium transition-colors shadow-xs"
                 asChild
               >
                 <Link href={profileUrl}>View Profile</Link>
@@ -174,12 +177,12 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
 
               <Button
                 variant="outline"
-                className="flex-1 border-zinc-200 hover:bg-zinc-50 hover:text-emerald-600 h-9 text-xs font-medium group/btn"
+                className="flex-1 border-border text-foreground hover:bg-accent hover:text-primary h-9 text-xs font-medium group/btn"
                 asChild
               >
                 <Link href={`${profileUrl}?tab=projects`}>
                   <Briefcase
-                    className="mr-2 h-3.5 w-3.5 text-zinc-400 group-hover/btn:text-emerald-500"
+                    className="mr-2 h-3.5 w-3.5 text-muted-foreground group-hover/btn:text-primary"
                     aria-hidden="true"
                   />
                   {projectCount} Projects

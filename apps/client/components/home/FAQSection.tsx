@@ -78,6 +78,7 @@ export const FAQSection = memo(function FAQSection() {
       {/* FAQPage Structured Data (SEO / Rich Snippets) */}
       <script
         type="application/ld+json"
+        // SECURITY_XSS_ALLOWLIST: Static FAQ schema metadata, safe JSON-LD without user input
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(faqJsonLd),
         }}

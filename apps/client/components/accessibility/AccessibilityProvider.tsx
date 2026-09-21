@@ -17,6 +17,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
 }: AccessibilityProviderProps) {
   const {
     theme,
+    setTheme,
     reduceMotion,
     reduceTransparency,
     highContrast,
@@ -34,12 +35,29 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
     const html = document.documentElement;
     const body = document.body;
 
+    // Check URL query parameter e.g. ?theme=dark or ?theme=light
+    let activeTheme = theme;
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlTheme = urlParams.get("theme");
+      if (
+        urlTheme === "dark" ||
+        urlTheme === "light" ||
+        urlTheme === "system"
+      ) {
+        activeTheme = urlTheme;
+        if (theme !== urlTheme) {
+          setTheme(urlTheme);
+        }
+      }
+    }
+
     // Theme (Light / Dark / System)
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const applyTheme = () => {
-      if (theme === "dark") {
+      if (activeTheme === "dark") {
         html.classList.add("dark");
-      } else if (theme === "light") {
+      } else if (activeTheme === "light") {
         html.classList.remove("dark");
       } else {
         html.classList.toggle("dark", mediaQuery.matches);
@@ -110,6 +128,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
     colorBlindMode,
     dyslexiaFont,
     lineSpacing,
+    setTheme,
   ]);
 
   // Keyboard shortcut handler (Alt + A opens accessibility settings)

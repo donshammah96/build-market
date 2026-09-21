@@ -156,7 +156,7 @@ export default async function RootLayout({
           }
         : {})}
     >
-      <html lang="en" className={dmSans.variable}>
+      <html lang="en" className={dmSans.variable} suppressHydrationWarning>
         <head>
           {/* Preconnect to Clerk FAPI dynamically configured by env */}
           {clerkOrigin && (
@@ -182,9 +182,19 @@ export default async function RootLayout({
           <script
             type="application/ld+json"
             nonce={nonce}
-
+            // SECURITY_XSS_ALLOWLIST: Static schema.org organization metadata, safe JSON-LD without user input
             dangerouslySetInnerHTML={{
               __html: JSON.stringify(organizationJsonLd),
+            }}
+          />
+
+          {/* Pre-hydration theme application: prevents theme flash & supports ?theme=dark */}
+          <script
+            nonce={nonce}
+            // SECURITY_XSS_ALLOWLIST: Static client-side theme initialization IIFE without user input
+            // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive accessibility theme preferences
+            dangerouslySetInnerHTML={{
+              __html: `(function(){try{var p=new URLSearchParams(window.location.search).get('theme');var s=localStorage.getItem('bm_accessibility_settings');var t=p||(s?JSON.parse(s).state?.theme:null);if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.remove('dark');}}catch(e){}})();`,
             }}
           />
         </head>

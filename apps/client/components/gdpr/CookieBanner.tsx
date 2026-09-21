@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Cookie, X, ChevronDown, ChevronUp, Shield } from "lucide-react";
+import { Cookie, X, ChevronDown, Shield } from "lucide-react";
 import Link from "next/link";
 import { useCookieConsent } from "@/hooks/useCookieConsent";
 import type { CookieConsent } from "@/components/providers/CookieConsentProvider";
