@@ -19,7 +19,7 @@ interface Stat {
  */
 const defaultStats: Stat[] = [
   { value: "100% Vetted", label: "Licensed engineers & architects" },
-  { value: "Milestone Held", label: "Funds released upon stage sign-off" },
+  { value: "Milestone Recorded", label: "Stage sign-offs tracked between parties" },
   { value: "County Reach", label: "Verified talent across Kenya" },
   { value: "Transparent Quotes", label: "Direct messaging & scope agreements" },
 ];
