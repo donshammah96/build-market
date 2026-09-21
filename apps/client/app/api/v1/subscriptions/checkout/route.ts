@@ -15,6 +15,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { applyPrivateNoStoreHeaders } from "@/app/lib/api/http-security";
 import { clientSubscriptionsService } from "@/app/lib/domains/subscriptions";
+import { isBillingEnabled } from "@/app/lib/capabilities/registry";
 
 const CheckoutSchema = z.object({
   planKey: z.nativeEnum(SubscriptionTierKey),
@@ -25,6 +26,15 @@ const CheckoutSchema = z.object({
 
 export const POST = withAuth(
   async (req: NextRequest, { dbUserId, userRole }) => {
+    if (!isBillingEnabled()) {
+      return applyPrivateNoStoreHeaders(
+        apiError(
+          "Paid subscription checkout is currently paused.",
+          HttpStatus.SERVICE_UNAVAILABLE,
+        ),
+      );
+    }
+
     const logger = getClientLogger();
     const correlationId = initializeCorrelationId(req);
 

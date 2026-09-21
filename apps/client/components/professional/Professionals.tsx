@@ -251,8 +251,9 @@ export const Professionals = memo(function Professionals({
               Are you an Architect, Engineer, or Contractor in Kenya?
             </h3>
             <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              Showcase your project portfolio to vetted clients, protect your
-              milestone earnings with escrow, and win high-budget contracts.
+              Showcase your project portfolio to vetted clients, secure your
+              milestone earnings with clear stage approvals, and win high-budget
+              contracts.
             </p>
           </div>
 

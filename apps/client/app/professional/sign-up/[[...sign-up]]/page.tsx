@@ -72,7 +72,7 @@ export default function ProfessionalSignUpPage() {
             <p className="text-base text-zinc-300 font-light leading-relaxed">
               Join Kenya&apos;s vetted network of Architects, Engineers,
               Quantity Surveyors, and General Contractors. Gain direct access to
-              high-intent clients and verified milestone escrows.
+              high-intent clients and structured milestone contracts.
             </p>
           </div>
 
@@ -82,8 +82,8 @@ export default function ProfessionalSignUpPage() {
               desc="Official NCA / BORAQS credentials displayed prominently to prospective clients."
             />
             <FeatureItem
-              title="Protected Milestone Escrow"
-              desc="Work with confidence knowing milestone funds are secured before site mobilization."
+              title="Milestone Contract Tracking"
+              desc="Work with confidence using clear stage approvals and transparent payment milestone sign-offs."
             />
             <FeatureItem
               title="SEO-Indexed Digital Portfolio"

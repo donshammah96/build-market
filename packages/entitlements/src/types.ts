@@ -39,7 +39,7 @@ export interface EntitlementFeatures {
 export interface EntitlementDiscounts {
   /** Discount percentage on additional lead credit purchases */
   leadCreditDiscountPct: number;
-  /** Escrow/Platform fee reduction percentage */
+  /** Platform transaction fee reduction percentage */
   platformFeeDiscountPct: number;
   /** Active Founding Pro lifetime discount applied to renewals */
   foundingProDiscountPct: number;

@@ -196,7 +196,7 @@ function HeroSection() {
             </span>
             <span className="flex items-center gap-1.5">
               <Lock className="h-4 w-4 text-emerald-400" />
-              Escrow milestone protection
+              Milestone stage sign-offs
             </span>
           </div>
         </motion.div>
@@ -295,7 +295,7 @@ function ValueProposition() {
       icon: BarChart3,
       title: "Built-In Project Tools",
       description:
-        "Manage stage-by-stage proposals, milestone contracts, progress photo documentation, and escrow payments inside one centralized platform.",
+        "Manage stage-by-stage proposals, milestone contracts, progress photo documentation, and verified payment milestones inside one centralized platform.",
     },
   ];
 
@@ -386,7 +386,7 @@ function FeatureShowcase() {
             <ul className="space-y-3.5">
               {[
                 "Centralized project inquiry & messaging inbox",
-                "Automated proposal generation & milestone escrow tracking",
+                "Automated proposal generation & milestone progress tracking",
                 "Verified portfolio showcases indexed by search engines",
               ].map((item, i) => (
                 <li

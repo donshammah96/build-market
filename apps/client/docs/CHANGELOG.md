@@ -16,6 +16,27 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added & Security — P0-7 Financial Custody Prohibition & Paid M-Pesa Operational Gating
+
+- **Public Marketing & Onboarding Escrow Purge (`app/sign-up/[[...sign-up]]/page.tsx`, `app/professional/page.tsx`, `components/professional/Professionals.tsx`, `components/professional/MockDashboardUi.tsx`)**:
+  - Eradicated all misleading custodial claims ("bank-grade escrow", "escrow milestone protection", "verified milestone escrows", "escrow payments") across client landing, onboarding, and dashboard mock components.
+  - Replaced with compliant non-custodial terminology: "Milestone Stage Tracking", "Structured milestone contracts", "Milestone stage sign-offs", and "Milestone Recorded".
+
+- **Automated CI Non-Custodial Copy Guard (`__tests__/legal/no-escrow-marketing-copy.test.ts`)**:
+  - Added automated Vitest suite (346 tests) scanning all public marketing, onboarding, and component files to prevent regression of banned custodial patterns (`/escrow/i`, `/bank-grade escrow/i`, `/custodial wallet/i`, `/safeguarded funds/i`, `/secure hold/i`, `/we hold your funds/i`).
+  - Scoped scanner to exclude legal disclaimer pages (`/legal/**`) where legitimate statutory non-custodial disclosures must reside.
+
+- **Public Founding Professional Commercial Terms & Governance (`app/legal/founding-pro-terms/page.tsx`, `app/legal/layout.tsx`)**:
+  - Published comprehensive public commercial terms articulating 180-day 100% comped access, KES 21,000 nominal commercial valuation, and a strict no-surprise conversion policy.
+  - Formulated automated notice schedule (Day -30, Day -14, Day -7, Day -1) and graceful degradation to the free tier upon expiry without affirmative payment initiation.
+  - Established internal 250 verified-professional cohort cap gated by completed statutory accreditation with `AdminAuditLog` cryptographic tamper-evidence.
+  - Added explicit involuntary-removal terms for credential falsification or safety violations, and linked in legal navigation.
+
+- **Billing Kill-Switch & Webhook Idempotency Hardening (`app/api/webhooks/mpesa/stk-callback/route.ts`, `app/lib/capabilities/registry.ts`, `app/lib/infrastructure/env.ts`)**:
+  - Added `FEATURE_BILLING_ENABLED` capability flag and `isBillingEnabled()` helper in client registry to provide an instant, zero-redeploy kill-switch for all outbound M-Pesa STK push triggers.
+  - Hardened M-Pesa STK callback route with explicit terminal transaction state checks, guaranteeing idempotent no-op responses on callback replay.
+  - Created automated test suite `__tests__/webhooks/mpesa-idempotency.test.ts` (3 tests) validating replay protection.
+
 ### Added & Security — P0-8 Privacy & Safety Operations Launch Hardening & Legal Governance
 
 - **Interim Privacy Policy v1.0 & Legal Blocker Remediation (`apps/client/app/legal/privacy/page.tsx`, `apps/client/app/legal/layout.tsx`)**:

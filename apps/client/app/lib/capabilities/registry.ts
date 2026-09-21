@@ -99,3 +99,12 @@ export function getCapabilityTelemetryAttributes(capability: MvpCapability) {
     capability_state: getCapabilityDecision(capability).state,
   } as const;
 }
+
+/**
+ * Phase 3 Operational Kill-Switch:
+ * Gates all outbound M-Pesa STK billing pushes platform-wide.
+ * Flippable via FEATURE_BILLING_ENABLED without requiring code deployment.
+ */
+export function isBillingEnabled(): boolean {
+  return env.features?.billingEnabled ?? false;
+}

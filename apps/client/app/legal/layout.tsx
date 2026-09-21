@@ -62,6 +62,12 @@ export default function LegalLayout({
               Moderation
             </Link>
             <Link
+              href="/legal/founding-pro-terms"
+              className="hover:text-white transition-colors"
+            >
+              Founding Pro
+            </Link>
+            <Link
               href="/legal/professional-terms"
               className="hover:text-white transition-colors"
             >

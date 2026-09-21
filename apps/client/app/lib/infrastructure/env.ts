@@ -624,6 +624,11 @@ const envGroups: EnvGroup[] = [
         required: false,
         default: "false",
       },
+      {
+        name: "FEATURE_BILLING_ENABLED",
+        required: false,
+        default: "false",
+      },
     ],
   },
   {
@@ -1569,6 +1574,7 @@ function buildEnvConfig() {
       mvpCpd: getBooleanEnv("FEATURE_MVP_CPD"),
       mvpWalletsEscrow: getBooleanEnv("FEATURE_MVP_WALLETS_ESCROW"),
       mvpPlatformCustody: getBooleanEnv("FEATURE_MVP_PLATFORM_CUSTODY"),
+      billingEnabled: getBooleanEnv("FEATURE_BILLING_ENABLED", false),
     },
 
     analytics: {

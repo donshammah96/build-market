@@ -70,8 +70,8 @@ export default function ClientSignUpPage() {
 
             <p className="text-base text-zinc-300 font-light leading-relaxed">
               Connect with verified architects, structural engineers, and
-              contractors. Protect your milestone funds with bank-grade escrow,
-              and track every stage of your build.
+              contractors. Track project stages with transparent milestone
+              sign-offs, and track every stage of your build.
             </p>
           </div>
 
@@ -84,8 +84,8 @@ export default function ClientSignUpPage() {
             />
             <FeatureCard
               icon={Lock}
-              title="Protected Milestone Escrow"
-              desc="Your deposits remain protected and are only released when you approve completed milestones."
+              title="Milestone Stage Tracking"
+              desc="Keep projects on schedule with clear stage sign-offs and transparent milestone approvals."
             />
             <FeatureCard
               icon={BookOpen}

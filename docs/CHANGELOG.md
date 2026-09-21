@@ -1,6 +1,37 @@
 # Changelog
 
-## [Unreleased]
+### Added & Security — P0-7 Financial Custody Prohibition & Paid M-Pesa Operational Gating
+
+- **Statutory Non-Custodial Marketplace Boundary Codification (`docs/launch/evidence/P0-7_FINANCIAL_CUSTODY_AND_PAYMENTS_RECORD.md`)**:
+  - Formally established non-custodial marketplace stance under the Central Bank of Kenya (CBK) National Payment System (NPS) Act (Cap 491C) and Retail Transfer Regulations 2014.
+  - Documented legal counsel Q&A distinguishing first-party merchant collection (subscription & lead credit billing via M-Pesa STK push) from third-party payment facilitation.
+  - Established standing architectural invariant: BuildMarket strictly prohibits displaying, embedding, or routing contractor personal tills or paybills through platform checkout to avoid P2P payment facilitation classification.
+
+- **Public Marketing & Onboarding Escrow Purge (`apps/client/app/sign-up/[[...sign-up]]/page.tsx`, `apps/client/app/professional/page.tsx`, `apps/client/components/professional/Professionals.tsx`, `MockDashboardUi.tsx`)**:
+  - Eradicated all misleading custodial claims ("bank-grade escrow", "escrow milestone protection", "verified milestone escrows", "escrow payments") across client landing, onboarding, and dashboard mock components.
+  - Replaced with compliant non-custodial terminology: "Milestone Stage Tracking", "Structured milestone contracts", "Milestone stage sign-offs", and "Milestone Recorded".
+  - Cleaned docstrings in `packages/entitlements/src/types.ts` to reference platform transaction fee discounts.
+
+- **Automated CI Non-Custodial Copy Guard (`apps/client/__tests__/legal/no-escrow-marketing-copy.test.ts`)**:
+  - Added automated Vitest suite (346 tests) scanning all public marketing, onboarding, and component files to prevent regression of banned custodial patterns (`/escrow/i`, `/bank-grade escrow/i`, `/custodial wallet/i`, `/safeguarded funds/i`, `/secure hold/i`, `/we hold your funds/i`).
+  - Scoped scanner to exclude legal disclaimer pages (`/legal/**`) where legitimate statutory non-custodial disclosures must reside.
+
+- **Public Founding Professional Commercial Terms & Governance (`apps/client/app/legal/founding-pro-terms/page.tsx`, `apps/client/app/legal/layout.tsx`)**:
+  - Published comprehensive public commercial terms articulating 180-day 100% comped access, KES 21,000 nominal commercial valuation, and a strict no-surprise conversion policy.
+  - Formulated automated notice schedule (Day -30, Day -14, Day -7, Day -1) and graceful degradation to the free tier upon expiry without affirmative payment initiation.
+  - Established internal 250 verified-professional cohort cap gated by completed statutory accreditation (preventing unverified registration squatting) with `AdminAuditLog` cryptographic tamper-evidence.
+  - Added explicit involuntary-removal terms for credential falsification or safety violations, and linked in legal navigation.
+
+- **Billing Kill-Switch & Webhook Idempotency Hardening (`apps/client/app/api/webhooks/mpesa/stk-callback/route.ts`, `apps/client/app/lib/capabilities/registry.ts`, `apps/client/app/lib/infrastructure/env.ts`)**:
+  - Added `FEATURE_BILLING_ENABLED` capability flag and `isBillingEnabled()` helper in client registry to provide an instant, zero-redeploy kill-switch for all outbound M-Pesa STK push triggers.
+  - Hardened M-Pesa STK callback route with explicit terminal transaction state checks, guaranteeing idempotent no-op responses on callback replay.
+  - Created automated test suite `apps/client/__tests__/webhooks/mpesa-idempotency.test.ts` (3 tests) validating replay protection.
+  - Added unit test `packages/entitlements/src/__tests__/comp-expiry-no-autocharge.test.ts` asserting that comp expiry degrades access and never initiates automated billing.
+
+- **Operational Pre-Activation Runbooks (`docs/runbooks/mpesa-production-activation.md`, `docs/runbooks/mpesa-refund-and-reversal.md`)**:
+  - **Production Activation Runbook**: Defined 7 hard pre-activation gates (CBK counsel confirmation, Daraja production credentials, edge SSL, replay testing, B2C float funding, KRA eTIMS digital tax invoicing integration, and staff training), canary zero-volume test protocol, and kill-switch execution.
+  - **Customer Refund Runbook**: Established default B2C platform float payout workflow with tiered customer SLAs (same-day <24h for mechanically detectable duplicate STK charges, 72h ceiling for complex investigations), Safaricom merchant escalation procedures, and statutory consumer recourse.
+  - Updated `docs/launch/GO_NO_GO.md` Payments Row 22 and `docs/MVP_LAUNCH_AUDIT_AND_HARDENING.md` P0 implementation table.
 
 ### Added & Security — P0-8 Privacy & Safety Operations Launch Hardening & Legal Governance
 

@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
   // never allowed to create or mutate a payment record.
   if (!transaction) return acceptedResponse();
 
+  // If transaction has already reached a terminal state, replay is an idempotent no-op.
+  if (transaction.status === "COMPLETED" || transaction.status === "FAILED") {
+    return acceptedResponse();
+  }
+
   const providerEventKey = createProviderEventKey("stk", {
     checkoutRequestId: callback.CheckoutRequestID,
     merchantRequestId: callback.MerchantRequestID,

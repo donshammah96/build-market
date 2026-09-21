@@ -116,7 +116,7 @@ export function MockDashboard() {
             category="Civil & Structural Certification"
             budget="KES 5.4M"
             location="Kilimani, Nairobi"
-            status="Milestone Escrow"
+            status="Milestone Recorded"
             time="5h ago"
             color="amber"
           />
