@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import { Navbar } from "@/components/layout/NavBar";
 import { Hero } from "@/components/home/Hero";
-import { Footer } from "@/components/layout/Footer";
+import { TrustBar } from "@/components/home/TrustBar";
 
 // Lazy load below-the-fold sections for faster initial page load
 // These components are deferred until they're needed, reducing initial JS bundle
@@ -13,6 +13,17 @@ const FeaturesSection = dynamic(
     })),
   {
     loading: () => <SectionSkeleton height="400px" />,
+    ssr: true,
+  },
+);
+
+const HowItWorks = dynamic(
+  () =>
+    import("@/components/home/HowItWorks").then((mod) => ({
+      default: mod.HowItWorks,
+    })),
+  {
+    loading: () => <SectionSkeleton height="500px" />,
     ssr: true,
   },
 );
@@ -61,6 +72,17 @@ const ReviewsSection = dynamic(
   },
 );
 
+const FAQSection = dynamic(
+  () =>
+    import("@/components/home/FAQSection").then((mod) => ({
+      default: mod.FAQSection,
+    })),
+  {
+    loading: () => <SectionSkeleton height="500px" />,
+    ssr: true,
+  },
+);
+
 const CTA = dynamic(
   () => import("@/components/home/CTA").then((mod) => ({ default: mod.CTA })),
   {
@@ -92,9 +114,22 @@ export default function Home() {
       <Navbar />
       <Hero />
 
+      {/*
+       * Rendered eagerly (not behind Suspense/dynamic like the sections
+       * below) since it's a small text/stat strip immediately under the
+       * fold — deferring it would cause a visible layout pop-in right
+       * where the user's eye lands after the Hero. See TrustBar.tsx for
+       * the placeholder-data caveat before shipping this.
+       */}
+      <TrustBar />
+
       {/* Below-the-fold content wrapped in Suspense for progressive loading */}
       <Suspense fallback={<SectionSkeleton height="400px" />}>
         <FeaturesSection />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton height="500px" />}>
+        <HowItWorks />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton height="500px" />}>
@@ -115,11 +150,15 @@ export default function Home() {
         <ReviewsSection />
       </Suspense>
 
+      <Suspense fallback={<SectionSkeleton height="500px" />}>
+        <FAQSection />
+      </Suspense>
+
       <Suspense fallback={<SectionSkeleton height="300px" bg="bg-primary" />}>
         <CTA />
       </Suspense>
 
-      <Footer />
+      {/* Footer now mounted globally in app/layout.tsx — see audit doc */}
     </main>
   );
 }

@@ -42,9 +42,27 @@ export const MARKETPLACE_ROUTES = {
   reviews: "/reviews",
   products: "/products",
   messages: "/messages",
+
+  // Legal & Compliance
+  legalPrivacy: "/legal/privacy",
+  legalTerms: "/legal/terms",
+  legalProfessionalTerms: "/legal/professional-terms",
+  legalCookieSettings: "/legal/cookie-settings",
+  legalAccessibility: "/legal/accessibility",
+  sitemap: "/sitemap",
+} as const;
+
+export const LEGAL_ROUTES = {
+  privacy: "/legal/privacy",
+  terms: "/legal/terms",
+  professionalTerms: "/legal/professional-terms",
+  cookieSettings: "/legal/cookie-settings",
+  accessibility: "/legal/accessibility",
+  sitemap: "/sitemap",
 } as const;
 
 export type MarketplaceRouteKey = keyof typeof MARKETPLACE_ROUTES;
+export type LegalRouteKey = keyof typeof LEGAL_ROUTES;
 
 // Store URL helpers
 export const getStoreUrl = (id: string) => `/stores/${id}`;

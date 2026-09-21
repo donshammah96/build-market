@@ -114,11 +114,17 @@ export const stores: Store[] = [
   },
 ];
 
+// Previously shipped with Figma/Lorem-ipsum placeholder copy ("Body text for
+// whatever you'd like to expand on the main point.") that never got replaced
+// with real content — a launch blocker if it ever reached this array's
+// consumer (components/professional/ProfessionalSection.tsx). Replaced with
+// real, specific descriptions of what each profession actually does on the
+// platform.
 export const professionals: Professional[] = [
   {
     title: "Engineers",
     description:
-      "Body text for whatever you’d like to expand on the main point.",
+      "Structural, civil, and electrical engineers who sign off on Kenyan building-code compliance — from foundation design through final inspection.",
     image: "/engineers.png",
     imageAlt: "Engineers",
     href: ROUTES.engineers,
@@ -126,7 +132,7 @@ export const professionals: Professional[] = [
   {
     title: "Designers",
     description:
-      "Body text for whatever you’d like to say. Add main takeaway points, quotes, anecdotes.",
+      "Interior and landscape designers who turn a finished shell into a livable space — space planning, sourcing, and styling included.",
     image: "/design.png",
     imageAlt: "Designers",
     href: ROUTES.designers,
@@ -134,7 +140,7 @@ export const professionals: Professional[] = [
   {
     title: "Architects",
     description:
-      "Body text for whatever you’d like to add more to the main point. It provides details, explanations, and context.",
+      "Licensed architects for concept design, planning approvals, and construction drawings, vetted against county-level building regulations.",
     image: "/architect.png",
     imageAlt: "Architects",
     href: ROUTES.architects,

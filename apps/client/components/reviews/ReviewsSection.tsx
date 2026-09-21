@@ -65,7 +65,7 @@ export const ReviewsSection = memo(function ReviewsSection({
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="reviews-heading"
     >
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-20">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-end mb-12 gap-6">
           <div

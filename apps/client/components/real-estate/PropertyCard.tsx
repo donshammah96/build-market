@@ -39,7 +39,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
         )}
       >
         {/* Image Section */}
-        <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
+        <div className="relative aspect-4/3 overflow-hidden bg-zinc-100">
           <Link href={propertyUrl}>
             <div className="h-full w-full overflow-hidden">
               <ImageWithFallback
@@ -71,7 +71,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
           </button>
 
           {/* Price Tag Overlay */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-12">
+          <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-4 pt-12">
             <p className="text-white text-xl font-bold tracking-tight">
               {formattedPrice}
             </p>
@@ -79,7 +79,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
         </div>
 
         {/* Content Section */}
-        <CardContent className="flex flex-col flex-grow p-5">
+        <CardContent className="flex flex-col grow p-5">
           {/* Title & Location */}
           <div className="mb-4">
             <Link
@@ -147,9 +147,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
                     className="object-cover"
                   />
                 </div>
-                <span className="truncate max-w-[100px]">
-                  {property.agent.name}
-                </span>
+                <span className="truncate max-w-25">{property.agent.name}</span>
               </div>
             ) : (
               <span />

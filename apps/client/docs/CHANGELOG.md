@@ -16,6 +16,39 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added, Changed & Fixed — Landing Page Modernization, FAQ Schema, WCAG Accessibility & Theme Infrastructure
+
+- **Home Landing Modernization & Progressive Section Loading (`apps/client/app/page.tsx`, `apps/client/app/layout.tsx`, `apps/client/app/data/homeData.ts`)**:
+  - Re-architected below-the-fold landing page sections into code-split dynamic imports wrapped in React `Suspense` with lightweight layout skeletons, preserving Core Web Vitals (CLS/FID).
+  - Grounded marketplace categories, properties, and vendor data with authentic Kenyan geographic contexts (Nairobi, Kiambu, Machakos, Mombasa, Nakuru) and localized pricing in KES.
+  - Extracted global `Footer` and `CookieConsentProvider` mounting into `app/layout.tsx` to eliminate redundant per-page duplication.
+  - Replaced ad-hoc route strings across navigation and marketing sections with centralized, strongly-typed route definitions from `@/lib/routes`.
+
+- **FAQ Section & Schema.org Structured Data (`apps/client/components/home/FAQSection.tsx`, `apps/client/app/page.tsx`)**:
+  - Implemented accessible FAQ accordion via `@/components/ui/accordion` (Radix primitive) answering 6 core consumer questions on statutory professional accreditation (EBK, BORAQS, NCA), structured milestone releases, dispute resolution, and vendor material procurement.
+  - Injected valid `application/ld+json` Schema.org `FAQPage` metadata with structured `Question` and `Answer` entities to power Google rich snippets and search visibility.
+  - Strictly audited copy against Central Bank of Kenya non-custodial constraints, verified by `__tests__/legal/no-escrow-marketing-copy.test.ts` (351 passing assertions).
+
+- **Dark-Mode Infrastructure & Accessibility Theme Toggle (`apps/client/lib/stores/accessibilityStore.ts`, `apps/client/components/accessibility/AccessibilityProvider.tsx`, `apps/client/components/accessibility/AccessibilitySettingsPanel.tsx`)**:
+  - Extended client-side `accessibilityStore` with `theme: "system" | "light" | "dark"`, `setTheme()`, and local persistence under `bm_accessibility_settings`, avoiding external library weight (`next-themes`) and hydration mismatches on Cloudflare Workers / OpenNext.
+  - Wired `AccessibilityProvider` with `window.matchMedia("(prefers-color-scheme: dark)")` change listeners, synchronizing system preferences and toggling `.dark` on `document.documentElement` against OKLCH design tokens.
+  - Added interactive visual theme selector (System, Light, Dark) with iconography and accessible keyboard navigation in `AccessibilitySettingsPanel`.
+
+- **WCAG 2.1 AA Accessibility Remediations across Landing Page Components (`apps/client/components/accessibility/`, `apps/client/components/gdpr/`, `apps/client/components/real-estate/`, `apps/client/components/vendors/`, `apps/client/components/reviews/`)**:
+  - **AccessibilitySettingsPanel**: Upgraded dialog trigger/overlay mechanics, fixed contrast ratios, and added proper ARIA attributes to panel close buttons.
+  - **CookieBanner**: Added focus trapping, semantic button roles, accessible descriptions, and escape-key handling.
+  - **Property & PropertyCard**: Resolved unlabelled icon buttons, added screen-reader accessible price formats and feature badges, and enforced keyboard focus rings.
+  - **VendorSection & VendorCard**: Added verified badge tooltips with accessible labels, category tags, and explicit link titles.
+  - **ReviewsSection & ReviewCard**: Added semantic star rating labels (`aria-label="Rated 5 out of 5 stars"`), verified hire indicators, and accessible quote containers.
+
+- **Image Domain Security & Cloudflare Worker Optimization Audit (`apps/client/next.config.ts`, `apps/client/next-config-csp.ts`)**:
+  - Verified CSP `imgOrigins` and Next.js `remotePatterns` maintain strict parity with zero open wildcards (`*`), restricted to `img.clerk.com`, `res.cloudinary.com`, `images.unsplash.com`, `unsplash.com`, and `i.pravatar.cc`.
+  - Reaffirmed `images.unoptimized: true` architectural requirement for Cloudflare Workers / OpenNext V8 isolate runtimes where native Node `sharp` image transformations are unsupported.
+
+- **Legal Compliance Pages & Automated Sitemap (`apps/client/app/legal/terms/page.tsx`, `apps/client/app/legal/accessibility/page.tsx`, `apps/client/app/sitemap.ts`, `apps/client/app/sitemap/route.ts`)**:
+  - Added production-grade Terms of Service and Accessibility Statement pages conforming to statutory consumer protection standards.
+  - Generated dynamic Next.js sitemap mapping core landing, marketplace, legal, and pro discovery routes with appropriate change frequencies and priorities.
+
 ### Added & Security — P0-7 Financial Custody Prohibition & Paid M-Pesa Operational Gating
 
 - **Public Marketing & Onboarding Escrow Purge (`app/sign-up/[[...sign-up]]/page.tsx`, `app/professional/page.tsx`, `components/professional/Professionals.tsx`, `components/professional/MockDashboardUi.tsx`)**:

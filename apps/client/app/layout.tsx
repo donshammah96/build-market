@@ -10,6 +10,7 @@ import { PostHogProvider } from "@/app/providers/PostHogProvider";
 import { CookieBanner } from "@/components/gdpr/CookieBanner";
 import { AccessibilityProvider } from "@/components/accessibility";
 import { RouteFocusManager } from "@/components/layout/RouteFocusManager";
+import { Footer } from "@/components/layout/Footer";
 import { env } from "@/app/lib/infrastructure/env"; // Added env import
 
 // Single, distinctive font with multiple weights for better performance
@@ -124,6 +125,25 @@ export default async function RootLayout({
     }
   }
 
+  const siteUrl = env.appUrl ?? "http://localhost:3500";
+
+  // Organization structured data — helps Google surface Build Market as a
+  // known entity (knowledge panel, sitelinks) and is a near-zero-cost SEO
+  // win that was previously entirely absent from the page's <head>. Kept
+  // as a plain object (not user input) so JSON.stringify here is safe, and
+  // nonce'd like every other injected script to satisfy the strict CSP
+  // this app already enforces.
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Build Market",
+    url: siteUrl,
+    logo: `${siteUrl}/bm-logo-main.png`,
+    description:
+      "Build Market connects Kenyan homeowners with verified architects, engineers, contractors, and building suppliers.",
+    areaServed: "KE",
+  };
+
   return (
     <ClerkProvider
       publishableKey={env.clerk.publishableKey}
@@ -157,6 +177,16 @@ export default async function RootLayout({
           <link rel="dns-prefetch" href="https://clerk-telemetry.com" />
           <link rel="preconnect" href="https://images.unsplash.com" />
           <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+
+          {/* Organization structured data (see audit doc, SEO section) */}
+          <script
+            type="application/ld+json"
+            nonce={nonce}
+
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(organizationJsonLd),
+            }}
+          />
         </head>
         <body
           className={`${dmSans.className} antialiased bg-background text-foreground`}
@@ -221,6 +251,16 @@ export default async function RootLayout({
                   <div id="main-content" tabIndex={-1} className="outline-none">
                     {children}
                   </div>
+                  {/*
+                   * Moved here from being rendered ad hoc at the bottom of
+                   * app/page.tsx. Legal/compliance links must be reachable
+                   * from every route, not just the homepage — mounting
+                   * Footer once in the root layout guarantees that instead
+                   * of relying on every future page author to remember to
+                   * add <Footer /> themselves. See the audit doc's "Legal
+                   * routes" section for the reasoning.
+                   */}
+                  <Footer />
                   <CookieBanner />
                   <ToastContainer
                     position="bottom-right"

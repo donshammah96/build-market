@@ -53,7 +53,7 @@ const VendorCard: React.FC<VendorCardProps> = memo(function VendorCard({
           )}
         </div>
 
-        <CardContent className="flex flex-col flex-grow p-5">
+        <CardContent className="flex flex-col grow p-5">
           <div className="flex justify-between items-start mb-2">
             <div>
               <h3 className="font-bold text-zinc-900 text-lg flex items-center gap-1.5 group-hover:text-emerald-700 transition-colors">

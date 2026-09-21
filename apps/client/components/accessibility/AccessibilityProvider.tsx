@@ -16,6 +16,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
   children,
 }: AccessibilityProviderProps) {
   const {
+    theme,
     reduceMotion,
     reduceTransparency,
     highContrast,
@@ -32,6 +33,20 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
+
+    // Theme (Light / Dark / System)
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyTheme = () => {
+      if (theme === "dark") {
+        html.classList.add("dark");
+      } else if (theme === "light") {
+        html.classList.remove("dark");
+      } else {
+        html.classList.toggle("dark", mediaQuery.matches);
+      }
+    };
+    applyTheme();
+    mediaQuery.addEventListener("change", applyTheme);
 
     // Reduce Motion
     if (reduceMotion === "on") {
@@ -82,8 +97,10 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
       html.style.removeProperty("--user-font-scale");
       html.style.removeProperty("--animation-duration");
       body.style.fontSize = "";
+      mediaQuery.removeEventListener("change", applyTheme);
     };
   }, [
+    theme,
     reduceMotion,
     reduceTransparency,
     highContrast,

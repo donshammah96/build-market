@@ -74,17 +74,25 @@ const Categories = () => {
 
   return (
     <div
-      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 bg-gray-100 p-2 rounded-lg mb-4 text-sm"
+      // Was: bg-gray-100 / text-gray-900 / text-gray-500 / focus:ring-blue-500.
+      // These hardcoded Tailwind grays and blue bypassed the app's OKLCH
+      // design tokens defined in globals.css, so this component didn't
+      // respond to dark mode and used a focus color that doesn't match the
+      // rest of the app's focus-visible ring. Swapped to token classes so
+      // it themes correctly and matches the accessibility system already
+      // built into the rest of the UI (focus-visible + --focus-ring).
+      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 bg-muted p-2 rounded-lg mb-4 text-sm"
       role="tablist"
       aria-label="Service Categories"
     >
       {categories.map((category) => (
         <button
           key={category.slug}
-          className={`flex items-center justify-center gap-2 cursor-pointer px-2 py-1 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          type="button"
+          className={`flex items-center justify-center gap-2 cursor-pointer px-2 py-1 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 ${
             category.slug === selectedCategory
-              ? "bg-white text-gray-900"
-              : "text-gray-500 hover:bg-gray-200"
+              ? "bg-card text-foreground shadow-xs"
+              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           }`}
           onClick={() => handleChange(category.slug)}
           role="tab"

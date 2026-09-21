@@ -67,7 +67,7 @@ export const ReviewCard = memo(function ReviewCard({
         </div>
 
         {/* Quote Content */}
-        <blockquote className="flex-grow mb-6 relative z-10">
+        <blockquote className="grow mb-6 relative z-10">
           <p className="text-zinc-700 text-lg leading-relaxed font-medium">
             &ldquo;{quote}&rdquo;
           </p>

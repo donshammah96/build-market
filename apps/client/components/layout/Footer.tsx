@@ -2,6 +2,7 @@
 
 import React, { memo, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   MapPin,
   Instagram,
@@ -15,8 +16,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROUTES } from "@/lib/routes";
+import { ROUTES, LEGAL_ROUTES } from "@/lib/routes";
 import { AccessibilitySettingsPanel } from "@/components/accessibility";
+import { useCookieConsent } from "@/hooks/useCookieConsent";
 
 // Memoized footer link component
 const FooterLink = memo(function FooterLink({
@@ -61,18 +63,38 @@ const SocialIcon = memo(function SocialIcon({
 
 type SubscribeStatus = "idle" | "loading" | "success" | "error";
 
-// Distinct success copy per backend status, rather than one generic
-// "You're in" message — "already_subscribed" and "resubscribe_pending"
-// are not failures, but they're also not the same event as a brand-new
-// signup, and telling a returning subscriber "check your inbox to
-// confirm" when they're already confirmed reads as broken, not helpful.
 const SUCCESS_COPY = {
   pending_confirmation: "You're in — check your inbox to confirm.",
   resubscribe_pending: "Almost there — check your inbox to confirm.",
   already_subscribed: "You're already subscribed — nothing to do here.",
 } as const;
 
+// Typed legal links sourced from central routes contract
+const LEGAL_LINKS = [
+  { href: LEGAL_ROUTES.privacy, label: "Privacy Policy" },
+  { href: LEGAL_ROUTES.terms, label: "Terms of Service" },
+  { href: LEGAL_ROUTES.professionalTerms, label: "Professional Terms" },
+  { href: LEGAL_ROUTES.cookieSettings, label: "Cookie Settings" },
+  { href: LEGAL_ROUTES.accessibility, label: "Accessibility Statement" },
+  { href: LEGAL_ROUTES.sitemap, label: "Sitemap" },
+] as const;
+
 export const Footer = memo(function Footer() {
+  const pathname = usePathname();
+  const { openPreferences } = useCookieConsent();
+
+  // Guard against layout contamination: hide consumer marketing footer on
+  // private dashboard shells, stepper onboarding wizards, standalone auth flows,
+  // and dedicated legal sub-shells (which already provide an integrated footer).
+  const isHiddenRoute =
+    pathname &&
+    (pathname.startsWith("/onboarding") ||
+      pathname.startsWith("/client") ||
+      pathname.startsWith("/professional-portal") ||
+      pathname.startsWith("/sign-in") ||
+      pathname.startsWith("/sign-up") ||
+      pathname.startsWith("/legal"));
+
   // Memoize current year to prevent recalculation
   const currentYear = useMemo(() => new Date().getFullYear(), []);
 
@@ -151,6 +173,10 @@ export const Footer = memo(function Footer() {
       setSubscribeStatus("error");
       setSubscribeMessage("Something went wrong — try again in a moment.");
     }
+  }
+
+  if (isHiddenRoute) {
+    return null;
   }
 
   return (
@@ -307,6 +333,25 @@ export const Footer = memo(function Footer() {
                 </Button>
               </div>
 
+              {/*
+               * Consent microcopy — GDPR / Kenya Data Protection Act (2019)
+               * best practice: a person submitting a marketing email must be
+               * able to see, at the point of collection, what it's used for
+               * and where to read the full policy. This was previously
+               * missing entirely.
+               */}
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                By subscribing, you agree to receive marketing emails from Build
+                Market and to our{" "}
+                <Link
+                  href={LEGAL_ROUTES.privacy}
+                  className="underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
+                >
+                  Privacy Policy
+                </Link>
+                . Unsubscribe anytime.
+              </p>
+
               {/* Status message — announced to screen readers via aria-live */}
               <div
                 aria-live="polite"
@@ -354,28 +399,37 @@ export const Footer = memo(function Footer() {
             </span>
             <span>&copy; {currentYear} Build Market Ltd.</span>
           </div>
+          {/*
+           * Was: three hand-written Link elements (Privacy, Professional
+           * Terms, Cookie Settings only) with no general Terms of Service,
+           * no Accessibility Statement, and no Sitemap — gaps called out in
+           * the audit. Now driven off LEGAL_LINKS so adding a future legal
+           * route is a one-line change instead of a repeated JSX block.
+           */}
           <nav
-            className="flex items-center gap-6 font-medium"
+            className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2 font-medium"
             aria-label="Legal links"
           >
-            <Link
-              href="/legal/privacy"
-              className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
-            >
-              Privacy Policy
-            </Link>
-            <Link
-              href="/legal/professional-terms"
-              className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
-            >
-              Terms of Service
-            </Link>
-            <Link
-              href="/legal/cookie-settings"
-              className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
-            >
-              Cookie Settings
-            </Link>
+            {LEGAL_LINKS.map((link) =>
+              link.label === "Cookie Settings" ? (
+                <button
+                  key={link.label}
+                  type="button"
+                  onClick={openPreferences}
+                  className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm cursor-pointer"
+                >
+                  {link.label}
+                </button>
+              ) : (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
+                >
+                  {link.label}
+                </Link>
+              ),
+            )}
             <span className="text-border" aria-hidden="true">
               |
             </span>

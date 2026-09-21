@@ -21,10 +21,14 @@ export interface AccessibilitySettings {
   // Reading
   dyslexiaFont: boolean;
   lineSpacing: "normal" | "relaxed" | "loose";
+
+  // Appearance Theme
+  theme: "system" | "light" | "dark";
 }
 
 interface AccessibilityState extends AccessibilitySettings {
   // Actions
+  setTheme: (value: "system" | "light" | "dark") => void;
   setReduceMotion: (value: "system" | "on" | "off") => void;
   setReduceTransparency: (value: boolean) => void;
   setHighContrast: (value: boolean) => void;
@@ -44,6 +48,7 @@ interface AccessibilityState extends AccessibilitySettings {
 }
 
 const defaultSettings: AccessibilitySettings = {
+  theme: "system",
   reduceMotion: "system",
   reduceTransparency: false,
   highContrast: false,
@@ -61,6 +66,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
     (set, get) => ({
       ...defaultSettings,
 
+      setTheme: (value) => set({ theme: value }),
       setReduceMotion: (value) => set({ reduceMotion: value }),
       setReduceTransparency: (value) => set({ reduceTransparency: value }),
       setHighContrast: (value) => set({ highContrast: value }),
@@ -89,6 +95,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       name: "accessibility-settings",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        theme: state.theme,
         reduceMotion: state.reduceMotion,
         reduceTransparency: state.reduceTransparency,
         highContrast: state.highContrast,
@@ -105,6 +112,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
 );
 
 // Selector hooks for better performance (prevents unnecessary re-renders)
+export const useTheme = () => useAccessibilityStore((state) => state.theme);
 export const useReduceMotion = () =>
   useAccessibilityStore((state) => state.reduceMotion);
 export const useHighContrast = () =>
