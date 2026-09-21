@@ -13,7 +13,6 @@ import {
 import Link from "next/link";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { ConversationsList } from "@/components/chat/ConversationsList";
 import ChatWindow from "@/components/chat/ChatWindow";
 import { Card } from "@/components/ui/card";
@@ -71,7 +70,7 @@ export default function MessagesPage() {
           </Link>
         </div>
 
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-[600px]">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-125">
           {/* --- LEFT COLUMN: Conversations List --- */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -208,11 +207,6 @@ export default function MessagesPage() {
           </motion.div>
         </div>
       </main>
-
-      {/* Footer is optional on chat apps, but keeping for consistency */}
-      <div className="hidden md:block">
-        <Footer />
-      </div>
     </div>
   );
 }
@@ -248,10 +242,10 @@ function ConversationsListSkeleton() {
           <Skeleton className="h-10 w-10 rounded-full bg-zinc-200" />
           <div className="space-y-2 flex-1">
             <div className="flex justify-between">
-              <Skeleton className="h-4 w-[100px] bg-zinc-200" />
-              <Skeleton className="h-3 w-[40px] bg-zinc-100" />
+              <Skeleton className="h-4 w-25 bg-zinc-200" />
+              <Skeleton className="h-3 w-10 bg-zinc-100" />
             </div>
-            <Skeleton className="h-3 w-[160px] bg-zinc-100" />
+            <Skeleton className="h-3 w-40 bg-zinc-100" />
           </div>
         </div>
       ))}
@@ -264,19 +258,19 @@ function ChatWindowSkeleton() {
     <div className="h-full p-6 flex flex-col space-y-8 bg-white">
       <div className="flex justify-start">
         <div className="space-y-2">
-          <Skeleton className="h-12 w-[280px] rounded-2xl rounded-tl-none bg-zinc-100" />
-          <Skeleton className="h-4 w-[100px] bg-zinc-50" />
+          <Skeleton className="h-12 w-70 rounded-2xl rounded-tl-none bg-zinc-100" />
+          <Skeleton className="h-4 w-25 bg-zinc-50" />
         </div>
       </div>
       <div className="flex justify-end">
         <div className="space-y-2 flex flex-col items-end">
           <Skeleton className="h-16 w-[320px] rounded-2xl rounded-tr-none bg-emerald-50" />
-          <Skeleton className="h-4 w-[80px] bg-zinc-50" />
+          <Skeleton className="h-4 w-20 bg-zinc-50" />
         </div>
       </div>
       <div className="flex justify-start">
         <div className="space-y-2">
-          <Skeleton className="h-24 w-[300px] rounded-2xl rounded-tl-none bg-zinc-100" />
+          <Skeleton className="h-24 w-75 rounded-2xl rounded-tl-none bg-zinc-100" />
         </div>
       </div>
       <div className="mt-auto pt-4 border-t border-zinc-100">

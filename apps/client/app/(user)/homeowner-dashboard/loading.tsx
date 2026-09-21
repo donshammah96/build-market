@@ -1,5 +1,4 @@
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Loading() {
@@ -13,7 +12,7 @@ export default function Loading() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
-            <Skeleton className="h-[300px] w-full rounded-2xl" />
+            <Skeleton className="h-75 w-full rounded-2xl" />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <Skeleton className="h-40 w-full rounded-xl" />
               <Skeleton className="h-40 w-full rounded-xl" />
@@ -26,7 +25,6 @@ export default function Loading() {
           </div>
         </div>
       </div>
-      <Footer />
     </div>
   );
 }

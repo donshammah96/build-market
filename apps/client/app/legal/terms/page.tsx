@@ -24,7 +24,7 @@ const termsSections = [
     icon: "🛡️",
     title: "3. Milestone Engagements & Payments",
     description:
-      "Projects contracted through the platform utilize structured milestone stages. Clients and professionals agree on project deliverables and stages in advance. Funds committed to project milestones are disbursed only after the client inspects and approves the verified milestone deliverable.",
+      "Projects may use agreed milestone stages. Clients and professionals agree on deliverables and payment terms directly, and Build Market does not hold, safeguard, or disburse project funds.",
   },
   {
     icon: "🚫",

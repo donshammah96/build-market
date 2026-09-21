@@ -32,23 +32,21 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
 
   // Apply settings to DOM
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     const html = document.documentElement;
     const body = document.body;
 
     // Check URL query parameter e.g. ?theme=dark or ?theme=light
     let activeTheme = theme;
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlTheme = urlParams.get("theme");
-      if (
-        urlTheme === "dark" ||
-        urlTheme === "light" ||
-        urlTheme === "system"
-      ) {
-        activeTheme = urlTheme;
-        if (theme !== urlTheme) {
-          setTheme(urlTheme);
-        }
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlTheme = urlParams.get("theme");
+    if (urlTheme === "dark" || urlTheme === "light" || urlTheme === "system") {
+      activeTheme = urlTheme;
+      if (theme !== urlTheme) {
+        setTheme(urlTheme);
       }
     }
 

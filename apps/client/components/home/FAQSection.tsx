@@ -28,7 +28,7 @@ export const FAQ_DATA: FAQItem[] = [
   {
     question: "How do structured milestone payments work?",
     answer:
-      "Projects are broken down into agreed stage deliverables (for example: Architectural Drawings, Structural Engineering Sign-off, Foundation, or Superstructure). Payment terms are confirmed up front per stage, and disbursements occur only after you inspect and sign off on completed work. You never pay for unverified work.",
+      "Projects are broken down into agreed stage deliverables (for example: Architectural Drawings, Structural Engineering Sign-off, Foundation, or Superstructure). Payment terms are agreed directly between the client and professional for each stage, with sign-offs recorded as work is completed.",
   },
   {
     question: "What types of professionals can I hire on Build Market?",

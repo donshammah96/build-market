@@ -1,5 +1,4 @@
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -18,7 +17,7 @@ export default function MessagesLoading() {
         </div>
 
         {/* Grid: list + chat */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-[600px]">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-150">
           {/* Left: Conversations list skeleton */}
           <div className="md:col-span-4 lg:col-span-3 h-full">
             <Card className="h-full border-zinc-200 shadow-sm bg-white overflow-hidden flex flex-col">
@@ -70,9 +69,6 @@ export default function MessagesLoading() {
           </div>
         </div>
       </main>
-      <div className="hidden md:block">
-        <Footer />
-      </div>
     </div>
   );
 }

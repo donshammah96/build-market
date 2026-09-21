@@ -16,6 +16,22 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed & Fixed — Accessibility Semantics, Non-Custodial Copy Hardening, Centralized Legal Routes & Root Footer Deduplication
+
+- **Accessibility Toggle Semantics & Non-Custodial Copy Hardening (`apps/client/components/home/HowItWorks.tsx`, `apps/client/__tests__/components/home/how-it-works.test.tsx`)**:
+  - **Button Group Toggle ARIA Semantics**: Refactored audience toggle from incomplete tablist pattern (`role="tablist"`, `role="tab"`, `aria-selected` without associated tabpanel, aria-controls, or keyboard arrows) to a two-state button group (`role="group"`, `aria-label="View how it works for"`, `aria-pressed={audience === key}`). Screen readers accurately announce the toggle state without expecting tab widget keyboard navigation.
+  - **Client-Facing Non-Custodial Copy Hardening**: Replaced milestone payment-protection guarantee ("Hire with milestone protection", "release payment as each milestone is approved — never pay for work that hasn't been done") with non-custodial stage sign-off copy ("Structured stage sign-offs", "Agree on project stages up front and record approvals between both parties as each milestone is completed to keep deliverables clear."). Aligns strictly with P0-7 non-custodial policy.
+  - **Professional-Facing Non-Custodial Settlement Copy**: Replaced fund disbursement promises ("Get paid on milestones", "disbursed as work is approved") with direct stage agreements ("Direct stage agreements", "Agree on clear deliverables per project stage and record client approvals as work is completed, keeping expectations aligned from kickoff to handover."). Honoring the settlement boundary documented in `/legal/safety-and-verification`.
+  - **Automated Regression Suite (`apps/client/__tests__/components/home/how-it-works.test.tsx`)**: Authored comprehensive unit test suite asserting button group ARIA semantics and guaranteeing zero prohibited custodial or escrow marketing claims in HowItWorks copy.
+
+- **Centralized Legal Route Contract Expansion (`apps/client/lib/routes/marketplace.routes.ts`, `apps/client/app/sitemap/page.tsx`, `apps/client/app/legal/layout.tsx`)**:
+  - Added centralized legal route definitions to `MARKETPLACE_ROUTES` and `LEGAL_ROUTES` for `safetyAndVerification`, `reviewPolicy`, `disputesAndComplaints`, `contentModeration`, and `foundingProTerms`.
+  - Refactored `apps/client/app/sitemap/page.tsx` and `apps/client/app/legal/layout.tsx` from hardcoded URL literals (`/legal/safety-and-verification`, `/legal/review-policy`, `/legal/disputes-and-complaints`, `/legal/content-moderation`, `/legal/founding-pro-terms`) to use strongly-typed `LEGAL_ROUTES.*` constants, eliminating URL drift.
+
+- **Page-Level Footer Deduplication (`apps/client/app/`)**:
+  - Paired the root layout global `<Footer />` mount in `apps/client/app/layout.tsx` with systematic removal of all redundant page-level `<Footer />` instances and unused imports across the application.
+  - Removed duplicate footers from `/professionals`, `/professionals/[id]`, `/properties`, `/properties/[id]`, `/professional`, `/sitemap`, `/profile/complete`, `/idea-books`, `/idea-books/[id]`, and all branches of `(user)` routes (`homeowner-dashboard`, `notifications`, `search`, `profile`, `reviews`, `leads`, `messages`). Prevents duplicate newsletter subscription boxes and repeated legal links.
+
 ### Changed & Fixed — Landing Page Dark Mode Responsiveness & Semantic Token Normalization
 
 - **Landing Page Dark Mode Theme Auditing & Semantic Token Hardening (`apps/client/components/home/CTA.tsx`, `apps/client/components/reviews/`, `apps/client/components/vendors/`, `apps/client/components/real-estate/`, `apps/client/components/professional/`, `apps/client/app/page.tsx`, `apps/client/app/layout.tsx`, `apps/client/components/accessibility/AccessibilityProvider.tsx`)**:

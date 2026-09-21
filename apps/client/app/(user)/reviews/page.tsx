@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Star, Search, Filter, MessageSquare } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -43,7 +42,7 @@ export default function ReviewsPage() {
         {/* --- Hero Header --- */}
         <section className="bg-zinc-900 text-white py-20 relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] opacity-10 bg-cover bg-center" />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-zinc-900/90" />
+          <div className="absolute inset-0 bg-linear-to-b from-transparent to-zinc-900/90" />
 
           <div className="container mx-auto px-4 md:px-6 relative z-10 text-center max-w-3xl">
             <motion.div
@@ -90,7 +89,7 @@ export default function ReviewsPage() {
                   className="w-full md:w-auto"
                   onValueChange={(v) => setActiveTab(v as TabValue)}
                 >
-                  <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
+                  <TabsList className="grid w-full grid-cols-3 md:w-100">
                     <TabsTrigger value="all">All Reviews</TabsTrigger>
                     <TabsTrigger value="PROFESSIONAL">Pros</TabsTrigger>
                     <TabsTrigger value="STORE">Stores</TabsTrigger>
@@ -137,7 +136,6 @@ export default function ReviewsPage() {
           )}
         </section>
       </main>
-      <Footer />
     </div>
   );
 }

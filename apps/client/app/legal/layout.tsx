@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LEGAL_ROUTES } from "@/lib/routes";
 
 export const metadata: Metadata = {
   title: "Legal",
@@ -32,43 +33,43 @@ export default function LegalLayout({
           </Link>
           <div className="flex flex-wrap items-center gap-4 md:gap-6 text-xs md:text-sm text-zinc-400">
             <Link
-              href="/legal/privacy"
+              href={LEGAL_ROUTES.privacy}
               className="hover:text-white transition-colors"
             >
               Privacy
             </Link>
             <Link
-              href="/legal/safety-and-verification"
+              href={LEGAL_ROUTES.safetyAndVerification}
               className="hover:text-white transition-colors"
             >
               Safety &amp; Trust
             </Link>
             <Link
-              href="/legal/review-policy"
+              href={LEGAL_ROUTES.reviewPolicy}
               className="hover:text-white transition-colors"
             >
               Reviews
             </Link>
             <Link
-              href="/legal/disputes-and-complaints"
+              href={LEGAL_ROUTES.disputesAndComplaints}
               className="hover:text-white transition-colors"
             >
               Disputes
             </Link>
             <Link
-              href="/legal/content-moderation"
+              href={LEGAL_ROUTES.contentModeration}
               className="hover:text-white transition-colors"
             >
               Moderation
             </Link>
             <Link
-              href="/legal/founding-pro-terms"
+              href={LEGAL_ROUTES.foundingProTerms}
               className="hover:text-white transition-colors"
             >
               Founding Pro
             </Link>
             <Link
-              href="/legal/professional-terms"
+              href={LEGAL_ROUTES.professionalTerms}
               className="hover:text-white transition-colors"
             >
               Terms

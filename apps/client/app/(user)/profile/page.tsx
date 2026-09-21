@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -128,7 +127,7 @@ export default function ProfilePage() {
           {/* --- LEFT SIDE: Identity Card --- */}
           <div className="lg:col-span-4 space-y-6">
             <Card className="border-zinc-200 shadow-sm overflow-hidden bg-white">
-              <div className="h-32 bg-gradient-to-r from-emerald-600 to-teal-600 relative">
+              <div className="h-32 bg-linear-to-r from-emerald-600 to-teal-600 relative">
                 {/* Banner Edit (Optional) */}
               </div>
               <div className="px-6 pb-6 relative">
@@ -303,7 +302,7 @@ export default function ProfilePage() {
                       onChange={(e) =>
                         setFormData({ ...formData, bio: e.target.value })
                       }
-                      className="bg-zinc-50 border-zinc-200 focus:bg-white resize-none min-h-[80px]"
+                      className="bg-zinc-50 border-zinc-200 focus:bg-white resize-none min-h-20"
                     />
                   </div>
                 </div>
@@ -381,7 +380,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }
@@ -395,7 +393,7 @@ function ProfileSkeleton() {
           <div className="h-96 bg-zinc-200 rounded-xl animate-pulse" />
         </div>
         <div className="lg:col-span-8">
-          <div className="h-[600px] bg-zinc-200 rounded-xl animate-pulse" />
+          <div className="h-150 bg-zinc-200 rounded-xl animate-pulse" />
         </div>
       </div>
     </div>

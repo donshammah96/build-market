@@ -43,9 +43,9 @@ const steps: Record<Audience, Step[]> = {
     },
     {
       icon: ShieldCheck,
-      title: "Hire with milestone protection",
+      title: "Structured stage sign-offs",
       description:
-        "Agree on stages up front and release payment as each milestone is approved — never pay for work that hasn't been done.",
+        "Agree on project stages up front and record approvals between both parties as each milestone is completed to keep deliverables clear.",
     },
   ],
   professionals: [
@@ -63,9 +63,9 @@ const steps: Record<Audience, Step[]> = {
     },
     {
       icon: Wallet,
-      title: "Get paid on milestones",
+      title: "Direct stage agreements",
       description:
-        "Payments are structured per agreed stage and disbursed as work is approved, so you're covered from kickoff to handover.",
+        "Agree on clear deliverables per project stage and record client approvals as work is completed, keeping expectations aligned from kickoff to handover.",
     },
   ],
 };
@@ -73,10 +73,9 @@ const steps: Record<Audience, Step[]> = {
 /**
  * "How It Works" — a standard two-sided-marketplace trust/conversion
  * section. Landing pages for platforms with structured stage
- * payments (as referenced in the Professionals recruitment banner) convert
- * better when the mechanics are explained up front, before the user is
- * asked to sign up. Mirrors the animation/intersection-observer pattern
- * used by the other home sections so it drops in without visual drift.
+ * agreements convert better when the mechanics are explained up front,
+ * before the user is asked to sign up. Mirrors the animation/intersection-observer
+ * pattern used by the other home sections so it drops in without visual drift.
  */
 export const HowItWorks = memo(function HowItWorks() {
   const [audience, setAudience] = useState<Audience>("clients");
@@ -110,7 +109,7 @@ export const HowItWorks = memo(function HowItWorks() {
 
         {/* Audience Toggle */}
         <div
-          role="tablist"
+          role="group"
           aria-label="View how it works for"
           className="flex justify-center gap-2 mb-12"
         >
@@ -118,8 +117,7 @@ export const HowItWorks = memo(function HowItWorks() {
             <button
               key={key}
               type="button"
-              role="tab"
-              aria-selected={audience === key}
+              aria-pressed={audience === key}
               onClick={() => setAudience(key)}
               className={cn(
                 "px-5 py-2 rounded-full text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2",

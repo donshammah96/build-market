@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { LEGAL_ROUTES, ROUTES } from "@/lib/routes";
 
 export const metadata: Metadata = {
@@ -92,7 +91,7 @@ const sitemapSections: SitemapSection[] = [
       },
       {
         label: "Sign Up as a Professional",
-        href: ROUTES.signUp,
+        href: ROUTES.joinAsPro,
         description: "Create your practitioner account and begin verification",
       },
     ],
@@ -117,22 +116,22 @@ const sitemapSections: SitemapSection[] = [
       },
       {
         label: "Safety & Verification",
-        href: "/legal/safety-and-verification",
+        href: LEGAL_ROUTES.safetyAndVerification,
         description: "Credential validation processes with EBK, BORAQS & NCA",
       },
       {
         label: "Review Policy",
-        href: "/legal/review-policy",
+        href: LEGAL_ROUTES.reviewPolicy,
         description: "Guidelines ensuring authentic and unmanipulated reviews",
       },
       {
         label: "Disputes & Complaints",
-        href: "/legal/disputes-and-complaints",
+        href: LEGAL_ROUTES.disputesAndComplaints,
         description: "Mediation process and milestone dispute handling",
       },
       {
         label: "Content Moderation",
-        href: "/legal/content-moderation",
+        href: LEGAL_ROUTES.contentModeration,
         description:
           "Platform safety rules for user submissions and portfolios",
       },
@@ -152,10 +151,10 @@ const sitemapSections: SitemapSection[] = [
 
 export default function SitemapPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col justify-between">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       <Navbar variant="light" />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 md:px-12 pt-28 pb-20 w-full">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 md:px-12 pt-28 pb-20 w-full flex-1">
         {/* Header */}
         <div className="mb-12 max-w-2xl">
           <div className="inline-block px-3 py-1 mb-3 text-xs font-semibold tracking-wider text-emerald-600 uppercase bg-emerald-50 dark:bg-emerald-950/40 rounded-full">
@@ -207,8 +206,6 @@ export default function SitemapPage() {
           ))}
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 }

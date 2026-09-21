@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,7 +139,6 @@ export default function NotificationsPage() {
           )}
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

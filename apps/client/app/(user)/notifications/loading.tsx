@@ -1,5 +1,4 @@
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function NotificationsLoading() {
@@ -37,7 +36,6 @@ export default function NotificationsLoading() {
           ))}
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

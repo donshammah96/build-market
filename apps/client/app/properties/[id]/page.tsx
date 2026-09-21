@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -390,8 +389,6 @@ export default async function PropertyDetailPage({
           </section>
         )}
       </main>
-
-      <Footer />
     </div>
   );
 }

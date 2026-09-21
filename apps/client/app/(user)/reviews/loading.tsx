@@ -1,5 +1,4 @@
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
-import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -24,7 +23,7 @@ export default function Loading() {
             <CardContent className="p-4 md:p-6">
               <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
                 <Skeleton className="h-10 w-96" />
-                <Skeleton className="h-10 w-[400px]" />
+                <Skeleton className="h-10 w-100" />
               </div>
             </CardContent>
           </Card>
@@ -52,7 +51,6 @@ export default function Loading() {
           </div>
         </section>
       </main>
-      <Footer />
     </div>
   );
 }

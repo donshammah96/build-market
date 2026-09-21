@@ -194,7 +194,7 @@ export default async function RootLayout({
             // SECURITY_XSS_ALLOWLIST: Static client-side theme initialization IIFE without user input
             // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive accessibility theme preferences
             dangerouslySetInnerHTML={{
-              __html: `(function(){try{var p=new URLSearchParams(window.location.search).get('theme');var s=localStorage.getItem('bm_accessibility_settings');var t=p||(s?JSON.parse(s).state?.theme:null);if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.remove('dark');}}catch(e){}})();`,
+              __html: `(function(){try{var p=new URLSearchParams(window.location.search).get('theme');var s=localStorage.getItem('accessibility-settings');var t=p||(s?JSON.parse(s).state?.theme:null);if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.remove('dark');}}catch(e){}})();`,
             }}
           />
         </head>

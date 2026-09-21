@@ -10,19 +10,29 @@ import "./staging-test-control";
 // Prevent uncaught exceptions from failing tests
 Cypress.on("uncaught:exception", (err, runnable) => {
   // Returning false prevents Cypress from failing the test
-  // Ignore hydration errors and Next.js specific errors
+  // Ignore hydration errors (including React 18/19 minified codes) and Next.js specific errors
+  const msg = err?.message || "";
   if (
-    err.message.includes("Hydration") ||
-    err.message.includes("NEXT_NOT_FOUND") ||
-    err.message.includes("ResizeObserver")
+    msg.includes("Hydration") ||
+    msg.includes("hydration") ||
+    msg.includes("Minified React error #418") ||
+    msg.includes("Minified React error #422") ||
+    msg.includes("Minified React error #423") ||
+    msg.includes("Minified React error #425") ||
+    msg.includes("NEXT_NOT_FOUND") ||
+    msg.includes("ResizeObserver")
   ) {
     return false;
   }
   // Log unexpected client-side exception with context before failing (S-7)
+  // Note: cy.* commands (e.g. cy.task) cannot be invoked inside uncaught:exception listeners
   const testTitle = runnable?.title || "unknown test";
-  cy.task(
-    "log",
-    `[CYPRESS UNCAUGHT EXCEPTION in "${testTitle}"]: ${err.message}\n${err.stack || ""}`,
+  Cypress.log({
+    name: "uncaught exception",
+    message: `[CYPRESS UNCAUGHT EXCEPTION in "${testTitle}"]: ${msg}`,
+  });
+  console.error(
+    `[CYPRESS UNCAUGHT EXCEPTION in "${testTitle}"]: ${msg}\n${err?.stack || ""}`,
   );
   return true;
 });

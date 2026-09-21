@@ -49,6 +49,11 @@ export const MARKETPLACE_ROUTES = {
   legalProfessionalTerms: "/legal/professional-terms",
   legalCookieSettings: "/legal/cookie-settings",
   legalAccessibility: "/legal/accessibility",
+  legalSafetyAndVerification: "/legal/safety-and-verification",
+  legalReviewPolicy: "/legal/review-policy",
+  legalDisputesAndComplaints: "/legal/disputes-and-complaints",
+  legalContentModeration: "/legal/content-moderation",
+  legalFoundingProTerms: "/legal/founding-pro-terms",
   sitemap: "/sitemap",
 } as const;
 
@@ -58,6 +63,11 @@ export const LEGAL_ROUTES = {
   professionalTerms: "/legal/professional-terms",
   cookieSettings: "/legal/cookie-settings",
   accessibility: "/legal/accessibility",
+  safetyAndVerification: "/legal/safety-and-verification",
+  reviewPolicy: "/legal/review-policy",
+  disputesAndComplaints: "/legal/disputes-and-complaints",
+  contentModeration: "/legal/content-moderation",
+  foundingProTerms: "/legal/founding-pro-terms",
   sitemap: "/sitemap",
 } as const;
 

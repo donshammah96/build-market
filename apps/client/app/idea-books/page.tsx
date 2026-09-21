@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 
 import { Navbar } from "@/components/layout/NavBar";
-import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,7 +103,7 @@ export default function IdeaBooksPage() {
             <motion.button
               layout
               onClick={() => setIsCreateOpen(true)}
-              className="group relative aspect-[4/3] rounded-2xl border-2 border-dashed border-zinc-200 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all flex flex-col items-center justify-center gap-4"
+              className="group relative aspect-4/3 rounded-2xl border-2 border-dashed border-zinc-200 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all flex flex-col items-center justify-center gap-4"
             >
               <div className="h-16 w-16 rounded-full bg-zinc-100 group-hover:bg-emerald-100 text-zinc-400 group-hover:text-emerald-600 flex items-center justify-center transition-colors">
                 <Plus className="h-8 w-8" />
@@ -126,8 +125,6 @@ export default function IdeaBooksPage() {
         onCreate={handleCreateBook}
         isPending={createMutation.isPending}
       />
-
-      <Footer />
     </div>
   );
 }
@@ -157,7 +154,7 @@ function IdeaBookCard({
       <Link href={getIdeaBookUrl(book.id)}>
         <Card className="h-full border-zinc-200 hover:border-emerald-500/50 hover:shadow-xl transition-all duration-300 overflow-hidden bg-white group-hover:-translate-y-1">
           {/* Collage Image Area */}
-          <div className="aspect-[4/3] bg-zinc-100 grid grid-cols-3 gap-0.5 relative">
+          <div className="aspect-4/3 bg-zinc-100 grid grid-cols-3 gap-0.5 relative">
             {/* Large Main Image */}
             <div className="col-span-2 row-span-2 relative overflow-hidden bg-zinc-200">
               {previewUrls[0] ? (
