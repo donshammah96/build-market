@@ -69,7 +69,23 @@ export {
   createLogger,
   getGlobalLogger,
   setGlobalLogger,
+  flushResilienceLogs,
+  closeResilienceLogs,
 } from "./logger.js";
+
+export {
+  DatadogBatchSink,
+  DATADOG_DEFAULT_MAX_QUEUE_RECORDS,
+  DATADOG_DEFAULT_MAX_BATCH_RECORDS,
+  DATADOG_DEFAULT_MAX_BATCH_BYTES,
+  DATADOG_DEFAULT_MAX_RETRIES,
+  DATADOG_DEFAULT_RETRY_BASE_DELAY_MS,
+  type DatadogBatchSinkOptions,
+} from "./datadog-transport.js";
+export {
+  createDatadogPinoTarget,
+  type DatadogPinoTarget,
+} from "./datadog-pino-target.js";
 
 // Configuration
 export {

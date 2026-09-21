@@ -1,5 +1,9 @@
 # ADR-004: Canonical Environment Variable Access Boundary
 
+Status: Accepted
+Owner: Client Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

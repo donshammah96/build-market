@@ -115,7 +115,7 @@ export default async function RootLayout({
   // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
   const nonce = rawNonce || undefined;
 
-  let clerkOrigin = "https://clerk.buildmarket.app";
+  let clerkOrigin: string | null = null;
   if (env.clerk.frontendApi) {
     try {
       clerkOrigin = new URL(env.clerk.frontendApi).origin;
@@ -125,7 +125,17 @@ export default async function RootLayout({
   }
 
   return (
-    <ClerkProvider nonce={nonce}>
+    <ClerkProvider
+      publishableKey={env.clerk.publishableKey}
+      nonce={nonce}
+      {...(env.clerk.isSatellite
+        ? {
+            isSatellite: true,
+            domain: env.clerk.domain,
+            signInUrl: env.clerk.primarySignInUrl,
+          }
+        : {})}
+    >
       <html lang="en" className={dmSans.variable}>
         <head>
           {/* Preconnect to Clerk FAPI dynamically configured by env */}
@@ -139,13 +149,6 @@ export default async function RootLayout({
               <link rel="dns-prefetch" href={clerkOrigin} />
             </>
           )}
-          {/* Safety fallbacks for standard Clerk subdomains & telemetry */}
-          <link
-            rel="preconnect"
-            href="https://clerk.buildmarket.app"
-            crossOrigin="anonymous"
-          />
-          <link rel="dns-prefetch" href="https://clerk.buildmarket.app" />
           <link
             rel="preconnect"
             href="https://clerk-telemetry.com"

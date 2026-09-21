@@ -55,6 +55,13 @@ describe("staging environment protection (anti-crawling & basic auth)", () => {
       expect(isStagingProtectionExempt(resendWebhook)).toBe(true);
     });
 
+    it("exempts /.well-known/ routes for SSL/DCV verification", () => {
+      const challengeReq = new NextRequest(
+        "http://localhost:3500/.well-known/cf-custom-hostname-challenge/5530422d-4eae-4414-a450-a4da56a18772",
+      );
+      expect(isStagingProtectionExempt(challengeReq)).toBe(true);
+    });
+
     it("does not exempt standard public or protected pages", () => {
       const homeReq = new NextRequest("http://localhost:3500/");
       const leadsReq = new NextRequest("http://localhost:3500/leads");

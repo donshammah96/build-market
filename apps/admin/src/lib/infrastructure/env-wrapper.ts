@@ -295,12 +295,6 @@ function buildEnvConfig() {
     },
 
     features: {
-      v2UserManagement: raw.NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT ?? false,
-      v2VerificationQueue:
-        raw.NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE ?? false,
-      v2FinanceDashboard:
-        raw.NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD ?? false,
-      v2AuditLogUi: raw.NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI ?? false,
       v2StructuredLogging:
         raw.NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING ?? false,
       licenseVerificationQueue:
@@ -341,6 +335,14 @@ function buildEnvConfig() {
       exporterEndpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
       serviceName: raw.OTEL_SERVICE_NAME,
       resourceAttributes: raw.OTEL_RESOURCE_ATTRIBUTES,
+      datadog: {
+        apiKey: raw.DD_API_KEY,
+        site: raw.DD_SITE ?? raw.DD_SITE_HOST ?? "us5.datadoghq.com",
+        service: raw.DD_SERVICE,
+        environment: raw.DD_ENV,
+        version: raw.DD_VERSION,
+        logsEnabled: raw.DD_LOGS_ENABLED,
+      },
     },
 
     nats: {

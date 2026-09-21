@@ -49,5 +49,6 @@
     { "path": "../../packages/env-validation" },
     { "path": "../../packages/clerk-test-harness" },
     { "path": "../../packages/telemetry" }
+    ,{ "path": "../../packages/mpesa" }
   ]
 }

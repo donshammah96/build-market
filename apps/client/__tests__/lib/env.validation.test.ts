@@ -357,4 +357,63 @@ describe("env storage production readiness validation", () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
+
+  describe("env database validation — hosted loopback guard", () => {
+    it("accepts a remote Supabase pooler URL in production", () => {
+      process.env = { ...process.env, NODE_ENV: "production" };
+      process.env.DATABASE_URL =
+        "postgresql://postgres.testref:pass@aws-1.pooler.supabase.com:5432/postgres";
+
+      const result = validateEnv(["database"], false);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("rejects loopback host 127.0.0.1 in production", () => {
+      process.env = { ...process.env, NODE_ENV: "production" };
+      delete process.env.ALLOW_LOCALHOST_DB;
+      process.env.DATABASE_URL =
+        "postgresql://postgres:pass@127.0.0.1:5432/postgres";
+
+      const result = validateEnv(["database"], false);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes("DATABASE_URL"))).toBe(true);
+    });
+
+    it("rejects loopback host localhost when VERCEL=1", () => {
+      process.env = { ...process.env, VERCEL: "1", NODE_ENV: "development" };
+      delete process.env.ALLOW_LOCALHOST_DB;
+      process.env.DATABASE_URL =
+        "postgresql://postgres:pass@localhost:5432/postgres";
+
+      const result = validateEnv(["database"], false);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes("DATABASE_URL"))).toBe(true);
+    });
+
+    it("allows loopback host in development without ALLOW_LOCALHOST_DB", () => {
+      process.env = { ...process.env, NODE_ENV: "development" };
+      delete process.env.VERCEL;
+      process.env.DATABASE_URL =
+        "postgresql://postgres:pass@127.0.0.1:5432/postgres";
+
+      const result = validateEnv(["database"], false);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("allows loopback host in production when ALLOW_LOCALHOST_DB=true", () => {
+      process.env = {
+        ...process.env,
+        NODE_ENV: "production",
+        ALLOW_LOCALHOST_DB: "true",
+      };
+      process.env.DATABASE_URL =
+        "postgresql://postgres:pass@127.0.0.1:5432/postgres";
+
+      const result = validateEnv(["database"], false);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
 });

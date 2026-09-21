@@ -29,12 +29,40 @@ export const DEFAULT_TIMEOUTS: TimeoutConfig = {
  * Execute an operation with a timeout
  */
 export async function withTimeout<T>(
-  operation: () => Promise<T>,
+  operation: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   operationName: string = "operation",
+  parentSignal?: AbortSignal,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
+    const controller = new AbortController();
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", onParentAbort);
+    };
+
+    const onParentAbort = () => {
+      if (settled) return;
+      settled = true;
+      controller.abort(parentSignal?.reason);
+      cleanup();
+      reject(parentSignal?.reason ?? new Error("Operation aborted"));
+    };
+
+    if (parentSignal?.aborted) {
+      onParentAbort();
+      return;
+    }
+
+    parentSignal?.addEventListener("abort", onParentAbort, { once: true });
+
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
       reject(
         new TimeoutError(
           `Operation '${operationName}' timed out after ${timeoutMs}ms`,
@@ -43,13 +71,18 @@ export async function withTimeout<T>(
       );
     }, timeoutMs);
 
-    operation()
+    Promise.resolve()
+      .then(() => operation(controller.signal))
       .then((result) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         resolve(result);
       })
       .catch((error) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(error);
       });
   });
@@ -71,7 +104,7 @@ export function getTimeout(
  * Execute an operation with criticality-based timeout
  */
 export async function withCriticalityTimeout<T>(
-  operation: () => Promise<T>,
+  operation: (signal: AbortSignal) => Promise<T>,
   criticality: OperationCriticality,
   operationName?: string,
   customTimeouts?: Partial<TimeoutConfig>,

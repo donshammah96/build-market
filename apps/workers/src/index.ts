@@ -1,18 +1,10 @@
 import "./bootstrap.js";
-/* eslint-disable no-restricted-syntax -- bootstrap-only: Datadog APM initialization requires early bootstrap before module imports */
-import tracer from "dd-trace";
-tracer.init({
-  service: "buildmarket-workers",
-  env: process.env.DD_ENV,
-  logInjection: true,
-  site: process.env.DD_SITE, // e.g. "us5.datadoghq.com" — same site as everywhere else
-  // DD_API_KEY is picked up automatically from the environment
-});
-/* eslint-enable no-restricted-syntax */
 
 import { validateWorkerEnv } from "./env.js";
 import { initOtel, shutdownOtel } from "./otel.js";
+import { initTracer } from "./tracer.js";
 import { startHealthServer } from "./health.js";
+import { resolveWorkerOptions } from "./worker-options.js";
 import { processMaintenanceJob } from "./processors/maintenance.processor.js";
 import { processNotificationRetryJob } from "./processors/notification.processor.js";
 import { processDataExportJob } from "./processors/export.processor.js";
@@ -24,9 +16,17 @@ import {
 } from "./processors/newsletter.processor.js";
 import { processImageUploadJob } from "./processors/upload.processor.js";
 import { processLicenseVerificationJob } from "./processors/license-verification.processor.js";
-import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import {
-  getBullMQConnectionOptions,
+  processMpesaB2cInitiateJob,
+  processMpesaB2cResultJob,
+} from "./processors/mpesa-b2c.processor.js";
+import {
+  processMpesaStkCallbackJob,
+  processMpesaStkInitiateJob,
+} from "./processors/mpesa-stk.processor.js";
+import { processMpesaReconciliationJob } from "./processors/mpesa-reconciliation.processor.js";
+import {
+  getQueueBackendType,
   type MaintenanceJobData,
   type NotificationRetryJobData,
   type ExportJobData,
@@ -36,6 +36,12 @@ import {
   type NewsletterEspSyncJobData,
   type ImageUploadProcessingJobData,
   type LicenseVerificationJobData,
+  type MpesaStkInitiateJobData,
+  type MpesaStkCallbackJobData,
+  type MpesaB2cInitiateJobData,
+  type MpesaB2cResultJobData,
+  type MpesaReconcileJobData,
+  migrateBullMqSchema,
 } from "@build/queue-server";
 import {
   createConsumer,
@@ -44,11 +50,18 @@ import {
 } from "@build/nats";
 import { Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
+import type { Client as PgClient } from "pg";
+import {
+  StructuredLogger,
+  CorrelationIdManager,
+  closeResilienceLogs,
+} from "@build/resilience";
 
 // 1. Fail-closed boot validation (P0: Must run before any socket initialization)
 const env = validateWorkerEnv();
 
-// 2. OpenTelemetry / Datadog APM instrumentation initialization
+// 2. Datadog APM and OpenTelemetry instrumentation initialization
+initTracer(env);
 initOtel(env);
 
 const logger = new StructuredLogger("workers-daemon");
@@ -57,18 +70,26 @@ logger.info("Starting BuildMarket background worker daemon...", {
   dbPoolMax: env.DB_POOL_MAX,
 });
 
+// 3. Pre-deploy BullMQ schema validation / migration (no-ops safely if no queue uses postgres)
+try {
+  await migrateBullMqSchema();
+} catch (err) {
+  logger.error(
+    "[Fatal] Failed to verify or migrate BullMQ schema on boot",
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  process.exit(1);
+}
+
 if (env.DISABLE_BACKGROUND_JOBS) {
   logger.warn(
     "DISABLE_BACKGROUND_JOBS is enabled — worker processing will remain dormant.",
   );
 }
 
-// 2. Redis connection check probe
-const redisConnectionOptions = getBullMQConnectionOptions();
-const healthRedisClient = new Redis(env.REDIS_URL, {
-  lazyConnect: true,
-  maxRetriesPerRequest: 1,
-});
+// 4. Connection check probes (lazily instantiated)
+let healthRedisClient: Redis | null = null;
+let healthPgClient: PgClient | null = null;
 
 let isShuttingDown = false;
 let isNatsConnected = false;
@@ -99,6 +120,14 @@ function initializeBullMqWorkers() {
     return;
   }
 
+  function getWorkerOptions(
+    queueName: string,
+    concurrency: number = 5,
+    limiter?: { max: number; duration: number },
+  ) {
+    return resolveWorkerOptions(queueName, concurrency, limiter, logger);
+  }
+
   // Maintenance & GDPR Queues Worker
   const maintenanceWorker = new Worker<MaintenanceJobData>(
     "maintenance-jobs",
@@ -110,10 +139,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("maintenance-jobs", 5),
   );
 
   maintenanceWorker.on("failed", (job, err) => {
@@ -142,10 +168,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("notification-retries", 5),
   );
 
   notificationWorker.on("failed", (job, err) => {
@@ -165,10 +188,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 2,
-    },
+    getWorkerOptions("gdpr-data-export", 2),
   );
 
   exportWorker.on("failed", (job, err) => {
@@ -189,14 +209,10 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 2,
-      limiter: {
-        max: 10,
-        duration: 60000,
-      },
-    },
+    getWorkerOptions("security-incidents", 2, {
+      max: 10,
+      duration: 60000,
+    }),
   );
 
   incidentWorker.on("failed", (job, err) => {
@@ -217,10 +233,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 2,
-    },
+    getWorkerOptions("compliance-notifications", 2),
   );
 
   complianceNotificationWorker.on("failed", (job, err) => {
@@ -241,10 +254,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("newsletter-confirmation-email", 5),
   );
 
   newsletterEmailWorker.on("failed", (job, err) => {
@@ -265,10 +275,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("newsletter-esp-sync", 5),
   );
 
   newsletterEspSyncWorker.on("failed", (job, err) => {
@@ -289,14 +296,10 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 2,
-      limiter: {
-        max: 20,
-        duration: 60000,
-      },
-    },
+    getWorkerOptions("uploads-image-processing", 2, {
+      max: 20,
+      duration: 60000,
+    }),
   );
 
   uploadProcessingWorker.on("failed", (job, err) => {
@@ -317,10 +320,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      connection: redisConnectionOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("license-verification", 5),
   );
 
   licenseVerificationWorker.on("failed", (job, err) => {
@@ -328,6 +328,68 @@ function initializeBullMqWorkers() {
       jobId: job?.id,
       professionalId: job?.data?.professionalId,
     });
+  });
+
+  const mpesaWorker = new Worker<
+    | MpesaStkInitiateJobData
+    | MpesaStkCallbackJobData
+    | MpesaB2cInitiateJobData
+    | MpesaB2cResultJobData
+  >(
+    "mpesa-payments",
+    async (
+      job: Job<
+        | MpesaStkInitiateJobData
+        | MpesaStkCallbackJobData
+        | MpesaB2cInitiateJobData
+        | MpesaB2cResultJobData
+      >,
+    ) =>
+      CorrelationIdManager.run(job.data.correlationId, () =>
+        job.name === "process-stk-callback"
+          ? processMpesaStkCallbackJob(job as Job<MpesaStkCallbackJobData>)
+          : job.name === "initiate-b2c"
+            ? processMpesaB2cInitiateJob(
+                job as Job<MpesaB2cInitiateJobData>,
+                env,
+              )
+            : job.name === "process-b2c-result"
+              ? processMpesaB2cResultJob(job as Job<MpesaB2cResultJobData>)
+              : processMpesaStkInitiateJob(
+                  job as Job<MpesaStkInitiateJobData>,
+                  env,
+                ),
+      ),
+    getWorkerOptions("mpesa-payments", 2),
+  );
+  mpesaWorker.on("failed", (job, err) => {
+    logger.error("[Worker:mpesa] STK initiation failed", err, {
+      jobId: job?.id,
+      transactionId: (job?.data as { transactionId?: string } | undefined)
+        ?.transactionId,
+    });
+  });
+
+  const mpesaReconciliationWorker = new Worker<MpesaReconcileJobData>(
+    "mpesa-reconciliation",
+    async (job: Job<MpesaReconcileJobData>) =>
+      CorrelationIdManager.run(job.data.correlationId, () =>
+        processMpesaReconciliationJob(job, env),
+      ),
+    getWorkerOptions("mpesa-reconciliation", 1, {
+      max: 10,
+      duration: 10000,
+    }),
+  );
+  mpesaReconciliationWorker.on("failed", (job, err) => {
+    logger.error(
+      "[Worker:mpesa-reconciliation] Reconciliation job failed",
+      err,
+      {
+        jobId: job?.id,
+        correlationId: job?.data?.correlationId,
+      },
+    );
   });
 
   activeWorkers.push(
@@ -340,6 +402,8 @@ function initializeBullMqWorkers() {
     newsletterEspSyncWorker,
     uploadProcessingWorker,
     licenseVerificationWorker,
+    mpesaWorker,
+    mpesaReconciliationWorker,
   );
 }
 
@@ -404,11 +468,24 @@ async function initializeNatsConsumer() {
   }
 }
 
-// 5. Start Healthcheck Server (P1: Port 8080)
+// 5. Start Healthcheck Server (P1: Port 8080 / Render PORT)
 const healthServer = startHealthServer({
-  port: env.HEALTH_PORT,
+  port: env.PORT || env.HEALTH_PORT,
   checkRedis: async () => {
     try {
+      if (env.DISABLE_BACKGROUND_JOBS) return true;
+      const hasRedis =
+        env.QUEUE_BACKEND === "redis" ||
+        activeWorkers.some((w) => getQueueBackendType(w.name) === "redis");
+      if (!hasRedis) return true;
+
+      if (!healthRedisClient) {
+        healthRedisClient = new Redis(env.REDIS_URL, {
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+        });
+      }
+
       if (
         healthRedisClient.status !== "ready" &&
         healthRedisClient.status !== "connecting"
@@ -418,6 +495,65 @@ const healthServer = startHealthServer({
       const pong = await healthRedisClient.ping();
       return pong === "PONG";
     } catch {
+      return false;
+    }
+  },
+  checkPostgres: async () => {
+    try {
+      if (env.DISABLE_BACKGROUND_JOBS) return true;
+      const hasPostgres =
+        env.QUEUE_BACKEND === "postgres" ||
+        activeWorkers.some((w) => getQueueBackendType(w.name) === "postgres");
+      if (!hasPostgres) return true;
+
+      if (!healthPgClient) {
+        const pgModule = await import("pg");
+        const Client = pgModule.default?.Client || pgModule.Client;
+        const dnsModule = await import("node:dns");
+        healthPgClient = new Client({
+          connectionString: env.DATABASE_URL,
+          ssl:
+            env.NODE_ENV === "production"
+              ? { rejectUnauthorized: false }
+              : undefined,
+          lookup: (
+            hostname: string,
+            options: unknown,
+            callback: (
+              err: NodeJS.ErrnoException | null,
+              address: string,
+              family: number,
+            ) => void,
+          ) => {
+            const cb =
+              typeof options === "function"
+                ? (options as (
+                    err: NodeJS.ErrnoException | null,
+                    address: string,
+                    family: number,
+                  ) => void)
+                : callback;
+            const opts =
+              typeof options === "object" && options !== null ? options : {};
+            dnsModule.default.lookup(hostname, { ...opts, family: 4 }, cb);
+          },
+        } as any);
+        await healthPgClient.connect();
+      }
+
+      const res = await healthPgClient.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'bullmq';",
+      );
+      return res.rows.length > 0;
+    } catch {
+      if (healthPgClient) {
+        try {
+          await healthPgClient.end();
+        } catch {
+          // ignore
+        }
+        healthPgClient = null;
+      }
       return false;
     }
   },
@@ -461,17 +597,33 @@ async function gracefulShutdown(signal: string) {
     await Promise.all(activeWorkers.map((w) => w.close()));
     logger.info("[BullMQ] All workers closed gracefully.");
 
-    // 3. Disconnect Redis
-    await healthRedisClient.quit();
+    // 3. Disconnect Redis and Postgres health probe clients
+    if (healthRedisClient) {
+      try {
+        await healthRedisClient.quit();
+      } catch {
+        healthRedisClient.disconnect();
+      }
+      healthRedisClient = null;
+    }
+    if (healthPgClient) {
+      try {
+        await healthPgClient.end();
+      } catch {
+        // ignore
+      }
+      healthPgClient = null;
+    }
 
     // 4. Close health server last
     healthServer.close();
 
-    // 5. Flush and terminate OpenTelemetry
+    // 5. Flush resilience logs and terminate OpenTelemetry
+    logger.info("Graceful shutdown complete.");
+    await closeResilienceLogs();
     await shutdownOtel();
 
     clearTimeout(shutdownTimeout);
-    logger.info("Graceful shutdown complete.");
     process.exit(0);
   } catch (err) {
     logger.error(
@@ -486,5 +638,13 @@ process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Start services
-initializeBullMqWorkers();
+try {
+  initializeBullMqWorkers();
+} catch (err) {
+  logger.error(
+    "[Fatal] BullMQ worker initialization failed on startup. Terminating process for orchestrator restart.",
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  process.exit(1);
+}
 void initializeNatsConsumer();

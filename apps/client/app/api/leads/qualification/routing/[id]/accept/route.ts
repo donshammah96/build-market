@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@build/db";
+import { UserRole } from "@build/enums";
 import { withRole, type AuthContext } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {

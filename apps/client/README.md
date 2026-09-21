@@ -19,6 +19,8 @@ Use this document for two things:
 
 Related deeper docs:
 
+- Current status and release evidence scope: `apps/client/docs/STATUS.md`
+- Client ADR index: `apps/client/docs/adr/ADR-001` through `ADR-010`
 - API catalog: `apps/client/app/api/API.md`
 - API architecture: `apps/client/app/lib/API_ARCHITECTURE.md`
 - Health endpoint behavior: `apps/client/app/api/health/README.md`
@@ -39,8 +41,8 @@ pnpm -v
 
 Expected:
 
-- Node `>=20`
-- pnpm `>=10`
+- Node `24.x`
+- pnpm `>=11.1.2 <12.0.0`
 
 Install dependencies once at repo root:
 

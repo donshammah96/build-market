@@ -9,6 +9,7 @@ import {
   isInternalApiRoute,
   isSettingsExemptRoute,
   isSignUpRoute,
+  isAuthRoute,
 } from "@/app/lib/security/middleware/route-matcher";
 
 function createMockRequest(pathname: string): NextRequest {
@@ -142,6 +143,35 @@ describe("Middleware Route Protection Matrix", () => {
     );
   });
 
+  describe("isAuthRoute Matcher", () => {
+    it.each([
+      "/sign-in",
+      "/sign-in/sso",
+      "/sign-up",
+      "/sign-up/sso",
+      "/verify",
+      "/verify/email",
+      "/sso-callback",
+      "/auth-callback",
+      "/unauthorized-sign-in",
+      "/professional/sign-up",
+    ])("classifies %s as an auth route", (pathname) => {
+      const req = createMockRequest(pathname);
+      expect(isAuthRoute(req)).toBe(true);
+    });
+
+    it.each([
+      "/",
+      "/professionals",
+      "/idea-books",
+      "/maintenance",
+      "/dashboard",
+    ])("does NOT classify %s as an auth route", (pathname) => {
+      const req = createMockRequest(pathname);
+      expect(isAuthRoute(req)).toBe(false);
+    });
+  });
+
   describe("isSettingsExemptRoute Matcher", () => {
     it.each([
       "/api/health",
@@ -198,6 +228,7 @@ describe("Middleware Route Protection Matrix", () => {
       "/api/newsletter/confirm",
       "/api/webhooks/clerk",
       "/api/webhooks/resend",
+      "/api/webhooks/mpesa/stk-callback",
       "/api/clerk-webhook",
       "/api/csp-reports",
     ])("classifies %s as a public API route", (pathname) => {

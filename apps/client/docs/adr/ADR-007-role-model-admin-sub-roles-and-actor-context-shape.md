@@ -1,5 +1,9 @@
 # ADR-007: Role Model Consolidation and Actor Context Boundaries
 
+Status: Accepted
+Owner: Client Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

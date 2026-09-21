@@ -13,6 +13,7 @@ export enum AdminCapability {
   MANAGE_USERS = "MANAGE_USERS",
   VIEW_FINANCIALS = "VIEW_FINANCIALS",
   PROCESS_PAYOUTS = "PROCESS_PAYOUTS",
+  RECONCILE_PAYMENTS = "RECONCILE_PAYMENTS",
   MANAGE_VERIFICATION = "MANAGE_VERIFICATION",
   EXPORT_DATA = "EXPORT_DATA",
   VIEW_CONTENT = "VIEW_CONTENT",
@@ -57,6 +58,10 @@ export const ADMIN_CAPABILITY_ROLE_MAP: Record<
     AdminRole.AUDITOR,
   ],
   [AdminCapability.PROCESS_PAYOUTS]: [
+    AdminRole.SUPER_ADMIN,
+    AdminRole.FINANCE_MANAGER,
+  ],
+  [AdminCapability.RECONCILE_PAYMENTS]: [
     AdminRole.SUPER_ADMIN,
     AdminRole.FINANCE_MANAGER,
   ],
@@ -275,6 +280,49 @@ export const ADMIN_ACTION_POLICY_MAP = {
   onboardingIdempotencyReconcile: strictMutationPolicy(
     AdminCapability.SYSTEM_ADMIN_ONLY,
     "onboarding",
+  ),
+
+  // ---- Subscriptions & Tiers (Tier 1) ----
+  get_subscription_plans: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  update_subscription_plan: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "subscriptions",
+  ),
+  get_professional_subscription: lowRiskReadPolicy(
+    AdminCapability.VIEW_FINANCIALS,
+  ),
+  override_professional_subscription: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "subscriptions",
+  ),
+  override_trust_tier: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  manage_professional_badge: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  create_profile_boost: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "subscriptions",
+  ),
+  get_lead_credit_wallet: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  adjust_lead_credit_wallet: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "wallets",
+  ),
+  create_mpesa_payout: strictMutationPolicy(
+    AdminCapability.PROCESS_PAYOUTS,
+    "mpesa_payouts",
+  ),
+  search_mpesa_transactions: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  get_mpesa_transaction_details: lowRiskReadPolicy(
+    AdminCapability.VIEW_FINANCIALS,
+  ),
+  requery_mpesa_transaction: strictMutationPolicy(
+    AdminCapability.RECONCILE_PAYMENTS,
+    "mpesa_reconciliation",
   ),
 } as const satisfies Record<string, AdminActionPolicy>;
 

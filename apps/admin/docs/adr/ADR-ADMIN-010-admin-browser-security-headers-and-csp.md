@@ -1,5 +1,9 @@
 # ADR-ADMIN-010: Admin Browser Security Headers and CSP
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

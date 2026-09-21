@@ -14,6 +14,397 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Engineering Guardrails (Staff Guidance)
 
+## [Unreleased]
+
+### Added & Security — P0-7 Financial Custody Prohibition & Paid M-Pesa Operational Gating
+
+- **Public Marketing & Onboarding Escrow Purge (`app/sign-up/[[...sign-up]]/page.tsx`, `app/professional/page.tsx`, `components/professional/Professionals.tsx`, `components/professional/MockDashboardUi.tsx`)**:
+  - Eradicated all misleading custodial claims ("bank-grade escrow", "escrow milestone protection", "verified milestone escrows", "escrow payments") across client landing, onboarding, and dashboard mock components.
+  - Replaced with compliant non-custodial terminology: "Milestone Stage Tracking", "Structured milestone contracts", "Milestone stage sign-offs", and "Milestone Recorded".
+
+- **Automated CI Non-Custodial Copy Guard (`__tests__/legal/no-escrow-marketing-copy.test.ts`)**:
+  - Added automated Vitest suite (346 tests) scanning all public marketing, onboarding, and component files to prevent regression of banned custodial patterns (`/escrow/i`, `/bank-grade escrow/i`, `/custodial wallet/i`, `/safeguarded funds/i`, `/secure hold/i`, `/we hold your funds/i`).
+  - Scoped scanner to exclude legal disclaimer pages (`/legal/**`) where legitimate statutory non-custodial disclosures must reside.
+
+- **Public Founding Professional Commercial Terms & Governance (`app/legal/founding-pro-terms/page.tsx`, `app/legal/layout.tsx`)**:
+  - Published comprehensive public commercial terms articulating 180-day 100% comped access, KES 21,000 nominal commercial valuation, and a strict no-surprise conversion policy.
+  - Formulated automated notice schedule (Day -30, Day -14, Day -7, Day -1) and graceful degradation to the free tier upon expiry without affirmative payment initiation.
+  - Established internal 250 verified-professional cohort cap gated by completed statutory accreditation with `AdminAuditLog` cryptographic tamper-evidence.
+  - Added explicit involuntary-removal terms for credential falsification or safety violations, and linked in legal navigation.
+
+- **Billing Kill-Switch & Webhook Idempotency Hardening (`app/api/webhooks/mpesa/stk-callback/route.ts`, `app/lib/capabilities/registry.ts`, `app/lib/infrastructure/env.ts`)**:
+  - Added `FEATURE_BILLING_ENABLED` capability flag and `isBillingEnabled()` helper in client registry to provide an instant, zero-redeploy kill-switch for all outbound M-Pesa STK push triggers.
+  - Hardened M-Pesa STK callback route with explicit terminal transaction state checks, guaranteeing idempotent no-op responses on callback replay.
+  - Created automated test suite `__tests__/webhooks/mpesa-idempotency.test.ts` (3 tests) validating replay protection.
+
+### Added & Security — P0-8 Privacy & Safety Operations Launch Hardening & Legal Governance
+
+- **Interim Privacy Policy v1.0 & Legal Blocker Remediation (`apps/client/app/legal/privacy/page.tsx`, `apps/client/app/legal/layout.tsx`)**:
+  - Replaced mock placeholder ("Pinky Promise") with a production Interim Privacy Policy compliant with Kenya Data Protection Act 2019 (DPA) and GDPR.
+  - Formally designated Data Controller (Build Market Technologies Ltd) and statutory contact point (`privacy@buildmarket.app`).
+  - Mapped data collection to ADR-006 data classification tiers: Class A (Restricted), Class B (Sensitive & Identity), Class C (Internal Operational), and Class D (Public Profile).
+  - Explicitly disclosed lawful bases under DPA Section 30 (Contractual Performance, Statutory Tax Obligations, Consent, Legitimate Interests).
+  - Published transparent subprocessor inventory (Clerk, AWS S3, Neon, Resend, Safaricom Daraja, Africa's Talking) and cross-border safeguards (DPAs with Standard Contractual Clauses).
+  - Disclosed masked communication protections for homeowner telephone numbers and exact street addresses prior to proposal acceptance.
+  - Provided direct links to statutory Data Subject Rights: Portability (`/api/user/export`), Rectification (`/api/user/rectification`), and Erasure (`/api/user/deletion` with 30-day grace period and 7-year anonymized financial ledger retention), as well as complaint mechanisms to the Office of the Data Protection Commissioner (ODPC).
+  - Updated legal layout header navigation to display links across the full trust and safety suite.
+
+- **CI Legal Placeholder Copy Guard & Governance Integration (`apps/client/__tests__/legal/no-placeholder-copy.test.ts`, `scripts/check-launch-documentation-governance.mjs`)**:
+  - Added automated Vitest suite asserting zero occurrences of prohibited placeholder or joke copy (`pinky promise`, `teaching our lawyers`, `lorem ipsum`, `under construction`, `TODO`) across all `.tsx` and `.ts` files under `apps/client/app/legal/`.
+  - Wired `checkLegalCopy()` into `scripts/check-launch-documentation-governance.mjs` to block CI regressions across legal pages.
+
+- **Customer Trust & Public Safety Policy Suite (`apps/client/app/legal/safety-and-verification/page.tsx`, `apps/client/app/legal/review-policy/page.tsx`, `apps/client/app/legal/disputes-and-complaints/page.tsx`, `apps/client/app/legal/content-moderation/page.tsx`, `apps/client/public/.well-known/security.txt`)**:
+  - **Safety & Verification Standards**: Disambiguates Statutory Verification (NCA/EBK/BORAQS), Platform Performance (response times, completed projects), and Verified Reputation per Houzz precedent; reaffirms P0-7 non-custodial role.
+  - **Review & Rating Policy**: Enforces the Verified Hire requirement (only authenticated completed projects can submit ratings), prohibits astroturfing and competitor manipulation, and establishes contractor right-of-reply and appeal channels (`reviews@buildmarket.app`).
+  - **Complaints & Dispute Resolution**: Defines three-stage dispute process (Direct good-faith negotiation $\rightarrow$ Marketplace conciliation $\rightarrow$ Binding NCIA arbitration in Nairobi) with non-custodial limitation of liability (`disputes@buildmarket.app`).
+  - **Content Moderation & Acceptable Use**: Prohibits unlicensed structural engineering, non-KEBS materials, stolen portfolio media, and contact circumvention, defining takedown SLAs and statutory board reporting (`moderation@buildmarket.app`).
+  - **Security Disclosure (RFC 9116)**: Published machine-readable security contact file at `apps/client/public/.well-known/security.txt` pointing to `security@buildmarket.app` and `privacy@buildmarket.app`.
+
+### Security & Fixed — Cross-Cutting Architectural Hardening, Concurrency & Boundary Alignment
+
+- **Single-Use Ticket Redemption Concurrency & Staging E2E Command Queue Chaining (`apps/client/components/auth/ClerkSignInWidget.tsx`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress/README.md`, `scripts/wait-for-staging-deployment.mjs`)**:
+  - **Ticket Exchange Concurrency Remediation (`apps/client/components/auth/ClerkSignInWidget.tsx`)**: Resolved issue where switching between staging identities (e.g. in spec `06-messaging.cy.ts` where client sends a message and professional subsequently signs in) caused the page to hang indefinitely on `<AuthPageSkeleton />`. Calling `clerk.signOut()` triggers a state update that invokes the effect cleanup (`isMounted = false`); when `clerk.client.signIn.create({ strategy: "ticket" })` resolved, the `if (!isMounted) return;` guard prematurely aborted execution before calling `clerk.setActive` or redirecting, burning the single-use ticket at Clerk without activating the session in the browser. Removed premature `isMounted` abort guards so single-use ticket exchange and browser redirection run to completion.
+  - **Cypress Command Queue Chaining (`apps/client/cypress/support/staging-test-control.ts`)**: Chained `visitTicketUrlWithStagingAuth(res.signInUrl)` return value in `loginStagingUser` and `resetStagingIdentity`, ensuring Cypress commands sequentially wait for ticket exchange, perimeter cookie restoration, and page navigation before evaluating DOM, pathname, and Clerk session assertions.
+  - **Deployment Wait Gate Ancestry Check (`scripts/wait-for-staging-deployment.mjs`)**: Added git ancestry evaluation (`git merge-base --is-ancestor`) when the active Vercel deployment commit is a git descendant of the expected SHA. Prevents 600s timeout false-positives when an auto-deployment on `staging` supersedes an earlier queued build, and gracefully exits via `process.exitCode = 0` to drain libuv handles.
+  - **Cypress Testing Documentation Audit & Modernization (`apps/client/cypress/README.md`)**: Fully updated and audited Cypress documentation to document both local dev testing and the live 8-spec Staging Release E2E suite (`01`–`08`), test-control architecture, command references, preflight and deployment readiness scripts, and architectural guardrails (ticket precedence, CSRF origin handling, perimeter cookie preservation, and zero-weakening policy).
+
+- **Marketplace Leads Idempotency Scope Registration & `withAuth` Error Isolation (`apps/client/app/lib/services/idempotency.service.ts`, `apps/client/__tests__/lib/idempotency.service.test.ts`, `apps/client/app/lib/api/api-middleware.ts`, `apps/client/app/lib/domains/marketplace-leads/repository.ts`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress/support/e2e.ts`)**:
+  - Registered `"marketplace-leads"` in `IdempotencyReplayScope` and `IDEMPOTENCY_REPLAY_SCOPE_POLICIES` with `allowedDataClasses: CLASS_B_C_AND_D`, resolving uncaught runtime exception in `IdempotencyService.checkOrCreate` across lead qualification and routing routes (`/api/leads/qualification/routing/[id]/accept`).
+  - Aligned explicit scope expectation checklist in `apps/client/__tests__/lib/idempotency.service.test.ts` to include `"marketplace-leads"`, resolving unit test regression assertion mismatch and restoring 100% pass rate.
+  - Decoupled authenticated route handler execution from the auth resolution `try/catch` block in `withAuth` (`apps/client/app/lib/api/api-middleware.ts`), preventing unhandled downstream domain exceptions from being masked as HTTP 401 `"Authentication failed"`.
+  - Added `toCountyEnum` helper in `apps/client/app/lib/domains/marketplace-leads/repository.ts` to normalize `projectCounty` string representations to uppercase `County` enum values when bridging marketplace leads to CRM pipeline `Lead` records in `acceptRoutingEvent`.
+  - Synchronized Clerk session readiness checks across `loginStagingUser` and `resetStagingIdentity` in `staging-test-control.ts` with explicit `window.Clerk.session` assertions and 15s cookie retrieval timeouts.
+  - Guarded indexed array access in `cypress/support/e2e.ts` for strict TypeScript compile-time safety.
+
+- **Edge Middleware Resilience & Clerk Dynamic Keys Crash Remediation (`apps/client/middleware.ts`, `apps/client/cypress/support/staging-test-control.ts`)**:
+  - Resolved `500 MIDDLEWARE_INVOCATION_FAILED` ("Routing Middleware for this page failed") occurring across all Cypress staging E2E specs on `/sign-in`.
+  - Removed passing `secretKey` to `clerkMiddlewareOptions`. In `@clerk/nextjs@7`, passing `secretKey` activates Dynamic Keys mode, triggering `encryptClerkRequestData` which asserts `CLERK_ENCRYPTION_KEY`. Without `CLERK_ENCRYPTION_KEY` configured, Clerk throws `encryptionKeyMissing` ("Clerk: Missing CLERK_ENCRYPTION_KEY. Required for propagating secretKey middleware option"), causing Vercel Edge Middleware to immediately crash with HTTP 500 on all incoming requests.
+  - Reverted to static environment key resolution where `clerkMiddleware` reads the ambient secret key without requiring `CLERK_ENCRYPTION_KEY`.
+  - Wrapped `(clerkHandler as any)(req, event)` in a defensive `try / catch` block in `middleware.ts`. In the event of an unhandled internal Clerk exception on public/auth routes (`/sign-in`, `/sign-up`), middleware logs the exception and safely falls back to `applyDocumentCspHeaders` rather than taking down the entire site with an unrecoverable 500 page.
+  - Added fail-fast detection for `MIDDLEWARE_INVOCATION_FAILED` in `cypress/support/staging-test-control.ts` across `loginStagingUser` and `resetStagingIdentity` to immediately terminate the test and surface diagnostic DOM contents instead of waiting for a 15-second navigation timeout.
+
+- **Staging E2E Autopsy v2 Phase 5: Structural Hardening & Production Exclusion (`packages/db/src/staging-test-runs/identity-contracts.ts`, `apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts`, `apps/client/app/lib/domains/testing/test-control/repository.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/api/internal/test-control/route.ts`, `apps/client/app/api/health/route.ts`, `apps/client/app/lib/security/internal-secret.ts`, `apps/client/app/lib/security/middleware/onboarding-resolver.ts`, `apps/client/cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts`, `apps/client/middleware.ts`, `scripts/preflight-staging-db-check.mjs`, `package.json`, `docs/runbooks/staging-e2e-troubleshooting.md`)**:
+  - Eliminated Prisma interactive-transaction timeout failures by setting explicit `timeout: 30_000` and `maxWait: 15_000` in `restoreIdentityBaseline` and `cleanupRun` (C-8).
+  - Consolidated canonical identity pool into `packages/db/src/staging-test-runs/identity-contracts.ts` (`STAGING_IDENTITY_SLOTS` with 4 slots: `pro-1`, `pro-2`, `client-1`, `client-2`), eliminating duplicate definitions in `identity-repository.ts` and `clerk-identity-adapter.ts` (C-12).
+  - Enforced strict fail-closed AND gate on `/api/internal/test-control` (`!isActualProduction && Boolean(env.stagingTestControl?.enabled) && (env.otel.ddEnv === "staging" || env.isVercelPreview)`) and wired `assertTestControlPermitted()` domain guard across mutating service methods (C-13, S-10).
+  - Surfaced `stagingTestControlEnabled: boolean` in `/api/health` and asserted it in `scripts/preflight-staging-db-check.mjs` before test suite execution, blocking runs early if `ENABLE_STAGING_TEST_CONTROL=true` is unconfigured.
+  - Partitioned `/api/health` payload: unauthenticated public callers receive only status, version, and sanitized dependency statuses (with internal error messages omitted); system metrics, circuit breakers, cache statistics, Clerk diagnostics, and staging test control state are strictly gated behind `hasValidInternalSecret` (C-14c/f).
+  - Replaced secret-length leaking string comparison in `timingSafeEqualStrings` (`apps/client/app/lib/security/internal-secret.ts`) with fixed-length SHA-256 digests evaluated via constant-time XOR accumulator (S-9).
+  - Added 30s in-memory cache with size capping to `resolveOnboardingStatus` in `onboarding-resolver.ts`, eliminating repetitive `/api/internal/user-status` fetch storms during navigation, with automatic cache invalidation on identity baseline resets (S-1).
+  - Removed duplicate dead `capabilityBoundaryForPath` check inside `clerkHandler` in `apps/client/middleware.ts` and updated outer middleware to return standard HTML 404 responses for browser navigations on disabled capability routes (S-6).
+  - Replaced hardcoded fallback in spec `02-routing-and-masked-disclosure.cy.ts` with direct validation and assertion of `clientEmail` from `seedStagingScenario("lead-routing")` (S-4).
+  - Added `test:verify-staging-cleanup` script to root `package.json` and updated `docs/runbooks/staging-e2e-troubleshooting.md` to reflect pool size 4, kill switch mechanics, and middleware crash remediation.
+  - Added direct Postgres and Clerk identity slot preflight assertions to `scripts/preflight-staging-db-check.mjs` with `CLERK_SECRET_KEY` pass-through in `.github/workflows/staging-e2e.yml`, verifying that all 4 canonical slots exist with matching roles and active credentials prior to suite dispatch (S-2).
+  - Added unit test asserting `ddEnv="staging"` + `enabled=false` returns HTTP 404 with `x-test-control-denial: not_staging_environment` in `apps/client/__tests__/api/internal/test-control.route.test.ts` (C-13).
+  - Reconciled identity pool inventory tables across runbooks (`docs/runbooks/staging-test-identity-lifecycle.md`, `docs/runbooks/staging-e2e-troubleshooting.md`) to 4 canonical slots (`pro-1`, `pro-2`, `client-1`, `client-2`) (S-2).
+  - Completed and audited all Phase 5 checklist deliverables in `apps/client/docs/STAGING-E2E-STAFF-AUTOPSY-V2.md`.
+
+- **Staging E2E Autopsy v2 Phase 4: Harness Robustness, Queue Path & Leak Prevention (`apps/client/cypress.config.ts`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress/support/e2e.ts`, `apps/client/app/lib/domains/testing/test-control/contracts.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/lib/domains/testing/test-control/repository.ts`, `apps/client/app/api/internal/test-control/route.ts`, `apps/client/app/api/internal/queue-health/route.ts`, `apps/client/app/api/health/route.ts`, `apps/client/cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts`, `apps/client/cypress/e2e/staging/07-queue-recovery.cy.ts`, `scripts/preflight-staging-db-check.mjs`)**:
+  - Implemented spec-scoped Cypress task state in `apps/client/cypress.config.ts` via `requireActive(spec)` (C-10), preventing shared module-scope run ID and grant token bleed across concurrent or sequential spec runs.
+  - Implemented projection redaction in `stagingTestControl:getProjection` in `apps/client/cypress.config.ts` (C-11): hashes user emails using SHA-256 (`emailHash`) and projects only opaque entity IDs and counts across the task boundary.
+  - Configured 900s run and grant token lifetime: raised `MAX_GRANT_LIFETIME_SECONDS` to 900 in `contracts.ts`, added `lifetimeSeconds` to `CreateRunActionSchema` and `TestControlRepository.createRun`, and configured 900s grant lifetimes in `service.ts` and `cypress.config.ts` (C-9).
+  - Shortened test ticket lifetime to 60s (`expiresInSeconds: 60`) in `issueBrowserSessionHandoff` and `resetIdentityBaseline` in `service.ts` (C-11).
+  - Scrubbed live test tickets from Cypress logs (`{ log: false }`) and immediately stripped single-use ticket search parameters via `window.history.replaceState` in `visitTicketUrlWithStagingAuth` in `staging-test-control.ts` (C-11).
+  - Added error logging before rethrow in `Cypress.on("uncaught:exception")` in `cypress/support/e2e.ts` (S-7).
+  - Created dedicated `/api/internal/queue-health` endpoint in `apps/client/app/api/internal/queue-health/route.ts` (S-5) probing BullMQ `MPESA_QUEUE_NAMES.PAYMENTS` queue counts, worker connection status, and consumer heartbeat timestamps behind `x-internal-secret` and staging perimeter protection.
+  - Replaced rate-limiter inference in `checkRedis()` in `apps/client/app/api/health/route.ts` with direct queue connectivity probe, reclassifying Redis as a critical dependency when `env.otel.ddEnv === "staging"` (C-14e).
+  - Wired `edgeEnv.redisUrl` in `apps/client/app/lib/infrastructure/edge-env.ts` to satisfy `envBoundary` security rule across health probes.
+  - Fixed DeepScan `INSUFFICIENT_NULL_CHECK` issues in `apps/client/cypress.config.ts` across `issueSession`, `resetIdentityBaseline`, `seedMpesa`, and `seedScenario` tasks by consistently accessing `params.spec`.
+  - Reconciled client test session redirection in `TestControlService.issueBrowserSessionHandoff` (`apps/client/app/lib/domains/testing/test-control/service.ts`) by targeting `/onboarding` for `CLIENT` role to match baseline staging un-onboarded identity constraints, eliminating the secondary redirect cascade from `/homeowner-dashboard`.
+  - Hardened single-use ticket browser visit in `visitTicketUrlWithStagingAuth` (`apps/client/cypress/support/staging-test-control.ts`): cleared browser `localStorage` alongside cookies to prevent ambient session cross-contamination between consecutive specs, and preserved search parameters during Clerk ticket consumption.
+  - Resolved DeepScan `INSUFFICIENT_NULL_CHECK` in `apps/client/middleware.ts` by safely evaluating `authObject?.userId` and reusing `userId` downstream.
+  - Updated Cypress spec `04-mpesa-replay-and-idempotency.cy.ts` to assert strict HTTP 202 on both initial callback and replay deliveries (S-5).
+  - Enhanced Cypress spec `07-queue-recovery.cy.ts` with `checkStagingQueueHealth` pre-check, conditionally skipping the spec with a named log reason when the queue backend is disconnected or no active consumer is detected within the recovery window (S-5).
+  - Extended `scripts/preflight-staging-db-check.mjs` to probe `/api/internal/queue-health` during preflight and report queue backend connectivity and consumer availability.
+
+- **Edge/Node Authentication Parity & Edge Middleware Session Verification (`apps/client/app/lib/infrastructure/edge-env.ts`, `apps/client/middleware.ts`, `apps/client/app/lib/security/clerk-fingerprint.ts`, `apps/client/__tests__/lib/edge-env.test.ts`, `apps/client/__tests__/middleware/protected-api-auth.test.ts`)**:
+  - Reconciled `edgeEnv.clerkPublishableKey` in `apps/client/app/lib/infrastructure/edge-env.ts` with staging Frontend API (`https://clerk.staging.buildmarket.app` -> `pk_live_Y2xlcmsuc3RhZ2luZy5idWlsZG1hcmtldC5hcHAk`), matching the Node runtime resolution in `env.ts` and eliminating cookie suffix divergence (`_bcZBSbmt`) between browser session cookies and Edge middleware (resolving H-1).
+  - Added `clerkSecretKey` getter to `edgeEnv.ts` reading `process.env.CLERK_SECRET_KEY` and wired `secretKey: clerkSecretKey` into `clerkMiddlewareOptions` in `apps/client/middleware.ts`, allowing Edge middleware to perform direct session token signature verification.
+  - Added defensive guard `isPrimaryDomain` in `apps/client/middleware.ts` ensuring `apps/client` does not activate Clerk satellite mode on its own staging or production domains (`staging.buildmarket.app`, `buildmarket.app`), preventing cross-domain sync deadlocks on standalone deployments (resolving H-4').
+  - Enhanced `unauthorizedApiResponse` in `apps/client/middleware.ts` to accept diagnostic response headers and sanitize values to printable ASCII; stamped `x-bm-mw-decision`, `x-bm-auth-reason`, and `x-bm-clerk-pk` onto 401 unauthenticated responses in staging/preview/dev environments to eliminate black-box API denials.
+  - Forwarded `edgeUserId: authObject.userId` and `decision: "mw_allow_protected_api"` on allowed protected API routes in `middleware.ts`, restoring `x-bm-edge-user` header propagation for downstream route handlers and the `/api/health/auth-parity` diagnostic probe.
+  - Hardened `fingerprintPublishableKey` in `apps/client/app/lib/security/clerk-fingerprint.ts` against non-ASCII replacement characters when decoding synthetic test keys, preventing HTTP ByteString header encoding exceptions.
+  - Added 4 isolated reproduction unit tests in `apps/client/__tests__/lib/edge-env.test.ts` and `apps/client/__tests__/middleware/protected-api-auth.test.ts`.
+
+- **Staging Perimeter Authentication Preservation on Single-Use Ticket Exchange (`apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress.config.ts`)**:
+  - Resolved `cy.visit()` failure on ticket URLs returning `content-type: 'text/plain'` (HTTP 401 from `handleStagingProtection`): in `staging-test-control.ts`, `cy.clearCookies()` previously purged the perimeter bypass cookie `bm_staging_auth` alongside stale session cookies before visiting single-use Clerk ticket URLs, causing Edge middleware to reject browser visits with a 401 Basic Auth challenge.
+  - Implemented `visitTicketUrlWithStagingAuth(signInUrl)` in `staging-test-control.ts`: immediately restores the `bm_staging_auth` cookie in Cypress's cookie jar after `cy.clearCookies()`, and attaches HTTP Basic Auth credentials (`auth: { username, password }`) to `cy.visit()` options if configured.
+
+- **Staging E2E Autopsy v2 Phase 3: Ownership, Cleanup, and Data Safety (`apps/client/app/lib/domains/testing/test-control/repository.ts`, `apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `packages/db/src/staging-test-runs/contracts.ts`, `scripts/emergency-staging-cleanup.mjs`, `scripts/verify-staging-cleanup.mjs`, `apps/client/__tests__/lib/domains/testing/test-control.repository.test.ts`, `apps/client/__tests__/lib/domains/testing/test-control.identity-repository.test.ts`, `packages/db/src/staging-test-runs/__tests__/contracts.test.ts`)**:
+  - Implemented derived review ownership in `getRunProjection` and `cleanupRun` in `apps/client/app/lib/domains/testing/test-control/repository.ts` (C-3): queries run-owned project IDs before deletion and targets reviews matching `{ stagingTestRunId: runId }` OR `{ projectId: { in: ownedProjectIds } }`, preventing orphaned reviews that lose their foreign key reference when projects are deleted with `onDelete: SetNull`.
+  - Driven `cleanupRun` deletes strictly from `STAGING_CLEANUP_DEPENDENCY_ORDER` via a type-safe `DELETERS` map in `apps/client/app/lib/domains/testing/test-control/repository.ts` (C-4): exported `StagingCleanupEntity` type from `packages/db/src/staging-test-runs/contracts.ts`, replacing arbitrary loose sequence statements with guaranteed compile-time and runtime dependency leaf-to-root execution.
+  - Implemented identity pool user protection and in-transaction post-condition survival check in `TestControlRepository.cleanupRun` (C-5): excludes all configured staging pool emails from `user.deleteMany({ email: { notIn: poolEmails } })`, and verifies `survivingPool === poolEmails.length` within the transaction, immediately aborting and rolling back if any pool user was deleted.
+  - Extended step-9 "zero owned records remain" assertion to include derived reviews (`remainingReviews > 0`) before marking `StagingTestRun` as `CLEANED` (C-3).
+  - Raised interactive transaction budget in `TestControlRepository.cleanupRun` and `TestControlIdentityRepository.restoreIdentityBaseline` to `timeout: 20_000`, `maxWait: 8_000`, and `isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted` (C-8), preventing `P2028` timeout failures on cold serverless invocations and database connection latency.
+  - Hardened emergency sweep script in `scripts/emergency-staging-cleanup.mjs` (C-7): adjusted selection predicate to `expiresAt < NOW() - INTERVAL '1 minute'` with `workflowRunId` scoping when running in GitHub Actions (C-7a), added preflight `to_regclass` table existence assertion against Prisma `@@map` drift (C-7b), isolated each stranded run in a per-run `try / BEGIN / COMMIT / catch / ROLLBACK` block (C-7c), and added GitHub Actions warning annotation reporting incomplete cleanup count while preserving exit code 0 (C-7d).
+  - Created standalone post-cleanup invariant assertion script `scripts/verify-staging-cleanup.mjs` (Gate 3) asserting zero active/cleaning runs, zero unreleased leases, zero orphaned derived and direct reviews, and full pool user retention.
+  - Added unit test suite in `apps/client/__tests__/lib/domains/testing/test-control.repository.test.ts` validating execution order, derived review ownership, pool user protection, and interactive transaction options.
+
+- **Staging E2E Autopsy v2 Phase 2: Ticket Precedence, Single-Use Ticket Protection, & Identity Pool Lease Isolation (`packages/db/src/staging-test-runs/identity-contracts.ts`, `apps/client/app/lib/domains/testing/test-control/contracts.ts`, `apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts`, `apps/client/app/lib/domains/testing/test-control/repository.ts`, `apps/client/app/api/internal/test-control/route.ts`, `apps/client/app/sign-in/[[...sign-in]]/page.tsx`, `apps/client/components/auth/ClerkSignInWidget.tsx`, `apps/client/app/lib/security/middleware/redirect-policy.ts`, `apps/client/scripts/report-security-drift.mjs`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress.config.ts`, `apps/client/cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts`, `apps/client/__tests__/lib/domains/testing/test-control.service.test.ts`, `packages/db/src/staging-test-runs/__tests__/identity-contracts.test.ts`, `apps/client/__tests__/middleware/route-guards.test.ts`, `apps/client/__tests__/middleware/clerk-middleware-dispatch.test.ts`, `apps/client/__tests__/middleware/middleware.dev-bypass.test.ts`)**:
+  - Enforced ticket precedence over ambient sessions in `apps/client/app/sign-in/[[...sign-in]]/page.tsx` (C-1): bypassed the `userId` short-circuit when `__clerk_ticket` or `ticket` is present in query parameters, preventing premature redirection that discarded single-use tokens and bound browser test flows to stale identity state.
+  - Implemented sign-out guard in `apps/client/components/auth/ClerkSignInWidget.tsx` (C-1): when mounting with an active single-use ticket while signed into an existing ambient session, explicitly calls `clerk.signOut({ redirectUrl: undefined })` before ticket exchange. Guarded against ticket re-consumption on component remount using `lastAttemptedTicketRef`.
+  - Introduced non-destructive `BORROWED` lease kind in `packages/db/src/staging-test-runs/identity-contracts.ts` and `apps/client/app/lib/domains/testing/test-control/identity-repository.ts` (C-6): widened scenario support (`isAllowedScenarioForIdentityLease`) for `BORROWED` leases across all valid staging scenarios while strictly restricting destructive resets to `onboarding` and `verification`.
+  - Routed `issueBrowserSessionHandoff` through `identityRepository.leaseIdentity({ kind: "BORROWED" })` in `apps/client/app/lib/domains/testing/test-control/service.ts`, minting the Clerk sign-in token for `lease.clerkId` instead of hardcoding static slot 1 accounts, eliminating test order-dependence and concurrent session revocation between specs.
+  - Hardened `apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts` (S-3): invokes `markLeaseFailed(lease.id)` on the `NON_POOL_CLERK_USER` branch before returning error.
+  - Enforced same-origin sign-in URL normalization in `apps/client/cypress.config.ts`: forces tickets and redirect URLs to Cypress `baseUrl` origin (`base.origin`), preventing cross-origin redirection failures mid-test caused by divergent `appUrl` environments.
+  - Hardened Cypress ticket handling in `apps/client/cypress/support/staging-test-control.ts`: executes `cy.clearCookies()` immediately before ticket visits and asserts the presence of both `__session*` and `__client_uat*` cookies with explicit failure messaging.
+  - Replaced hardcoded pool emails in `apps/client/cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts` with dynamic `clientEmail` returned from `seedScenario` (S-4).
+  - Reconciled `resolvePrimaryOrigin()` precedence in `apps/client/app/lib/security/middleware/redirect-policy.ts`: prioritizes explicitly injected test/in-memory `env.clerk.isSatellite` and `env.appUrl` configurations over ambient `edgeEnv` fallbacks, preserving satellite test assertions.
+  - Replaced object spread (`...meta`) in `apps/client/app/api/internal/test-control/route.ts` `deny()` logging with explicit `detail` attribute for log safety static analyzer compliance.
+  - Added `edge-env.ts` to `ENV_ALLOWLIST_FILES` in `apps/client/scripts/report-security-drift.mjs`.
+  - Added `clearAuthBounce` to mock declarations across `route-guards.test.ts`, `clerk-middleware-dispatch.test.ts`, and `middleware.dev-bypass.test.ts`.
+
+- **Staging E2E Autopsy v2 Phase 1: Edge Environment Inlining Architecture, Rate Limiter Resilience, & Auth Parity Probe (`apps/client/app/lib/infrastructure/edge-env.ts`, `apps/client/app/lib/api/rate-limit.ts`, `apps/client/app/api/health/route.ts`, `apps/client/app/api/healthz/route.ts`, `apps/client/app/api/health/auth-parity/route.ts`, `apps/client/app/lib/security/internal-secret.ts`, `apps/client/app/lib/security/middleware/staging-auth.ts`, `apps/client/app/lib/security/middleware/redirect-policy.ts`, `apps/client/middleware.ts`, `scripts/wait-for-staging-deployment.mjs`, `apps/client/__tests__/lib/rate-limit-redis.test.ts`, `apps/client/__tests__/api/health.route.test.ts`, `apps/client/__tests__/api/auth-parity.route.test.ts`)**:
+  - Created `apps/client/app/lib/infrastructure/edge-env.ts` with statically inlinable member expressions for Webpack/Turbopack's DefinePlugin in Edge runtime (`clerkPublishableKey`, `clerkFrontendApi`, `clerkIsSatellite`, `clerkDomain`, `internalServiceSecret`, `internalApiSecret`, `stagingAuthSecret`, `appUrl`, `apiUrl`, `ddEnv`, `cspReportOnly`). Resolves H-1 / Q5 where dynamic `process.env[name]` lookups bypassed build-time compiler inlining and produced `undefined` or mismatched auth state in Edge middleware.
+  - Removed module-scope runtime mutations of `process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` in `apps/client/app/lib/infrastructure/env.ts`, preserving immutability and compiler inlining integrity across runtimes.
+  - Fixed `resolveRateLimitBackend()` in `apps/client/app/lib/api/rate-limit.ts` to return `"redis"` in production only when `hasUpstashCredentials` is strictly present, honoring the documented contract in `.env.example` and `env.ts`.
+  - Hardened `checkRateLimit()` catch block in `apps/client/app/lib/api/rate-limit.ts`: while strict production continues to fail closed against DDoS on Redis outage, staging, preview, and test environments fall back to the in-memory store, preventing cascading 429 blackouts across all routes during CI runs when Upstash reaches daily quota or connection limits.
+  - Added perimeter secret and internal secret exemptions to `apps/client/app/api/health/route.ts`: requests presenting valid `x-internal-secret` or `x-staging-secret`, as well as `?shallow=true` probes, bypass public IP rate limiting.
+  - Surface Node Clerk diagnostics (`clerkPublishableKeyFingerprint`, `clerkInstanceType`, `clerkFrontendApi`, `clerkIsSatellite`) and `stagingTestControlEnabled` in `/api/health` shallow and deep responses when authenticated by `x-internal-secret` (C-14d).
+  - Enhanced lightweight process probe `/api/healthz` with `buildSha`, `deploymentId`, `version`, and `bootedAt`, enabling sub-millisecond, zero-dependency deployment verification.
+  - Created diagnostic parity endpoint `apps/client/app/api/health/auth-parity/route.ts` (P-1) comparing `x-bm-edge-user` forwarded by middleware with `(await auth()).userId` evaluated in Node, gated by `x-internal-secret` and `x-staging-secret`.
+  - Updated `scripts/wait-for-staging-deployment.mjs` to probe `/api/healthz` first with fallback to `/api/health?shallow=true`, forwarding `x-internal-secret` alongside staging credentials.
+  - Added comprehensive unit test suites in `__tests__/api/auth-parity.route.test.ts`, updated `__tests__/lib/rate-limit-redis.test.ts`, and updated `__tests__/api/health.route.test.ts`.
+
+- **Staging E2E Autopsy v2 Phase 0: Loop Termination, Deployment Readiness Gate & Diagnostic Scaffolding (`apps/client/app/api/health/route.ts`, `apps/client/app/api/internal/test-control/route.ts`, `apps/client/app/lib/security/clerk-fingerprint.ts`, `apps/client/app/lib/security/middleware/redirect-policy.ts`, `apps/client/middleware.ts`, `apps/client/cypress.staging.config.ts`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/package.json`, `scripts/wait-for-staging-deployment.mjs`, `.github/workflows/staging-e2e.yml`, `apps/client/__tests__/lib/redirect-policy.test.ts`, `apps/client/__tests__/api/internal/test-control.route.test.ts`, `apps/client/__tests__/api/health.route.test.ts`)**:
+  - Implemented `AUTH_BOUNCE_COOKIE = "bm_auth_bounce"` (TTL 60s), `readBounce`, `clearAuthBounce`, and `authLoopDiagnostic` in `apps/client/app/lib/security/middleware/redirect-policy.ts` (C-2). Terminates unbounded Edge-versus-Node redirect loops on the 3rd hop in non-production environments with HTTP 503 `AUTH_REDIRECT_LOOP_BROKEN`, returning categorical diagnostic telemetry (bounce counts, cookie presence flags, Clerk publishable key fingerprint, satellite flags) while preserving fail-closed isolation.
+  - Fixed CSP nonce dropping in `redirect-policy.ts` when already on `/sign-in`, ensuring `applyDocumentCspHeaders` preserves `x-nonce` on the loop-breaker bypass.
+  - Created `apps/client/app/lib/security/clerk-fingerprint.ts` to extract publishable key prefixes (`pk_test` / `pk_live`) and base64-decode the embedded FAPI host without leaking raw secret tokens.
+  - Updated `apps/client/middleware.ts` to call `clearAuthBounce` on all allowed authenticated transitions (`mw_allow_onboarding`, `mw_allow_protected`, `mw_allow_professional_pending_verification`), attach response headers `x-bm-mw-decision` and `x-bm-auth-reason` in staging (P-2), and forward request header `x-bm-edge-user` for downstream Edge/Node auth parity checks (P-1).
+  - Added `buildSha`, `deploymentId`, and `bootedAt` to `/api/health` in both shallow and deep modes in `apps/client/app/api/health/route.ts` (C-14a).
+  - Created `scripts/wait-for-staging-deployment.mjs` (C-12) to poll `/api/health` with `x-staging-secret` / Basic auth until `buildSha === EXPECTED_SHA` before Cypress starts.
+  - Hardened `.github/workflows/staging-e2e.yml` to assert non-empty required secrets, export `STAGING_AUTH_USER` / `STAGING_AUTH_PASSWORD`, insert the deployment readiness wait step, and pass `--config-file cypress.staging.config.ts`.
+  - Enforced pre-read `content-length` cap against `MAX_BODY_BYTES` in `apps/client/app/api/internal/test-control/route.ts` (C-13 minor).
+  - Implemented `deny(reason, meta)` in `apps/client/app/api/internal/test-control/route.ts` (C-15) with structured `console.warn` emissions and explicit `x-test-control-denial` headers across all rejection branches (`not_staging_environment`, `internal_secret_rejected`, `missing_configured_test_control_secret`, `test_control_secret_mismatch`, `grant_missing`, `grant_invalid_or_expired`, `grant_run_mismatch`, `grant_action_not_permitted`, `grant_scenario_not_eligible`).
+  - Created `apps/client/cypress.staging.config.ts` (S-8) with `redirectionLimit: 5`, `retries: { runMode: 1 }`, and `video: true`, and added DOM inspection in `apps/client/cypress/support/staging-test-control.ts` to capture and log 503 loop diagnostic bodies directly.
+  - Added comprehensive unit test suites in `__tests__/lib/redirect-policy.test.ts`, `__tests__/api/internal/test-control.route.test.ts`, and `__tests__/api/health.route.test.ts`.
+
+- **Staging Test Identity Lease Expiration Sweep & Optimistic Concurrency Fallback (`apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/__tests__/lib/domains/testing/test-control.identity-repository.test.ts`)**:
+  - Resolved `PrismaClientKnownRequestError` HTTP 500 (`Unique constraint failed on the constraint: staging_test_identity_leases_active_slot_idx`) during `POST /api/internal/test-control` (`resetIdentityBaseline`).
+  - Previously, `IdentityRepository.leaseIdentity` excluded expired leases from active slot calculations (`leaseExpiresAt: { gt: now }`), but did not update their state in the database. Because the PostgreSQL partial unique index `staging_test_identity_leases_active_slot_idx` enforces uniqueness on `slot` where `state IN ('LEASED', 'RESETTING', 'READY')` regardless of expiration timestamp, subsequent runs selected the expired slot and collided with the stale active row.
+  - Implemented eager in-band reclamation in `leaseIdentity` to update expired leases (`state IN ('LEASED', 'RESETTING', 'READY') AND leaseExpiresAt <= now`) to `RELEASED` before evaluating available pool slots.
+  - Added optimistic collision handling in the lease creation loop to catch `P2002` / `staging_test_identity_leases_active_slot_idx` conflicts from concurrent runners, trying subsequent pool slots or returning `null` (mapping cleanly to HTTP 409 `IDENTITY_LEASE_EXHAUSTED` instead of HTTP 500).
+  - Added regression test suite simulating PostgreSQL partial unique index constraints, verifying automatic reclamation and multi-worker race recovery.
+
+- **Edge Middleware Resilience, Staging Publishable Key Reconciliation & M-Pesa Webhook Decoupling (`apps/client/middleware.ts`, `apps/client/app/api/webhooks/mpesa/stk-callback/route.ts`, `apps/client/cypress/e2e/staging/03-review-eligibility.cy.ts`)**:
+  - Forwarded reconciled `publishableKey: env.clerk.publishableKey` explicitly to `clerkMiddlewareOptions` in `apps/client/middleware.ts` without passing `secretKey`, aligning Edge token verification with `<ClerkProvider>` in `apps/client/app/layout.tsx`. Resolves `auth().userId` evaluating to `null` during staging navigation to `/onboarding` caused by default environment key mismatch against `clerk.staging.buildmarket.app`.
+  - Reverted passing undefined `secretKey` in `clerkMiddlewareOptions`, resolving `MIDDLEWARE_INVOCATION_FAILED` (HTTP 500 `@clerk/nextjs: Missing secretKey`) thrown by Clerk's `assertKey` in Vercel Edge Runtime when `CLERK_SECRET_KEY` is not bound to Edge env.
+  - Added fast-path evaluation for service-to-service internal API routes (`/api/internal/*`, `/api/metrics/*`) in outer `middleware.ts` before delegating to `clerkMiddleware`. Validates `x-internal-secret` via constant-time comparison (`ensureValidInternalSecret`), decoupling internal test-control and monitoring probes from Clerk runtime dependencies.
+  - Decoupled `addMpesaStkCallbackJob` in `apps/client/app/api/webhooks/mpesa/stk-callback/route.ts`: once `prisma.mpesaCallbackEvent.create()` durably persists the callback, the route returns HTTP 202 `acceptedResponse()` regardless of transient Redis connection state, logging enqueue failures as reconciliation warnings and resolving Cypress spec `04-mpesa-replay-and-idempotency.cy.ts` assertion failures.
+  - Reconciled Cypress spec naming drift by renaming `03-messaging.cy.ts` to `03-review-eligibility.cy.ts`, matching the workflow dispatch matrix in `.github/workflows/staging-e2e.yml`.
+
+- **Staging E2E Redirect Loop Remediation, Clerk Metadata Alignment & Asynchronous Projection Polling (`apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/sign-in/[[...sign-in]]/page.tsx`, `apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress.config.ts`, `apps/client/cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts`, `apps/client/cypress/e2e/staging/07-queue-recovery.cy.ts`, `apps/client/__tests__/lib/domains/testing/test-control.clerk-identity-adapter.test.ts`, `apps/client/__tests__/lib/domains/testing/test-control.service.test.ts`)**:
+  - Resolved Cypress error `The application redirected to https://staging.buildmarket.app/sign-in?redirect_url=%2Fonboarding more than 20 times` across specs `01`, `02`, `03`, `06`, and `08`.
+  - Harmonized Clerk public metadata schema in `restoreClerkIdentityBaseline` to include canonical `isOnboarded: false` and `isProfileComplete: false` alongside `role`, matching `staging-test-identity-lifecycle.md` and enabling `hasRoutableAuthClaims` to resolve immediately without 5 repeated timeouts.
+  - Bound explicit target destinations (`redirect_url`) in `resolveTestingSignInUrl` for both `resetIdentityBaseline` (`/onboarding`) and `issueBrowserSessionHandoff` (`/professional-portal/dashboard` or `/homeowner-dashboard`), ensuring single-use ticket consumption routes directly to the intended destination without ping-ponging through client-side routing hubs.
+  - Preserved `redirect_url` in `normalizeSignInUrl` in `cypress.config.ts` when normalizing `accounts.*` URLs.
+  - Reverted superficial redirect patch in `SignInPage` (`page.tsx`) to canonical `redirect(safeRedirectUrl ?? "/auth-callback")`.
+  - Implemented `pollStagingProjection` in `staging-test-control.ts` to actively retry Node-level `stagingTestControl:getProjection` tasks against asynchronous BullMQ workers, resolving premature assertion failures in `04-mpesa-replay-and-idempotency.cy.ts` and `07-queue-recovery.cy.ts` caused by one-shot `cy.task` evaluation before background retry delays elapse.
+  - Updated unit and contract suites in `test-control.clerk-identity-adapter.test.ts` and `test-control.service.test.ts`.
+
+- **Edge API Route Classification, Capability Boundary Guarding & Staging Clerk FAPI Publishable Key Reconciliation (`apps/client/app/lib/security/middleware/route-matcher.ts`, `apps/client/middleware.ts`, `apps/client/app/layout.tsx`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/__tests__/middleware/middleware.test.ts`, `apps/client/__tests__/middleware/route-matrix.test.ts`, `apps/client/__tests__/middleware/clerk-middleware-dispatch.test.ts`)**:
+  - Added full route classification inventory for active API trees in `route-matcher.ts`: expanded `PUBLIC_API_ROUTES` to cover public endpoints (`/api/v1(.*)`, `/api/professionals(.*)`, `/api/stores(.*)`, `/api/properties(.*)`, `/api/services(.*)`, `/api/search(.*)`, `/api/advice(.*)`, `/api/webhooks/(.*)`), and expanded `isProtectedApiRoute` to cover domain operations (`/api/leads(.*)`, `/api/messaging(.*)`, `/api/reviews(.*)`, `/api/quotes(.*)`, `/api/projects(.*)`, `/api/client(.*)`, `/api/uploads(.*)`, `/api/notifications(.*)`, `/api/analytics(.*)`, `/api/idea-books(.*)`). Prevents edge fail-closed fallback `mw_deny_api_unclassified` from dropping authenticated requests with 401 `{"error":"Not found"}` in Cypress staging tests `01`, `02`, `03`, and `06`.
+  - Promoted `capabilityBoundaryForPath` evaluation to the top of outer `middleware.ts`, ensuring dormant MVP capability boundaries (e.g. materials/properties commerce) deny direct requests immediately before dev bypass or fast-path dispatch.
+  - Routed authentication routes (`isAuthRoute`: `/sign-in`, `/sign-up`, etc.) through `clerkHandler` in `middleware.ts` (`!isAuthRoute(req)`), preventing public fast-path short-circuiting from bypassing Clerk's server-side request context initialization on `/sign-in`.
+  - Reconciled Clerk publishable key resolution in `env.ts` with target frontend API (`NEXT_PUBLIC_CLERK_FRONTEND_API` or staging auto-detection): dynamically derives the matching publishable key (e.g. `pk_live_Y2xlcmsuc3RhZ2luZy5idWlsZG1hcmtldC5hcHAk` for `clerk.staging.buildmarket.app`) when the environment variable was inherited from production (`clerk.buildmarket.app`), preventing `GET 403 Forbidden` (`subdomain_not_allowed`) errors in the browser.
+  - Forwarded `publishableKey={env.clerk.publishableKey}` and satellite options explicitly to `<ClerkProvider>` in `apps/client/app/layout.tsx`, aligning with `apps/admin` and `apps/verification-ops` and ensuring client components target the correct Clerk instance.
+  - Added reproduction and regression tests across `middleware.test.ts`, `route-matrix.test.ts`, and `clerk-middleware-dispatch.test.ts`.
+
+- **Cypress E2E Staging Auth Command Queue Chaining & Webhook Dispatch (`apps/client/cypress/support/staging-test-control.ts`, `apps/client/cypress.config.ts`, `apps/client/cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts`, `apps/client/cypress/plugins/staging-test-control.test.ts`)**:
+  - Resolved runtime `CypressError: cy.then() failed because you are mixing up async and sync code` across staging E2E suites (`01-onboarding-and-verification.cy.ts`, `02-routing-and-masked-disclosure.cy.ts`, `03-messaging.cy.ts`, `06-messaging.cy.ts`, `08-verification-public-trust.cy.ts`).
+  - Decoupled Cypress command enqueuing (`cy.visit(...)`, `cy.location(...)`, `cy.should(...)`) from subject yielding by eliminating synchronous `return cy.visit(...)` inside `.then()` callbacks in `loginStagingUser` and `resetStagingIdentity`, chaining a dedicated parameter-less `.then(() => result)` to yield typed subjects cleanly.
+  - Implemented Node-level `stagingTestControl:postMpesaWebhook` task in `cypress.config.ts` and exposed `cy.postStagingMpesaCallback(payload)` in `staging-test-control.ts` to dispatch authenticated STK callbacks using `getTestControlHeaders()`, preserving the boundary invariant that internal secrets never cross into browser memory while testing fail-closed webhook authenticity in `04-mpesa-replay-and-idempotency.cy.ts`.
+  - Synchronized session cookie settlement in `loginStagingUser` and `resetStagingIdentity`: updated pathname assertions to wait past `/auth-callback` until landing on the authenticated destination and verified `__session` cookie presence before resolving, preventing subsequent `cy.request()` calls from firing with unhydrated session state.
+  - Added Vitest boundary and contract test suite in `apps/client/cypress/plugins/staging-test-control.test.ts` to enforce callback isolation and command availability.
+
+- **Clerk Single-Use Ticket Auto-Consumption & Sign-In Route Handoff (`apps/client/components/auth/ClerkSignInWidget.tsx`, `apps/client/__tests__/components/auth/ClerkSignInWidget.test.tsx`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/cypress.config.ts`, `apps/client/__tests__/lib/domains/testing/test-control.service.test.ts`, `apps/client/cypress/plugins/staging-test-control.test.ts`)**:
+  - Implemented programmatic ticket consumption inside `ClerkSignInWidget` via `useClerk().client.signIn.create({ strategy: "ticket", ticket })` and `clerk.setActive()`, automatically resolving the single-use ticket and redirecting to `safeTargetUrl || ROUTES.authCallback` while displaying `<AuthPageSkeleton variant="sign-in" />`.
+  - Fixed an asynchronous lifecycle race condition where state mutation (`setIsProcessingTicket(true)`) within `useEffect` re-rendered the component and triggered effect teardown (`isCancelled = true`), prematurely cancelling in-flight ticket authentication before session activation and redirect could complete. Replaced stateful tracking with a stable `ticketConsumedRef` (`useRef`), stabilizing effect dependencies and preventing unmount/re-render aborts.
+  - Added unit test suite in `apps/client/__tests__/components/auth/ClerkSignInWidget.test.tsx` verifying successful single-use ticket handoff, session activation, fallback route defaults, and failure fallbacks.
+  - Resolves Cypress `AssertionError: Timed out retrying after 15000ms: expected '/sign-in' to not include '/sign-in'` where automated browser sessions were stuck on `/sign-in`.
+  - Bound `signInUrl` generation in `issueBrowserSessionHandoff` and `resetIdentityBaseline` to the application origin (`${base}/sign-in?__clerk_ticket=${ticket}`) with defense-in-depth sanitization in `cypress.config.ts` (`normalizeSignInUrl`), eliminating 403 Forbidden and DNS failures against unhosted `accounts.*` portals.
+
+- **M-Pesa Webhook Independent Secret Validation & Header Decoupling (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/cypress.config.ts`, `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`)**:
+  - Decoupled `x-internal-secret` and `x-test-control-secret` evaluation in `verifyMpesaCallbackAuthenticity` so that presence of `x-internal-secret` does not short-circuit or shadow `x-test-control-secret` validation.
+  - Updated `cypress.config.ts` (`getTestControlHeaders`) to conditionally omit empty secrets.
+  - Resolves HTTP 401 Unauthorized in `04-mpesa-replay-and-idempotency.cy.ts` when automated test callbacks authenticate via `x-test-control-secret` during staging validation. Added regression coverage in `__tests__/api/webhooks/mpesa-callback.test.ts`.
+
+- **Cypress Webpack Toolchain TypeScript 6 Deprecation Alignment (`apps/client/cypress/tsconfig.json`)**:
+  - Restored compiler option `"ignoreDeprecations": "6.0"` in `apps/client/cypress/tsconfig.json` (reverting `"5.0"`), resolving Webpack Compilation Error `TS5101: Option 'downlevelIteration' is deprecated and will stop functioning in TypeScript 7.0` encountered during Cypress spec bundling in CI.
+  - Mitigated internal configuration injection by Cypress 14's bundled `@cypress/webpack-preprocessor`, which passes `downlevelIteration: true` to `ts-loader` by default for ES5 legacy compatibility. Setting `"ignoreDeprecations": "6.0"` enables standard forward-compatibility under the workspace TypeScript 6.0 compiler without introducing unneeded custom preprocessor dependencies.
+
+- **Staging Test Identity Professional Profile Resolution (`apps/client/app/lib/domains/testing/test-control/repository.ts`)**:
+  - Implemented self-healing upsert for `ProfessionalProfile` during `seedScenario` execution in `TestControlRepository`. Base staging professional identities (`e2e_pro_1`) require a `ProfessionalProfile` relation for lead routing and project associations; when missing, test-control automatically provisions the profile row with `PENDING` verification and `UNVERIFIED` trust tier, eliminating the `STAGING_TEST_IDENTITY_MISSING` 500 error in E2E scenario seeding.
+
+- **MpesaTransaction Database Schema Migration (`packages/db/prisma/migrations/20260911140000_add_mpesa_transaction_subscription_id`)**:
+  - Added missing migration for `MpesaTransaction.subscriptionId` (`TEXT`, nullable) with index `MpesaTransaction_subscriptionId_idx` matching `schema.prisma`. Resolves Prisma 500 error during `seedMpesa` execution in staging E2E tests where Prisma expected the column to exist in the database.
+
+- **Staging Identity Slot Production Guard Resolution (`apps/client/app/lib/domains/testing/test-control/identity-repository.ts`, `apps/client/app/lib/domains/testing/test-control/clerk-identity-adapter.ts`)**:
+  - Refined `isProduction` flag passed to `parseStagingIdentitySlots` in `resolveConfiguredSlots` and `resolveAllowedPoolEmails` to evaluate actual production status (`env.isProd && !env.isVercelPreview && env.otel.ddEnv !== "staging" && !env.stagingTestControl?.enabled`) instead of raw `env.isProd`. Resolves 500 error in `resetIdentityBaseline` on Vercel preview environments where `NODE_ENV === "production"` while maintaining full fail-closed security against test slot parsing in real production.
+
+- **Database Package PrismaPg Adapter Initialization (`packages/db/lib/prisma.ts`)**:
+  - Configured `PrismaPg` with `poolConfig` directly instead of passing an externally instantiated `Pool`. Resolves an ESM/CJS module boundary issue where `instanceof Pool` failed in hosted environments, causing `@prisma/adapter-pg` to treat the pool instance as an options map, crash in `pg-protocol/dist/serializer.js`, and cause queries to fall back to loopback (`127.0.0.1:5432`).
+
+- **M-Pesa Webhook Authenticity & High-Risk Checkout Protection (`apps/client/app/api/webhooks/mpesa/shared.ts`, `apps/client/app/api/webhooks/mpesa/stk-callback/route.ts`, `apps/client/app/lib/domains/payments/mpesa-callback.ts`, `apps/client/app/api/v1/subscriptions/checkout/route.ts`, `apps/client/app/lib/security/high-risk-registry.ts`)**:
+  - Implemented timing-safe webhook callback authenticity verification (`verifyMpesaCallbackAuthenticity`) against `MPESA_CALLBACK_SECRET`, failing closed before reading body payload or querying database state. Added unit test suite in `apps/client/__tests__/api/webhooks/mpesa-callback.test.ts`.
+  - Hardened subscription checkout route `/api/v1/subscriptions/checkout` with `withAuth(..., { recentAuth: { maxAgeSeconds: 180 } })`, strict role gating (`PROFESSIONAL`, `ADMIN`, `SUPER_ADMIN`), actor-scoped rate limiting (`getActorRateLimitIdentifier(dbUserId, "subscription-mpesa-checkout")`), per-invocation logger initialization, and mapped domain errors, eliminating unhandled 500 exceptions and satisfying SEC-LINT-004. Registered route under `HIGH_VALUE_ROUTE_GUARD_RULES`.
+  - Populated `phoneSearchHash` in `createPendingMpesaCheckout` via `@build/mpesa` helper `computePhoneSearchHash`, validated `MPESA_PHONE_SEARCH_HASH_SECRET` in `env.ts`, and updated repository test-environment salt resolution to typed `env.isTest`.
+
+- **Quote Materials Checkout Authorization (`apps/client/app/lib/domains/quotes/boq-store-bridge.ts`, `apps/client/app/api/quotes/[id]/checkout-materials/route.ts`, `apps/client/__tests__/domains/quotes/boq-store-bridge.test.ts`)**:
+  - Bound `buildDraftOrderFromQuote` to authenticated caller identity, enforcing client quote ownership (`quote.clientId === actor.userId` or admin role), accepted status (`quote.status === "ACCEPTED"`), and latest version (`quote.isLatest === true`).
+
+- **Review Atomic Deduplication (`apps/client/app/lib/domains/reviews/repository.ts`, `packages/db/prisma/schema.prisma`)**:
+  - Added unique constraint `@@unique([reviewerId, projectId])` on `Review` model and migration `20260911130000_add_review_reviewer_project_uniqueness`. Handled Prisma unique constraint violation code `P2002` in review repository to return `null` atomically on concurrent duplicate reviews.
+
+- **UI Hydration & Queue Server Backend Validation (`packages/ui/src/trust-seal-badge.tsx`, `packages/queue-server/src/backend.ts`)**:
+  - Replaced render-time `Math.random()` with React 19's `useId()` in `TrustSealBadge`, eliminating SVG path hydration mismatches.
+  - Added fail-closed check in `getQueueConnectionOptions` to explicitly reject unsupported `postgres` BullMQ backend configurations instead of silently defaulting to Redis.
+
+### Added — Zero-Downtime Enterprise API Key Secret Rotation & Migration Strategy
+
+- **Enterprise Authentication & Environment Contract (`apps/client/app/api/v1/shared/enterprise-auth.ts`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/.env.example`, `turbo.json`, `apps/client/__tests__/api/v1/enterprise-auth.test.ts`)**:
+  - Implemented dual-secret fallback verification and in-flight lazy migration in `authenticateEnterpriseClient` to enable rotating `ENTERPRISE_API_KEY_HASH_SECRET` without invalidating active enterprise integrations.
+  - Added optional `ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET` (minimum 16 characters) to `envGroups.services` and `buildEnvConfig` in `apps/client/app/lib/infrastructure/env.ts`, declaring it in `apps/client/.env.example` and `turbo.json` `globalEnv`.
+  - Refactored `hashApiKey(apiKey, explicitSecret?)` in `enterprise-auth.ts` to allow computing hashes against specified salts/secrets while preserving default values.
+  - When an incoming API request misses under the primary secret hash and a previous secret is configured, `authenticateEnterpriseClient` falls back to verify against the previous hash; if valid and active, it executes a non-blocking in-flight update (`prisma.enterpriseApiClient.update`) to re-hash the stored key to the current secret.
+  - Added unit test suite in `apps/client/__tests__/api/v1/enterprise-auth.test.ts` verifying fallback authentication, lazy database re-hashing, and rejection of revoked/inactive keys.
+  - Verified `pnpm --filter client test`, `pnpm run client:check-env-contract` (0 missing keys), `pnpm run client:check-security-drift`, and `pnpm --filter client check-types`.
+
+### Fixed — Turbopack Route Adapter Enum Decoupling & Boundary Alignment
+
+- **Route Adapters & Schema Validation (`apps/client/app/api/onboarding/professional/complete/route.ts`, `apps/client/app/api/leads/qualification/routing/...`)**:
+  - Replaced direct `@prisma/client` and `@build/db` runtime enum imports with zero-dependency `@build/enums` constants (`PROFESSIONS`, `COUNTIES`, `LICENSE_AUTHORITIES`, `PROPERTY_TYPES`, `PROPERTY_CATEGORIES`, `PROPERTY_STATUSES`, `UserRole`).
+  - Switched from `z.nativeEnum(...)` to `z.enum(...)` with canonical const arrays, maintaining strict compile-time and runtime validation parity while eliminating route-level CommonJS runtime coupling.
+  - Enforced ADR-002 thin adapter invariants: route handlers remain lightweight HTTP ingress adapters without database ORM runtime dependencies.
+
+### Fixed — CI Smoke Gate Ephemeral Database Loopback Override (.github/workflows/ci.yml)
+
+- **CI Workflow & Build Infrastructure (`.github/workflows/ci.yml`)**:
+  - Restored static ephemeral CI PostgreSQL service container endpoint (`postgresql://ci:ci@127.0.0.1:5432/build_market_ci`) and added `ALLOW_LOCALHOST_DB: "true"` to `client-preview-smoke-gate`'s runner environment.
+  - Fixes build crash where `next build` sets `NODE_ENV="production"`, causing `apps/client/app/lib/infrastructure/env.ts` to reject the CI runner's loopback database URL during static page data collection for `/_not-found`.
+  - Preserves strict fail-closed loopback database rejection across cloud production and staging deployments while ensuring CI smoke tests run cleanly and deterministically against local ephemeral service containers.
+
+### Fixed — TypeScript CLI Binary Discovery in Monorepo TS6 Bridge (Next.js 16.3.4)
+
+- **Toolchain & Build Compatibility (`scripts/patch-typescript.mjs`)**:
+  - Added `pkg.bin = { tsc: "./lib/tsc.js" }` to the monorepo's synthetic `typescript` package manifest.
+  - Fixes `next build` failure under Next.js 16.3.4 where `experimental.useTypeScriptCli` defaults to `true` and checks `packageJson.bin.tsc`, causing false-positive `missingDepsError` during type validation.
+
+### Security — Production Dependency Vulnerability Remediation (Next.js & sharp)
+
+- **Framework & Media Toolchain (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**:
+  - Upgraded Next.js toolchain (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.11` to `16.3.4` via the workspace catalog, patching unauthenticated Remote Code Execution on Windows servers (GHSA-2xp9-vwfh-vxw4) and AVIF image optimization vulnerability.
+  - Bumped `sharp` to `^0.35.4` and tightened override to `">=0.35.4"`, resolving libheif vulnerabilities (GHSA-rgj7-g3m4-5g8c, GHSA-g89c-p67h-r497, GHSA-2jg2-4ch7-h545).
+  - Maintained zero production vulnerabilities in `pnpm audit --prod` while preserving OpenNext Cloudflare worker compatibility.
+
+### Fixed — Client Environment Contract Enforcement & Loopback Override Alignment
+
+- **Environment Contract & Canonical Registry Alignment (`apps/client/scripts/check-env-contract.mjs`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/.env.example`)**:
+  - Added `VERCEL` to `ALLOWED_UNDECLARED` in `apps/client/scripts/check-env-contract.mjs`, aligning platform-injected runtime variables with `CI`, `NODE_ENV`, `NEXT_PHASE`, and `NEXT_RUNTIME`.
+  - Formally declared `ALLOW_LOCALHOST_DB` under the `database` group variables in `apps/client/app/lib/infrastructure/env.ts` (`required: false`) and documented `ALLOW_LOCALHOST_DB="false"` with operator safety guidance in `apps/client/.env.example`, restoring ADR-004 inventory completeness.
+  - Hardened loopback safety check in `env.ts` to strictly evaluate `process.env.ALLOW_LOCALHOST_DB !== "true"`, preventing string-truthiness ambiguity and enforcing fail-closed loopback rejection in hosted/production environments.
+  - Restored passing status to automated CI gate `pnpm run client:check-env-contract` (`.github/workflows/ci.yml`).
+
+### Added — Staging Database Loopback Guard & Preflight Verification
+
+- **Client Environment & Runtime Hardening (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/app/lib/domains/testing/test-control/service.ts`, `apps/client/app/api/internal/test-control/route.ts`)**:
+  - Hardened the `database` group in `env.ts` to reject loopback hosts (`localhost`, `127.0.0.1`, `::1`) when running in production or hosted environments (`NODE_ENV === "production"` or `VERCEL === "1"`), unless `ALLOW_LOCALHOST_DB === "true"`.
+  - Updated `testControlService.createRun` to intercept database connection and loopback configuration errors, mapping them to a typed domain error `{ error: "STAGING_DATABASE_MISCONFIGURED", status: 503 }`.
+  - Preserved thin HTTP route boundaries (ADR-002) and strict environment read encapsulation (ADR-004) in `/api/internal/test-control/route.ts` by delegating error handling to domain service results without route-level `process.env` inspection.
+  - Added unit tests in `__tests__/lib/env.validation.test.ts` and `__tests__/lib/domains/testing/test-control.service.test.ts`.
+
+### Fixed — Staging E2E internal auth alignment and emergency DB sweep quoting
+
+- **Staging Test-Control Internal Auth Alignment (`apps/client/app/lib/infrastructure/env.ts`, `apps/client/cypress.config.ts`, `.github/workflows/staging-e2e.yml`, `apps/client/.env.example`)**:
+  - Resolved HTTP 403 Forbidden failure on `POST /api/internal/test-control` by wiring bidirectional fallback between `INTERNAL_API_SECRET` and `INTERNAL_SERVICE_SECRET` across client runtime env, GitHub Actions CI workflow, and environment templates.
+  - Hardened staging environment classification in `/api/internal/test-control/route.ts` to recognize `ENABLE_STAGING_TEST_CONTROL=true` and `stagingAuth.isEnabled` alongside `DD_ENV === "staging"`, preventing fail-closed 404 rejections in environments where `DD_ENV` is not preset.
+  - Added diagnostic `x-test-control-denial` response headers and formatted Cypress task error reporting to explicitly surface the gate denial reason on non-OK responses.
+  - Added `.trim()` sanitization to `baseUrl`, `internalSecret`, `testSecret`, and staging authentication credentials across Cypress configuration, emergency cleanup scripts, and `env.ts` to prevent constant-time string comparison (`timingSafeEqualStrings`) byte-length rejections caused by trailing newlines or whitespace.
+  - Added `INTERNAL_SERVICE_SECRET`, `ENABLE_STAGING_TEST_CONTROL`, and `STAGING_TEST_IDENTITY_SLOTS` to `apps/client/.env.example` and `envGroups`, maintaining full compliance with the automated client environment contract check (`pnpm run check-env-contract`).
+  - Maintained `"ignoreDeprecations": "6.0"` in `apps/client/cypress/tsconfig.json` while removing deprecated `"baseUrl": ".."` and updating paths to `"@/*": ["../*"]` relative to the cypress directory, silencing `TS5101` (`downlevelIteration`) compiler errors injected by `@cypress/webpack-preprocessor`.
+- **Emergency Staging Cleanup Sweeper (`scripts/emergency-staging-cleanup.mjs`)**:
+  - Quoted all mixed-case PostgreSQL table and column identifiers (`"expiresAt"`, `"stagingTestRunId"`, `"leaseExpiresAt"`, `"releasedAt"`, `"cleanedAt"`, `"staging_test_runs"`, `"staging_test_identity_leases"`) in raw SQL sweeps, resolving the `column "expiresat" does not exist` runtime error.
+  - Added diagnostic logging for non-OK HTTP response codes and response bodies during the pre-sweep API probe.
+- **Staging Perimeter Protection SSL/DCV Challenge Exemption (`apps/client/app/lib/security/middleware/staging-auth.ts`, `apps/client/__tests__/middleware/staging-auth.test.ts`)**:
+  - Added `pathname.startsWith("/.well-known/")` to `isStagingProtectionExempt()` in edge middleware protection logic.
+  - Resolves HTTP 401 Unauthorized rejections on automated Cloudflare Domain Control Validation (DCV) hostname probes (`/.well-known/cf-custom-hostname-challenge/*`) and ACME challenges, ensuring uninterrupted SSL certificate provisioning and renewal for `staging.buildmarket.app`.
+  - Added unit test coverage in `__tests__/middleware/staging-auth.test.ts` (13/13 passing).
+
+### Changed — Staging E2E control-plane hardening
+
+- Replaced the `seed-scenario` acknowledgement with durable, run-owned routing, messaging, and review fixtures; added ownership/cleanup coverage for `MarketplaceLead` and `MessageThread` roots.
+- Removed deployable default credentials from the Cypress and route adapters, require an HTTPS allowlisted staging host, and bind M-Pesa callback events to their owned test run.
+- Replaced route/page placeholder checks with real routed-lead masking/acceptance, participant messaging, callback replay, project-linked review eligibility, bounded queue recovery, and capability-boundary scenarios. Isolated onboarding/verification mutation remains an explicit no-go control until a resettable identity adapter exists.
+
+### Added — Staging test-control authority and cross-service E2E evidence
+
+- **Staging Test-Control Authority (`app/api/internal/test-control/route.ts`, `app/lib/domains/testing/test-control/`)**:
+  - Implemented the fail-closed `/api/internal/test-control` route adapter with dual-layer gate: internal service secret plus short-lived (<= 5 min), audience-bound HMAC-SHA256 staging test grant (`buildmarket-staging-test-control`).
+  - Added dynamic importing of Prisma, Clerk, and test-control modules strictly after verifying `DD_ENV === "staging" || NODE_ENV === "test"`; returns uniform 404 in production before evaluating payload.
+  - Implemented `TestControlService` and `TestControlRepository` supporting `createRun`, `seedScenario`, `issueBrowserSessionHandoff` (via Clerk Backend API single-use tickets for dedicated staging pool accounts), `seedPendingMpesaTransaction`, `getRunProjection`, and atomic leaf-to-root `cleanupRun`.
+- **Database Staging Ownership & Outbound Sink (`packages/db`)**:
+  - Added `StagingTestRun` and `StagingTestOutboundDelivery` models with active run expiry, cascade review, and explicit `stagingTestRunId` foreign keys on `User`, `ProfessionalProfile`, `Lead`, `Project`, `Review`, `MpesaTransaction`, and `MpesaCallbackEvent`.
+  - Added deterministic compound seed keys and dependency-ordered cleanup validation.
+- **Worker Staging Interceptor & Sink (`apps/workers`)**:
+  - Added `apps/workers/src/interceptors/staging-test-control.ts` intercepting all outbound SMS/email communications for staging runs into `staging_test_outbound_deliveries` with non-reversible SHA-256 recipient hashing and PII redaction.
+  - Added simulated worker failure triggers (`CRASH`, `TIMEOUT`, `TRANSIENT_ERROR`) to validate queue retry and recovery without customer-facing side effects.
+- **Queue Inspection (`packages/queue-server`)**:
+  - Implemented `QueueTestInspector` with dual-mode inspection: querying PostgreSQL `bullmq.jobs` schema in staging, with an `ioredis` fallback for Redis queue mode.
+- **Cypress Real Staging Suite (`apps/client/cypress/`)**:
+  - Implemented Node-side tasks in `cypress.config.ts` acquiring audience-bound grants without exposing persistent secrets to browser execution context.
+  - Added custom commands (`cy.initStagingRun`, `cy.loginStagingUser`, `cy.seedStagingMpesa`, `cy.getStagingProjection`, `cy.cleanupStagingRun`) and 5 end-to-end staging specs (`01-onboarding-and-verification.cy.ts`, `02-routing-and-messaging.cy.ts`, `03-review-eligibility.cy.ts`, `04-mpesa-replay-and-idempotency.cy.ts`, `05-queue-failure-recovery.cy.ts`).
+- **CI & Concurrency (`.github/workflows/staging-e2e.yml`)**:
+  - Added dedicated single-tenant workflow bound to GitHub Environment `staging-e2e` with `always()` guaranteed cleanup.
+
+### Added — P0 deferred-capability boundary
+
+- Added the server-owned default-off MVP capability registry and generic 404 middleware denial for deferred vertical deep links and APIs; client navigation is no longer the authorization boundary.
+- Added explicit `FEATURE_MVP_*` kill switches, all defaulting to false, and the staging rollback Cypress scenario/runbook.
+
+### Fixed — Vitest Startup Hang & Discovery Traversal Hardening
+
+- **Test Runner Environment (`apps/client/vitest.config.ts`)**:
+  - Bound file discovery by constraining `test.include` to `__tests__/**/*.{test,spec}.{js,ts,tsx}` and `app/**/*.{test,spec}.{js,ts,tsx}`, and explicitly extending `test.exclude` with `.next/**`, `.turbo/**`, `.wrangler/**`, `tmp/**`, and `cypress/**`. This eliminates recursive directory traversal across 4,400+ Next.js build artifacts during test discovery and watcher registration on Windows.
+  - Replaced the default `forks` pool with `pool: "threads"` and configured bounded worker concurrency (`maxWorkers: 4`), eliminating Windows `child_process.fork` spawning latency, IPC contention, and the startup hang before test discovery.
+  - Reordered module aliases so specific package mappings (`@build/lead-qualification`, `@build/resilience`) strictly precede the general `@` catch-all alias.
+
+### Added — P0 launch documentation authority
+
+- Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped client readiness page.
+- Updated client onboarding and architecture references to the complete `ADR-001` through `ADR-010` index and Node 24 toolchain.
+
+### Changed — Test Script Encapsulation & Workspace Manifest Alignment
+
+- **Test Script Consolidation (`apps/client/package.json`)**: Relocated and consolidated 17 domain, contract, and regression test commands previously residing in root `package.json` directly into the client package manifest:
+  - Domain & Risk Contracts: `test:properties-risk`, `test:properties-service-once`, `test:projects-api`, `test:projects-api:json`, `test:portfolio-api`, `test:secure-action`, `test:leads`, `test:stores-route`, `test:projects-property-focused`.
+  - Concurrency & Envelope Regressions: `test:projects-envelope-focused`, `test:projects-envelope-focused:single-worker`.
+  - Browser Hooks & Client Facades: `test:browser-hook-sweep`, `test:dashboard-hook`, `test:dashboard-browser-clients`.
+  - Component & Accessibility Regressions: `test:button-slot-regression`, `test:button-slot-regression:single-worker`, `test:onboarding-ui-a11y:single-worker`.
+- Reclaimed clean boundary separation between the monorepo coordinator and the client app presentation/domain tier. All test suites can now be run locally via `pnpm test:<name>` inside `apps/client` or via `pnpm --filter client run test:<name>` from repo root.
+
+### Added — Datadog environment contract alignment
+
+- Added canonical `DD_SITE`, `DD_VERSION`, and `DD_LOGS_ENABLED` configuration entries with a compatibility fallback for legacy `DD_SITE_HOST` deployments.
+- Exposed resolved Datadog metadata through the client telemetry environment boundary.
+
+### Fixed — Upstash Redis Write Optimization & Route-Tiered Rate Limiting
+
+- **Rate Limiting Architecture (`app/lib/api/rate-limit.ts`, `app/lib/api/rate-limit.redis.ts`, `types/external-modules..d.ts`)**:
+  - Upgraded Redis rate limiter integration to support multi-algorithm routing (`sliding` for sensitive mutations/auth, `cachedFixed` for high-throughput reads).
+  - Added `checkReadRateLimit()` helper leveraging in-memory window caching to deduplicate and batch rate-limiting queries across warm instances, eliminating unnecessary Redis `ZADD`/`EVAL` write calls.
+  - Updated `GET /api/settings/public` (`app/api/settings/public/route.ts`) to use `checkReadRateLimit()` alongside CDN edge `Cache-Control` headers.
+  - Added unit test coverage in `__tests__/lib/rate-limit-redis.test.ts` and `__tests__/api/settings/public.route.test.ts` asserting algorithm pass-through, fail-closed production behavior, and error fallbacks.
+
+### Added - M-Pesa payment boundary & multi-purpose contracts (Phase 4b)
+
+- Added authenticated subscription, lead-credit, and escrow checkout intent creation with deterministic
+  idempotency and worker queue production.
+- Enforced database-level user ownership querying in `/api/v1/payments/mpesa/status` and corrected status DTOs to return actual `checkoutRequestId` (nullable) without fabricating provider identifiers.
+- Added user-scoped status reads and thin STK/B2C callback receivers that
+  persist redacted callback receipts before enqueueing processing.
+- Provider credentials and direct Daraja calls remain strictly outside the client app.
+  runtime; lead-credit checkout remains disabled until ledger settlement exists.
+
 ### 1) Identity and Auth Model
 
 - Clerk is the primary runtime identity provider for `apps/client`.
@@ -26,7 +417,55 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
-## [Unreleased]
+### Added — Professional Tier System UI & Presentation Layer
+
+- **Shared UI Primitives (`@build/ui`)**:
+  - `TrustSealBadge`: Implemented 3-way visual split separating regulator-backed seals (`LICENSE_VERIFIED`/`ELITE` with arced NCA/BORAQS/EBK text) from non-regulator checkmark chips (`ID_VERIFIED`/`SKILLS_VERIFIED`) and plain text (`UNVERIFIED`).
+  - `BadgeRow`: Strictly displays the 5 schema `BadgeType` values with earned vs locked styling.
+  - `InsuredIndicator`: Credential indicator for `ProfessionalProfile.isInsured`.
+  - `SponsoredLabel`: High-contrast badge with aria-label enforcing ranking transparency on boosted cards.
+  - `PlanChip`: Subscription tier pills supporting `TRIALING`, `GRACE_PERIOD`, `ACTIVE`, `EXPIRED`, and Founding Pro markers.
+  - `RenewalStatus`: Subscription cycle countdown with animated progress bar and grace-period alerts.
+  - `LeadCreditWallet`: Lead credit balance and active subscription discount preview.
+  - `MpesaStkModal`: Unified STK modal with Kenyan phone validation, 60s countdown, polling, retry, and timeout reconciliation.
+- **REST API Endpoints**:
+  - `GET /api/v1/payments/mpesa/status`: Authenticated polling endpoint querying `MpesaTransaction` status by `checkoutRequestId`.
+- **Portal Pages & Component Integrations**:
+  - `app/professional-portal/profile/verification/page.tsx`: Trust ladder with seal, requirements checklist, and 60-day NCA renewal countdown.
+  - `app/professional-portal/settings/billing/page.tsx`: 3-tier comparison cards, `RenewalStatus`, `LeadCreditWallet`, and `MpesaStkModal` integration.
+  - `components/dashboard/widgets/shared/TierSystemWidget.tsx`: Dashboard widget registered as `tier_system`.
+  - `components/professional/ProfessionalCard.tsx` & `app/professionals/[id]/page.tsx`: Server-determined `SponsoredLabel` on boosted cards and public profile credentials header.
+- **Unit Tests**:
+  - `__tests__/components/tier-system-ui.test.tsx`: 9 unit tests covering visual split, badge constraints, phone validation, and UI states.
+
+### Added — Professional Tier System Phases 5 & 6: AI Copilot, CPD Hub, Enterprise Directory API, BOQ-Store Bridge, & Multi-Channel Notifications
+
+- **AI Copilot Domain Service (`app/lib/domains/professionals/ai-copilot.ts`)**:
+  - Generates draft bios with `isDraft: true` and disclaimer for human review before publishing.
+  - Generates informational pricing context percentiles (`p25`, `median`, `p75`) across Kenyan trades.
+- **CPD Compliance Domain Service (`app/lib/domains/professionals/cpd.ts`, `app/api/professionals/cpd/route.ts`)**:
+  - Submits and tracks annual CPD activity records and evaluates progress against national targets (10 points).
+- **BOQ-to-Store Checkout Bridge (`app/lib/domains/quotes/boq-store-bridge.ts`, `app/api/quotes/[id]/checkout-materials/route.ts`)**:
+  - Automatically matches accepted BOQ items to store products with confidence scoring and explicit `UNMATCHED_NEEDS_MANUAL_SELECTION` state for ambiguous items.
+- **Multi-Channel Notification Gateway (`app/lib/services/notification-gateway.ts`)**:
+  - Implemented multi-channel dispatcher enforcing Meta WhatsApp Business API opt-in rules and approved templates with automatic fallback to Africa's Talking SMS and Email.
+- **Enterprise Verified Contractor Directory API (`app/api/v1/directory/verified-contractors/route.ts`, `app/api/v1/shared/enterprise-auth.ts`)**:
+  - Implemented SHA-256 API key authentication, per-client token-bucket rate limiting, and zero-PII directory output.
+- **Materials Price Index Market Data Endpoint (`app/api/v1/market-data/materials-price-index/route.ts`)**:
+  - Returns statistically validated price benchmarks, suppressing under-sampled regions (< 3 stores).
+
+### Added — Professional Subscriptions, Wallets, Ranking Algorithm & M-Pesa Architecture
+
+- **Subscriptions Domain Slice (`app/lib/domains/subscriptions/`)**:
+  - Implemented `contracts.ts`, `repository.ts`, and `service.ts` providing type-safe `Result<T, SubscriptionsDomainError>` operations for plan querying, active subscription retrieval, and STK checkout initiation.
+  - Added Kenyan phone number normalization utility supporting Safaricom prefixes (`07...`, `01...`, `+254...`, `254...`).
+  - Added support for Founding Pro 100% comped trial periods and permanent discounts (15%).
+- **Lead Credit Wallets Domain Slice (`app/lib/domains/wallets/`)**:
+  - Implemented wallet ledger queries and credit balance management for professional marketplace lead unlock operations.
+- **Professional Search Ranking Engine (`app/lib/domains/professionals/ranking.ts`)**:
+  - Implemented multi-factor ranking scoring prioritizing active subscriptions, trust tiers (`ELITE`, `LICENSE_VERIFIED`), verified badges, and active profile boosts (`HOMEPAGE_FEATURED`, `CATEGORY_FEATURED`).
+- **M-Pesa Integration Plan Documentation (`docs/build-market-mpesa-implementation-plan.md`)**:
+  - Aligned client app role as thin HTTP adapter for public Safaricom callbacks and checkout initiation with shared `@build/mpesa` contracts.
 
 ### Fixed — Module Resolution, Monorepo Build Architecture, & Turborepo Environment Tracking
 

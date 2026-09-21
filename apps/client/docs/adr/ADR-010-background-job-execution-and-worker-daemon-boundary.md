@@ -1,5 +1,9 @@
 # ADR-010: Background Job Execution and Worker Daemon Boundary
 
+Status: Accepted
+Owner: Platform Engineering
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

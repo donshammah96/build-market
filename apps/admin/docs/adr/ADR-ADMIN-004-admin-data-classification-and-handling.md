@@ -1,5 +1,9 @@
 # ADR-ADMIN-004: Admin Data Classification and Handling
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

@@ -182,10 +182,35 @@ const envGroups: EnvGroup[] = [
       {
         name: "DATABASE_URL",
         required: true,
-        validate: (v) =>
-          v.startsWith("postgresql://") || v.startsWith("postgres://"),
+        validate: (v) => {
+          if (!v.startsWith("postgresql://") && !v.startsWith("postgres://")) {
+            return false;
+          }
+          const isHosted =
+            process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+          if (isHosted && process.env.ALLOW_LOCALHOST_DB !== "true") {
+            try {
+              const parseable = v.replace(
+                /^(postgres|postgresql):\/\//i,
+                "http://",
+              );
+              const parsed = new URL(parseable);
+              if (
+                parsed.hostname === "localhost" ||
+                parsed.hostname === "127.0.0.1" ||
+                parsed.hostname === "::1"
+              ) {
+                return false;
+              }
+            } catch {
+              return false;
+            }
+          }
+          return true;
+        },
         errorMessage:
           "Must be a valid PostgreSQL connection string. " +
+          "Loopback addresses (localhost/127.0.0.1) are rejected in hosted/production environments. " +
           "Use the Supabase Supavisor session-mode pooler URL " +
           "(postgresql://postgres.PROJECT_REF:PASSWORD@aws-REGION.pooler.supabase.com:5432/postgres).",
       },
@@ -203,6 +228,7 @@ const envGroups: EnvGroup[] = [
       },
       // POSTGRES_URL is an optional alias (e.g., Vercel Postgres injects this automatically).
       { name: "POSTGRES_URL", required: false },
+      { name: "ALLOW_LOCALHOST_DB", required: false },
     ],
   },
   {
@@ -376,12 +402,42 @@ const envGroups: EnvGroup[] = [
       { name: "NOTIFICATION_SERVICE_URL", required: false },
       { name: "HCAPTCHA_SECRET_KEY", required: false },
       { name: "INTERNAL_API_SECRET", required: false },
+      { name: "INTERNAL_SERVICE_SECRET", required: false },
+      {
+        name: "ENTERPRISE_API_KEY_HASH_SECRET",
+        required: false,
+        default: "buildmarket_enterprise_api_key_default_hash_secret",
+        validate: (v) => v.trim().length >= 16,
+        errorMessage:
+          "ENTERPRISE_API_KEY_HASH_SECRET must be at least 16 characters long",
+      },
+      {
+        name: "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET",
+        required: false,
+        validate: (v) => !v || v.trim().length >= 16,
+        errorMessage:
+          "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET must be at least 16 characters long",
+      },
       {
         name: "SCAN_CALLBACK_HMAC_SECRET",
         required: true,
         validate: (v) => v.length >= 32,
         errorMessage:
           "Must be at least 32 characters long for secure webhook HMAC validation (generate with: openssl rand -hex 32)",
+      },
+      {
+        name: "MPESA_CALLBACK_SECRET",
+        required: false,
+        validate: (v) => !v || v.trim().length >= 16,
+        errorMessage:
+          "MPESA_CALLBACK_SECRET must be at least 16 characters long",
+      },
+      {
+        name: "MPESA_PHONE_SEARCH_HASH_SECRET",
+        required: false,
+        validate: (v) => !v || v.trim().length >= 16,
+        errorMessage:
+          "MPESA_PHONE_SEARCH_HASH_SECRET must be at least 16 characters long",
       },
     ],
   },
@@ -550,6 +606,29 @@ const envGroups: EnvGroup[] = [
       { name: "FEATURE_PORTAL_STORES_V2", required: false, default: "true" },
       { name: "FEATURE_PORTAL_CALENDAR_V2", required: false, default: "true" },
       { name: "FEATURE_PORTAL_PORTFOLIO_V2", required: false, default: "true" },
+      {
+        name: "FEATURE_MVP_MATERIALS_COMMERCE",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "FEATURE_MVP_PROPERTY_TRANSACTIONS",
+        required: false,
+        default: "false",
+      },
+      { name: "FEATURE_MVP_IDEA_BOOKS", required: false, default: "false" },
+      { name: "FEATURE_MVP_CPD", required: false, default: "false" },
+      { name: "FEATURE_MVP_WALLETS_ESCROW", required: false, default: "false" },
+      {
+        name: "FEATURE_MVP_PLATFORM_CUSTODY",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "FEATURE_BILLING_ENABLED",
+        required: false,
+        default: "false",
+      },
     ],
   },
   {
@@ -666,9 +745,13 @@ const envGroups: EnvGroup[] = [
         required: false,
       },
       {
-        name: "DD_SITE_HOST",
+        name: "DD_SITE",
         required: false,
         default: "us5.datadoghq.com",
+      },
+      {
+        name: "DD_SITE_HOST",
+        required: false,
       },
       {
         name: "DD_SERVICE",
@@ -677,6 +760,15 @@ const envGroups: EnvGroup[] = [
       {
         name: "DD_ENV",
         required: false,
+      },
+      {
+        name: "DD_VERSION",
+        required: false,
+      },
+      {
+        name: "DD_LOGS_ENABLED",
+        required: false,
+        default: "false",
       },
     ],
   },
@@ -688,6 +780,16 @@ const envGroups: EnvGroup[] = [
       { name: "STAGING_AUTH_PASSWORD", required: false },
       { name: "STAGING_AUTH_SECRET", required: false },
       { name: "STAGING_AUTH_ENABLED", required: false },
+    ],
+  },
+  {
+    name: "stagingTestControl",
+    description: "Staging Test Control Authority Configuration",
+    variables: [
+      { name: "ENABLE_STAGING_TEST_CONTROL", required: false },
+      { name: "TEST_CONTROL_SECRET", required: false },
+      { name: "TEST_CONTROL_GRANT_PUBLIC_KEY", required: false },
+      { name: "STAGING_TEST_IDENTITY_SLOTS", required: false },
     ],
   },
   {
@@ -1099,9 +1201,47 @@ function buildEnvConfig() {
   // (it's a no-op when isSatellite is false) so a future misconfiguration
   // doesn't rely on someone remembering to add this check when satellite
   // mode is first turned on here.
+  const rawPublishableKey = getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+  const configuredFrontendApi = getOptionalStringEnv(
+    "NEXT_PUBLIC_CLERK_FRONTEND_API",
+  );
+  const isStagingEnv =
+    getOptionalStringEnv("DD_ENV") === "staging" ||
+    (typeof process.env.NEXT_PUBLIC_APP_URL === "string" &&
+      process.env.NEXT_PUBLIC_APP_URL.includes("staging.buildmarket.app"));
+
+  const frontendApi =
+    configuredFrontendApi ||
+    (isStagingEnv ? "https://clerk.staging.buildmarket.app" : undefined);
+
+  // Derive publishable key matching frontend API if provided (e.g. clerk.staging.buildmarket.app).
+  // In staging environments, Clerk FAPI is clerk.staging.buildmarket.app which requires its matching
+  // publishable key (pk_live_Y2xlcmsuc3RhZ2luZy5idWlsZG1hcmtldC5hcHAk). If NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+  // was inherited or configured with the production key (clerk.buildmarket.app), reconcile it so client
+  // components and Clerk SDK resolve to the matching staging instance without 403 subdomain errors.
+  let publishableKey = rawPublishableKey;
+  if (frontendApi) {
+    try {
+      const fapiHost = new URL(frontendApi).host;
+      if (fapiHost) {
+        const encodedHost = (
+          typeof Buffer !== "undefined"
+            ? Buffer.from(`${fapiHost}$`).toString("base64")
+            : btoa(`${fapiHost}$`)
+        ).replace(/=+$/, "");
+        if (!rawPublishableKey.includes(encodedHost)) {
+          const isDev = rawPublishableKey.startsWith("pk_test_");
+          publishableKey = `${isDev ? "pk_test_" : "pk_live_"}${encodedHost}`;
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+  }
+
   const clerk = {
-    publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-    frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
+    publishableKey,
+    frontendApi,
     secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
     webhookSecret:
       getOptionalStringEnv("CLERK_WEBHOOK_SECRET") ||
@@ -1149,6 +1289,13 @@ function buildEnvConfig() {
       .map((value) => value.trim())
       .filter((value) => value.length > 0),
   };
+
+  // Primary app invariant: apps/client is the primary application, not a satellite.
+  // If NEXT_PUBLIC_CLERK_DOMAIN was erroneously configured in non-satellite environments (e.g. staging),
+  // clear it so Clerk SDK does not prepend "clerk." and override publishableKey frontendApi.
+  if (!clerk.isSatellite && process.env.NEXT_PUBLIC_CLERK_DOMAIN) {
+    delete process.env.NEXT_PUBLIC_CLERK_DOMAIN;
+  }
 
   const satelliteIssues = validateSatelliteInvariants({
     isSatellite: clerk.isSatellite,
@@ -1386,8 +1533,22 @@ function buildEnvConfig() {
         "http://localhost:3005",
       ),
       hcaptchaSecretKey: getOptionalStringEnv("HCAPTCHA_SECRET_KEY"),
-      internalApiSecret: getOptionalStringEnv("INTERNAL_API_SECRET"),
+      internalApiSecret: (
+        getOptionalStringEnv("INTERNAL_API_SECRET") ||
+        getOptionalStringEnv("INTERNAL_SERVICE_SECRET")
+      )?.trim(),
+      enterpriseApiKeyHashSecret: getStringEnv(
+        "ENTERPRISE_API_KEY_HASH_SECRET",
+        "buildmarket_enterprise_api_key_default_hash_secret",
+      ),
+      enterpriseApiKeyPreviousHashSecret: getOptionalStringEnv(
+        "ENTERPRISE_API_KEY_PREVIOUS_HASH_SECRET",
+      ),
       scanCallbackHmacSecret: getOptionalStringEnv("SCAN_CALLBACK_HMAC_SECRET"),
+      mpesaCallbackSecret: getOptionalStringEnv("MPESA_CALLBACK_SECRET"),
+      mpesaPhoneSearchHashSecret: getOptionalStringEnv(
+        "MPESA_PHONE_SEARCH_HASH_SECRET",
+      ),
     },
 
     // Feature Flags
@@ -1405,6 +1566,15 @@ function buildEnvConfig() {
       portalStoresV2: getBooleanEnv("FEATURE_PORTAL_STORES_V2", true),
       portalCalendarV2: getBooleanEnv("FEATURE_PORTAL_CALENDAR_V2", true),
       portalPortfolioV2: getBooleanEnv("FEATURE_PORTAL_PORTFOLIO_V2", true),
+      mvpMaterialsCommerce: getBooleanEnv("FEATURE_MVP_MATERIALS_COMMERCE"),
+      mvpPropertyTransactions: getBooleanEnv(
+        "FEATURE_MVP_PROPERTY_TRANSACTIONS",
+      ),
+      mvpIdeaBooks: getBooleanEnv("FEATURE_MVP_IDEA_BOOKS"),
+      mvpCpd: getBooleanEnv("FEATURE_MVP_CPD"),
+      mvpWalletsEscrow: getBooleanEnv("FEATURE_MVP_WALLETS_ESCROW"),
+      mvpPlatformCustody: getBooleanEnv("FEATURE_MVP_PLATFORM_CUSTODY"),
+      billingEnabled: getBooleanEnv("FEATURE_BILLING_ENABLED", false),
     },
 
     analytics: {
@@ -1524,8 +1694,13 @@ function buildEnvConfig() {
       ),
       resourceAttributes: getOptionalStringEnv("OTEL_RESOURCE_ATTRIBUTES"),
       apiKey: getOptionalStringEnv("DD_API_KEY"),
-      siteHost: getStringEnv("DD_SITE_HOST", "us5.datadoghq.com"),
+      siteHost: getStringEnv(
+        "DD_SITE",
+        getStringEnv("DD_SITE_HOST", "us5.datadoghq.com"),
+      ),
       ddEnv: getStringEnv("DD_ENV", isProd ? "production" : "staging"),
+      ddVersion: getOptionalStringEnv("DD_VERSION"),
+      logsEnabled: getBooleanEnv("DD_LOGS_ENABLED", false),
     },
 
     // Regulator Verification API Credentials (ADR-004 boundary compliant)
@@ -1579,6 +1754,20 @@ function buildEnvConfig() {
       user: getStringEnv("STAGING_AUTH_USER", "buildmarket"),
       password: getOptionalStringEnv("STAGING_AUTH_PASSWORD"),
       secret: getOptionalStringEnv("STAGING_AUTH_SECRET"),
+    },
+
+    // Staging Test Control Authority (DD_ENV === "staging" || NODE_ENV === "test")
+    stagingTestControl: {
+      enabled:
+        getBooleanEnv("ENABLE_STAGING_TEST_CONTROL", false) ||
+        getOptionalStringEnv("DD_ENV") === "staging",
+      secret: getOptionalStringEnv("TEST_CONTROL_SECRET")?.trim(),
+      grantPublicKey: getOptionalStringEnv(
+        "TEST_CONTROL_GRANT_PUBLIC_KEY",
+      )?.trim(),
+      identitySlots: getOptionalStringEnv(
+        "STAGING_TEST_IDENTITY_SLOTS",
+      )?.trim(),
     },
   } as const;
 }

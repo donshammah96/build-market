@@ -3,6 +3,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 export * from "@prisma/client";
+export * from "../src/staging-test-runs/contracts.js";
+export { resolveDatabaseUrl } from "./connection-url.js";
+import { resolveDatabaseUrl } from "./connection-url.js";
 
 interface GlobalDatabaseContext {
   prisma?: PrismaClient;
@@ -11,16 +14,10 @@ interface GlobalDatabaseContext {
 
 const globalForPrisma = globalThis as unknown as GlobalDatabaseContext;
 
-function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
-  // Use the pooled DATABASE_URL at runtime.
+function createDatabaseClient(): { prisma: PrismaClient; pool?: Pool } {
+  // Use the pooled DATABASE_URL at runtime (with resilient aliases and loopback guards).
   // DIRECT_URL is consumed only by `prisma migrate deploy` — never at runtime.
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error(
-      "[@build/db] DATABASE_URL is not set. " +
-        "Set it to the Supabase Supavisor session-mode pooler URL.",
-    );
-  }
+  const connectionString = resolveDatabaseUrl();
 
   // Serverless environments (Vercel / Lambda): 1 connection per invocation is optimal.
   // Persistent servers (apps/admin, BullMQ queue workers): pool size defaults to 10 or DB_POOL_MAX.
@@ -38,8 +35,12 @@ function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
     connectionTimeoutMillis: 5000,
   };
 
-  const pool = new Pool(poolConfig);
-  const adapter = new PrismaPg(pool);
+  // Pass poolConfig directly to PrismaPg. Passing an external `new Pool()` instance
+  // fails cross-module `instanceof Pool` checks between ESM and CJS bundles of `pg`,
+  // causing @prisma/adapter-pg to misidentify the Pool instance as a plain config object
+  // and pass its internal options into `Connection.startup`, triggering a fatal TypeError
+  // in `pg-protocol` serializer and causing Prisma queries to fail or fall back to loopback.
+  const adapter = new PrismaPg(poolConfig);
 
   const client = new PrismaClient({
     adapter,
@@ -49,7 +50,7 @@ function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
         : ["error"],
   });
 
-  return { prisma: client, pool };
+  return { prisma: client };
 }
 
 function getDatabaseClient(): PrismaClient {

@@ -32,6 +32,18 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     expect(env.DB_POOL_MAX).toBe(5);
     expect(env.HEALTH_PORT).toBe(8080);
     expect(env.LOG_LEVEL).toBe("info");
+    expect(env.QUEUE_BACKEND).toBe("redis");
+  });
+
+  it("should parse custom QUEUE_BACKEND value", () => {
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.QUEUE_BACKEND = "postgres";
+
+    const env = validateWorkerEnv();
+
+    expect(env.QUEUE_BACKEND).toBe("postgres");
   });
 
   it("should fail-closed and call process.exit(1) when DATABASE_URL is missing or has invalid scheme", () => {
@@ -58,8 +70,31 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     Object.assign(process.env, { NODE_ENV: "production" });
     process.env.DATABASE_URL =
       "postgresql://postgres:postgres@localhost:5432/buildmarket";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://:secret@upstash.io:6379";
     Reflect.deleteProperty(process.env, "NATS_URL");
+
+    const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as unknown as () => never);
+
+    const mockConsoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    expect(() => validateWorkerEnv()).toThrow("process.exit called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockConsoleError).toHaveBeenCalled();
+
+    mockExit.mockRestore();
+    mockConsoleError.mockRestore();
+  });
+
+  it("should fail-closed in production when REDIS_URL points to localhost", () => {
+    Object.assign(process.env, { NODE_ENV: "production" });
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.NATS_URL = "tls://nats.buildmarket.io:4222";
 
     const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
       throw new Error("process.exit called");
@@ -103,5 +138,27 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
 
     expect(env.NATS_URL).toBe("wss://nats.onrender.com");
     expect(env.NATS_TOKEN).toBe("secret-auth-token-1234");
+  });
+
+  it("should reject direct Datadog logging without an API key", () => {
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.DD_LOGS_ENABLED = "true";
+    Reflect.deleteProperty(process.env, "DD_API_KEY");
+
+    const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as unknown as () => never);
+    const mockConsoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    expect(() => validateWorkerEnv()).toThrow("process.exit called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockConsoleError).toHaveBeenCalled();
+
+    mockExit.mockRestore();
+    mockConsoleError.mockRestore();
   });
 });

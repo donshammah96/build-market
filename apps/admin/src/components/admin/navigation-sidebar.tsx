@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import type { AdminRole } from "@build/enums";
 import { getPendingVerifications } from "@/actions/admin";
-import { AdminFeatureFlag, getAdminV2Route } from "@/lib/config/feature-flags";
 import {
   ADMIN_CAPABILITY_ROLE_MAP,
   AdminCapability,
@@ -114,30 +113,9 @@ export function NavigationSidebar({
   adminRole,
   footer,
 }: NavigationSidebarProps) {
-  const usersHref = getAdminV2Route(
-    AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT,
-    "/users",
-    "/users-v2",
-  );
-  const verificationsHref = getAdminV2Route(
-    AdminFeatureFlag.ADMIN_V2_VERIFICATION_QUEUE,
-    "/verifications",
-    "/verifications-v2",
-  );
-  const analyticsHref = getAdminV2Route(
-    AdminFeatureFlag.ADMIN_V2_FINANCE_DASHBOARD,
-    "/analytics",
-    "/analytics-v2",
-  );
-  const auditHref = getAdminV2Route(
-    AdminFeatureFlag.ADMIN_V2_AUDIT_LOG_UI,
-    "/audit",
-    "/audit-v2",
-  );
-
   const managementItems: NavigationItem[] = [
     {
-      href: usersHref,
+      href: "/users",
       label: "All Users",
       Icon: Users,
       hoverClassName: "group-hover:text-blue-400",
@@ -189,14 +167,14 @@ export function NavigationSidebar({
 
   const systemItems: NavigationItem[] = [
     {
-      href: analyticsHref,
+      href: "/analytics",
       label: "Analytics",
       Icon: BarChart3,
       hoverClassName: "group-hover:text-emerald-400",
       capability: AdminCapability.VIEW_FINANCIALS,
     },
     {
-      href: auditHref,
+      href: "/audit",
       label: "Audit Logs",
       Icon: FileText,
       hoverClassName: "group-hover:text-yellow-400",
@@ -243,7 +221,7 @@ export function NavigationSidebar({
               Verification
             </p>
             <Link
-              href={verificationsHref}
+              href="/verifications"
               className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
             >
               <span className="flex items-center gap-3">

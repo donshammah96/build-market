@@ -38,6 +38,47 @@ export type OnboardingStatus = {
     | "internal_api_resolved";
 };
 
+interface CachedOnboardingStatus {
+  status: OnboardingStatus;
+  expiresAt: number;
+}
+
+const ONBOARDING_CACHE_TTL_MS = 30_000;
+const MAX_CACHE_SIZE = 500;
+const onboardingStatusCache = new Map<string, CachedOnboardingStatus>();
+
+export function clearOnboardingResolverCache(clerkId?: string): void {
+  if (clerkId) {
+    onboardingStatusCache.delete(clerkId);
+  } else {
+    onboardingStatusCache.clear();
+  }
+}
+
+function getCachedOnboardingStatus(clerkId: string): OnboardingStatus | null {
+  const cached = onboardingStatusCache.get(clerkId);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    onboardingStatusCache.delete(clerkId);
+    return null;
+  }
+  return cached.status;
+}
+
+function setCachedOnboardingStatus(
+  clerkId: string,
+  status: OnboardingStatus,
+): void {
+  if (onboardingStatusCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = onboardingStatusCache.keys().next().value;
+    if (oldestKey) onboardingStatusCache.delete(oldestKey);
+  }
+  onboardingStatusCache.set(clerkId, {
+    status,
+    expiresAt: Date.now() + ONBOARDING_CACHE_TTL_MS,
+  });
+}
+
 export async function resolveOnboardingStatus(
   clerkId: string,
   metadata:
@@ -61,6 +102,11 @@ export async function resolveOnboardingStatus(
       confidence: "high",
       reason: "metadata_present",
     };
+  }
+
+  const cached = getCachedOnboardingStatus(clerkId);
+  if (cached) {
+    return cached;
   }
 
   const internalSecret = env.services.internalApiSecret;
@@ -143,6 +189,8 @@ export async function resolveOnboardingStatus(
       confidence: "medium",
       reason: "internal_api_resolved",
     };
+
+    setCachedOnboardingStatus(clerkId, resolvedResult);
 
     logOnboardingResolverOutcome("info", {
       outcome: "resolved",

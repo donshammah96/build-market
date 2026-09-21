@@ -1,0 +1,459 @@
+import { clerkClient } from "@clerk/nextjs/server";
+import { err, ok, type Result } from "@/app/lib/errors/result";
+import { env } from "@/app/lib/infrastructure/env";
+import {
+  isStagingRunActive,
+  type StagingScenario,
+} from "@build/db/staging-test-runs";
+import { signStagingGrant, resolveStagingControlSecret } from "./contracts";
+import { testControlRepository, type CreateRunParams } from "./repository";
+import {
+  identityRepository,
+  resolveConfiguredSlots,
+  type IdentityResetProjection,
+} from "./identity-repository";
+import { restoreClerkIdentityBaseline } from "./clerk-identity-adapter";
+
+export interface TestControlError {
+  error: string;
+  message: string;
+  status: number;
+}
+
+export class TestControlService {
+  private assertTestControlPermitted(): Result<true, TestControlError> {
+    const isTest = env.isTest;
+    const isActualProduction =
+      env.isProd && !env.isVercelPreview && env.otel.ddEnv !== "staging";
+    const testControlEnabled =
+      !isActualProduction &&
+      Boolean(env.stagingTestControl?.enabled) &&
+      (env.otel.ddEnv === "staging" || env.isVercelPreview);
+
+    if (!testControlEnabled && !isTest) {
+      return err({
+        error: "NOT_STAGING_ENVIRONMENT",
+        message:
+          "Staging test control is not enabled or permitted in this environment",
+        status: 404,
+      });
+    }
+    return ok(true);
+  }
+
+  /**
+   * Initializes a new StagingTestRun and issues a signed, short-lived grant token.
+   */
+  async createRun(
+    params: CreateRunParams,
+  ): Promise<Result<{ runId: string; grantToken: string }, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+    const secret = resolveStagingControlSecret(
+      env.stagingTestControl?.secret,
+      env.isTest,
+    );
+    if (!secret) {
+      return err({
+        error: "TEST_CONTROL_NOT_CONFIGURED",
+        message: "Staging test control is missing TEST_CONTROL_SECRET",
+        status: 404,
+      });
+    }
+
+    try {
+      const run = await testControlRepository.createRun(params);
+      const grantToken = signStagingGrant(
+        {
+          runId: run.id,
+          scenario: params.scenario,
+          actions: [
+            "seed-scenario",
+            "issue-session-handoff",
+            "reset-identity-baseline",
+            "seed-mpesa-transaction",
+            "get-run-projection",
+            "cleanup-run",
+          ],
+        },
+        secret,
+        params.lifetimeSeconds ?? 900,
+      );
+
+      return ok({ runId: run.id, grantToken });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || "");
+      const isLoopbackMisconfig =
+        msg.includes("[@build/db] DATABASE_URL points to loopback host") ||
+        /Can't reach database server at (127\.0\.0\.1|localhost|::1)/i.test(
+          msg,
+        );
+
+      if (isLoopbackMisconfig) {
+        return err({
+          error: "STAGING_DATABASE_MISCONFIGURED",
+          message:
+            "DATABASE_URL is not correctly configured for this deployment (resolves to a local/invalid host). " +
+            "This is an environment configuration problem, not a transient database issue.",
+          status: 503,
+        });
+      }
+
+      return err({
+        error: "CREATE_RUN_FAILED",
+        message: msg || "Failed to initialize staging test run",
+        status: 500,
+      });
+    }
+  }
+
+  /**
+   * Generates a single-use Clerk sign-in ticket for pre-provisioned staging pool accounts.
+   */
+  async issueBrowserSessionHandoff(params: {
+    runId: string;
+    role: "CLIENT" | "PROFESSIONAL";
+  }): Promise<
+    Result<
+      { userId: string; email: string; ticket: string; signInUrl: string },
+      TestControlError
+    >
+  > {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
+    const run = await testControlRepository.findRunById(params.runId);
+    if (
+      !run ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
+      return err({
+        error: "RUN_NOT_ACTIVE",
+        message: "Staging test run is not found or has expired",
+        status: 400,
+      });
+    }
+
+    const lease = await identityRepository.leaseIdentity({
+      runId: params.runId,
+      scenario: run.scenario,
+      role: params.role,
+      kind: "BORROWED",
+    });
+
+    if (!lease) {
+      return err({
+        error: "IDENTITY_LEASE_EXHAUSTED",
+        message: `All staging identity slots for role "${params.role}" are currently leased`,
+        status: 409,
+      });
+    }
+
+    try {
+      const clerk = await clerkClient();
+      const ticketResponse = await (
+        clerk as any
+      ).signInTokens.createSignInToken({
+        userId: lease.clerkId,
+        expiresInSeconds: 60,
+      });
+
+      const slot = resolveConfiguredSlots().find((s) => s.slot === lease.slot);
+      const email = lease.email ?? slot?.email ?? "";
+
+      return ok({
+        userId: lease.userId,
+        email,
+        ticket: ticketResponse.token,
+        signInUrl: this.resolveTestingSignInUrl(
+          ticketResponse.token,
+          ticketResponse.url,
+          params.role === "PROFESSIONAL"
+            ? "/professional-portal/dashboard"
+            : "/onboarding",
+        ),
+      });
+    } catch (e: any) {
+      return err({
+        error: "CLERK_HANDOFF_FAILED",
+        message: e.message || "Failed to mint Clerk testing token",
+        status: 502,
+      });
+    }
+  }
+
+  /**
+   * Resolves the application embedded sign-in URL for test tickets.
+   * Prevents unhosted accounts.* portal 403 Forbidden errors by routing through /sign-in.
+   */
+  private resolveTestingSignInUrl(
+    ticket: string,
+    fallbackUrl: string,
+    redirectUrl?: string,
+  ): string {
+    const base = env.appUrl ? env.appUrl.replace(/\/+$/, "") : null;
+    if (base) {
+      const redirectParam = redirectUrl
+        ? `&redirect_url=${encodeURIComponent(redirectUrl)}`
+        : "";
+      return `${base}/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}${redirectParam}`;
+    }
+    return fallbackUrl;
+  }
+
+  /**
+   * Resets the identity baseline for a leased test identity in staging.
+   * Sequence: validate run -> lease identity -> mark resetting -> reset Clerk -> restore DB baseline -> mark ready -> mint Clerk ticket.
+   */
+  async resetIdentityBaseline(params: {
+    runId: string;
+    role: "CLIENT" | "PROFESSIONAL";
+  }): Promise<
+    Result<
+      {
+        leaseId: string;
+        slot: string;
+        userId: string;
+        role: "CLIENT" | "PROFESSIONAL";
+        ticket: string;
+        signInUrl: string;
+        projection: IdentityResetProjection;
+      },
+      TestControlError
+    >
+  > {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
+    const run = await testControlRepository.findRunById(params.runId);
+    if (
+      !run ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
+      return err({
+        error: "RUN_NOT_ACTIVE",
+        message: "Staging test run is not found or has expired",
+        status: 400,
+      });
+    }
+
+    if (run.scenario !== "onboarding" && run.scenario !== "verification") {
+      return err({
+        error: "RUN_SCENARIO_MISMATCH",
+        message: `Scenario "${run.scenario}" is not eligible for identity baseline reset`,
+        status: 400,
+      });
+    }
+
+    try {
+      const lease = await identityRepository.leaseIdentity({
+        runId: params.runId,
+        scenario: run.scenario as any,
+        role: params.role,
+      });
+
+      if (!lease) {
+        return err({
+          error: "IDENTITY_LEASE_EXHAUSTED",
+          message: `All staging identity slots for role "${params.role}" are currently leased`,
+          status: 409,
+        });
+      }
+
+      // Reset Clerk identity baseline
+      const clerkResetResult = await restoreClerkIdentityBaseline(lease);
+      if (!clerkResetResult.ok) {
+        return clerkResetResult;
+      }
+
+      // Restore DB baseline
+      const projection = await identityRepository.restoreIdentityBaseline({
+        leaseId: lease.id,
+        runId: params.runId,
+        baseline: {
+          role: params.role,
+          userStatus: "ONBOARDING",
+          onboardingState: "NOT_STARTED",
+          isProfileComplete: false,
+          verified: false,
+          trustTier: "UNVERIFIED",
+        },
+      });
+
+      // Issue single-use Clerk ticket
+      const clerk = (await clerkClient()) as any;
+      const ticketResponse = await clerk.signInTokens.createSignInToken({
+        userId: lease.clerkId,
+        expiresInSeconds: 60,
+      });
+
+      return ok({
+        leaseId: lease.id,
+        slot: lease.slot,
+        userId: lease.userId,
+        role: lease.role,
+        ticket: ticketResponse.token,
+        signInUrl: this.resolveTestingSignInUrl(
+          ticketResponse.token,
+          ticketResponse.url,
+          "/onboarding",
+        ),
+        projection,
+      });
+    } catch (e: any) {
+      return err({
+        error: "RESET_IDENTITY_FAILED",
+        message: e.message || "Failed to reset identity baseline",
+        status: 500,
+      });
+    }
+  }
+
+  /**
+   * Seeds a pending MpesaTransaction record bound to the staging test run.
+   */
+  async seedPendingMpesaTransaction(params: {
+    runId: string;
+    amount: number;
+    phoneNumber: string;
+    checkoutRequestId?: string;
+    merchantRequestId?: string;
+  }): Promise<
+    Result<
+      {
+        transactionId: string;
+        checkoutRequestId: string;
+        merchantRequestId: string;
+      },
+      TestControlError
+    >
+  > {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
+    const run = await testControlRepository.findRunById(params.runId);
+    if (
+      !run ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
+      return err({
+        error: "RUN_NOT_ACTIVE",
+        message: "Staging test run is not active or has expired",
+        status: 400,
+      });
+    }
+
+    try {
+      const tx =
+        await testControlRepository.seedPendingMpesaTransaction(params);
+      return ok({
+        transactionId: tx.id,
+        checkoutRequestId: tx.checkoutRequestId!,
+        merchantRequestId: tx.merchantRequestId!,
+      });
+    } catch (e: any) {
+      return err({
+        error: "SEED_TRANSACTION_FAILED",
+        message: e.message || "Failed to seed pending M-Pesa transaction",
+        status: 500,
+      });
+    }
+  }
+
+  async seedScenario(params: {
+    runId: string;
+    scenario: StagingScenario;
+    payload: Record<string, unknown>;
+  }): Promise<Result<Record<string, string>, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
+    const run = await testControlRepository.findRunById(params.runId);
+    if (
+      !run ||
+      run.scenario !== params.scenario ||
+      !isStagingRunActive({ state: run.state as any, expiresAt: run.expiresAt })
+    ) {
+      return err({
+        error: "RUN_NOT_ACTIVE",
+        message: "Staging test run is not active for the requested scenario",
+        status: 400,
+      });
+    }
+
+    try {
+      return ok(await testControlRepository.seedScenario(params));
+    } catch (e: any) {
+      return err({
+        error: "SEED_SCENARIO_FAILED",
+        message: e.message || "Failed to seed staging scenario",
+        status: 500,
+      });
+    }
+  }
+
+  /**
+   * Retrieves full entity projection owned by the test run.
+   */
+  async getRunProjection(
+    runId: string,
+  ): Promise<Result<any, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
+    try {
+      const projection = await testControlRepository.getRunProjection(runId);
+      if (!projection.run) {
+        return err({
+          error: "RUN_NOT_FOUND",
+          message: `Staging test run ${runId} was not found`,
+          status: 404,
+        });
+      }
+      return ok(projection);
+    } catch (e: any) {
+      return err({
+        error: "GET_PROJECTION_FAILED",
+        message: e.message || "Failed to retrieve run projection",
+        status: 500,
+      });
+    }
+  }
+
+  /**
+   * Executes atomic cascading cleanup of all entities owned by the test run.
+   */
+  async cleanupRun(
+    runId: string,
+  ): Promise<Result<{ cleaned: true }, TestControlError>> {
+    const permitCheck = this.assertTestControlPermitted();
+    if (!permitCheck.ok) return permitCheck;
+
+    const run = await testControlRepository.findRunById(runId);
+    if (!run) {
+      return err({
+        error: "RUN_NOT_FOUND",
+        message: `Staging test run ${runId} was not found`,
+        status: 404,
+      });
+    }
+
+    if (run.state === "CLEANED") {
+      return ok({ cleaned: true }); // Idempotent success
+    }
+
+    try {
+      await identityRepository.releaseIdentityLease(runId);
+      await testControlRepository.cleanupRun(runId);
+      return ok({ cleaned: true });
+    } catch (e: any) {
+      return err({
+        error: "CLEANUP_FAILED",
+        message: e.message || "Failed to clean up staging test run",
+        status: 500,
+      });
+    }
+  }
+}
+
+export const testControlService = new TestControlService();

@@ -1,5 +1,9 @@
 # ADR-ADMIN-005: Admin HTTP and Security Surface
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

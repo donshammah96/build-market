@@ -13,9 +13,11 @@ import {
   isApiRoute,
   isSettingsExemptRoute,
   isSignUpRoute,
+  isAuthRoute,
 } from "@/app/lib/security/middleware/route-matcher";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
 import {
+  clearAuthBounce,
   redirectToDashboardForRole,
   redirectToMaintenance,
   redirectToOnboarding,
@@ -29,6 +31,7 @@ import { resolveSystemSettings } from "@/app/lib/security/middleware/system-sett
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 import { env } from "@/app/lib/infrastructure/env";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
 import {
   buildCspWithNonce,
   generateCspNonce,
@@ -36,6 +39,8 @@ import {
 import { PROFESSIONAL_ROUTES } from "@/lib/routes";
 import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 import { handleStagingProtection } from "@/app/lib/security/middleware/staging-auth";
+import { capabilityBoundaryForPath } from "@/app/lib/capabilities/boundary";
+import { fingerprintPublishableKey } from "@/app/lib/security/clerk-fingerprint";
 
 // =============================================================================
 // Middleware
@@ -57,15 +62,42 @@ const applyDocumentCspHeaders = (
   req: NextRequest,
   nonce: string,
   cspValue: string,
+  options?: {
+    edgeUserId?: string | null;
+    decision?: string;
+    authReason?: string;
+  },
 ): NextResponse => {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", cspValue);
+  if (options?.edgeUserId !== undefined) {
+    requestHeaders.set("x-bm-edge-user", options.edgeUserId ?? "");
+  }
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  const cspHeaderName = env.cspReportOnly
+  const isCspReportOnly = edgeEnv.cspReportOnly || env.cspReportOnly;
+  const cspHeaderName = isCspReportOnly
     ? "Content-Security-Policy-Report-Only"
     : "Content-Security-Policy";
   response.headers.set(cspHeaderName, cspValue);
+
+  // Diagnostic response headers in staging/preview/dev (P-2)
+  const isDiagnosticEnv =
+    edgeEnv.ddEnv === "staging" ||
+    env.otel?.ddEnv === "staging" ||
+    edgeEnv.isVercelPreview ||
+    env.isVercelPreview ||
+    edgeEnv.isDev ||
+    env.isDev;
+  if (isDiagnosticEnv) {
+    if (options?.decision) {
+      response.headers.set("x-bm-mw-decision", options.decision);
+    }
+    if (options?.authReason) {
+      response.headers.set("x-bm-auth-reason", options.authReason);
+    }
+  }
+
   return response;
 };
 
@@ -87,20 +119,32 @@ const applyDocumentCspHeaders = (
 // reaching a satellite's FAPI, or vice versa.
 //
 const getClerkSatelliteOrigins = (): string[] =>
-  (env.clerk?.satelliteOrigins ?? [])
+  (edgeEnv.clerkSatelliteOrigins.length > 0
+    ? edgeEnv.clerkSatelliteOrigins
+    : (env.clerk?.satelliteOrigins ?? [])
+  )
     .map((value) => toOrigin(value.trim()))
     .filter((value): value is string => Boolean(value));
 
 const buildRequestCsp = (nonce: string): string =>
   buildCspWithNonce({
     nonce,
-    appOrigin: toOrigin(env.appUrl) ?? "http://localhost:3500",
+    appOrigin:
+      toOrigin(edgeEnv.appUrl) ??
+      toOrigin(env.appUrl) ??
+      "http://localhost:3500",
     apiOrigin:
-      toOrigin(env.apiUrl) ?? toOrigin(env.appUrl) ?? "http://localhost:3500",
-    clerkFrontendApiOrigin: toOrigin(env.clerk?.frontendApi),
-    analyticsOrigin: toOrigin(env.analytics?.posthogHost),
-    isDev: Boolean(env.isDev),
-    allowUnsafeEval: env.allowCspUnsafeEval,
+      toOrigin(edgeEnv.apiUrl) ??
+      toOrigin(env.apiUrl) ??
+      toOrigin(edgeEnv.appUrl) ??
+      toOrigin(env.appUrl) ??
+      "http://localhost:3500",
+    clerkFrontendApiOrigin:
+      toOrigin(edgeEnv.clerkFrontendApi) ?? toOrigin(env.clerk?.frontendApi),
+    analyticsOrigin:
+      toOrigin(edgeEnv.posthogHost) ?? toOrigin(env.analytics?.posthogHost),
+    isDev: Boolean(edgeEnv.isDev || env.isDev),
+    allowUnsafeEval: edgeEnv.allowCspUnsafeEval || env.allowCspUnsafeEval,
     clerkSatelliteOrigins: getClerkSatelliteOrigins(),
     clerkChallengeOrigins: [
       "https://challenges.cloudflare.com",
@@ -117,8 +161,21 @@ const BLOCKED_ACCOUNT_STATUSES = [
 
 // API routes are called by fetch/XHR/tRPC clients, not browser navigation,
 // so failures must be JSON responses rather than sign-in redirects.
-const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
-  NextResponse.json({ error: message }, { status: 401 });
+const unauthorizedApiResponse = (
+  message = "Unauthorized",
+  headersInit?: Record<string, string>,
+): NextResponse => {
+  const response = NextResponse.json({ error: message }, { status: 401 });
+  if (headersInit) {
+    for (const [k, v] of Object.entries(headersInit)) {
+      if (v) {
+        const safeVal = v.replace(/[^\x20-\x7E]/g, "");
+        if (safeVal) response.headers.set(k, safeVal);
+      }
+    }
+  }
+  return response;
+};
 
 // =============================================================================
 // Satellite wiring (ROOT CAUSE FIX — see REDIRECT_LOOP_AUTOPSY_AND_FIX.md)
@@ -141,10 +198,26 @@ const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
 // a misconfigured env var degrades this satellite's auth instead of taking
 // the whole app down — matching the "fail open + log" contract documented
 // in env.ts's satellite config comments.
-const satelliteDomain = env.clerk.domain?.trim() || undefined;
-const isSatelliteConfigured = Boolean(env.clerk.isSatellite && satelliteDomain);
+const satelliteDomain =
+  (edgeEnv.clerkDomain || env.clerk.domain)?.trim() || undefined;
 
-if (env.clerk.isSatellite && !satelliteDomain) {
+// apps/client is the PRIMARY application (buildmarket.app / staging.buildmarket.app).
+// It is a standalone instance, NEVER a Clerk satellite (see ADR-001 & STAGING-E2E-STAFF-AUTOPSY-V2 §4 Q4).
+// Defensive guard against satellite env vars leaking into Preview(staging) for client (H-4').
+const isPrimaryDomain =
+  !satelliteDomain ||
+  satelliteDomain.includes("staging.buildmarket.app") ||
+  satelliteDomain.includes("buildmarket.app");
+
+const isSatellite =
+  edgeEnv.clerkIsSatellite !== undefined
+    ? edgeEnv.clerkIsSatellite
+    : Boolean(env.clerk.isSatellite);
+const isSatelliteConfigured = Boolean(
+  isSatellite && satelliteDomain && !isPrimaryDomain,
+);
+
+if (isSatellite && !satelliteDomain) {
   console.error(
     "[middleware] NEXT_PUBLIC_CLERK_IS_SATELLITE=true but " +
       "NEXT_PUBLIC_CLERK_DOMAIN is unset/empty. Falling back to non-satellite " +
@@ -155,9 +228,21 @@ if (env.clerk.isSatellite && !satelliteDomain) {
   );
 }
 
-const clerkMiddlewareOptions = isSatelliteConfigured
-  ? { isSatellite: true as const, domain: satelliteDomain as string }
-  : undefined;
+const clerkPublishableKey =
+  edgeEnv.clerkPublishableKey || env.clerk.publishableKey;
+// CRITICAL: Do NOT pass secretKey into clerkMiddlewareOptions.
+// In Clerk v7, passing secretKey activates Dynamic Keys mode, which asserts
+// CLERK_ENCRYPTION_KEY at request time (encryptClerkRequestData). If CLERK_ENCRYPTION_KEY
+// is missing, Clerk throws encryptionKeyMissing ("Clerk: Missing CLERK_ENCRYPTION_KEY.
+// Required for propagating secretKey middleware option"), causing 500 MIDDLEWARE_INVOCATION_FAILED.
+// When secretKey is omitted here, clerkMiddleware safely reads ambient secretKey configuration
+// in standard static mode without requiring CLERK_ENCRYPTION_KEY.
+const clerkMiddlewareOptions = {
+  publishableKey: clerkPublishableKey,
+  ...(isSatelliteConfigured
+    ? { isSatellite: true as const, domain: satelliteDomain as string }
+    : {}),
+};
 
 const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const nextReq = req;
@@ -260,13 +345,41 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   // before this point was ever reached). It now runs here, and
   // actually enforces auth instead of allowing unconditionally.
   if (isProtectedApiRoute(nextReq)) {
-    const authObject = await auth();
-    if (!authObject.userId) {
-      logMiddlewareDecision(nextReq, "mw_deny_protected_api_unauthenticated");
-      return unauthorizedApiResponse();
+    const authObject = (await auth()) as any;
+    const userId = authObject?.userId;
+    if (!userId) {
+      const debugData =
+        typeof authObject?.debug === "function" ? authObject.debug() : null;
+      const authReason =
+        debugData?.reason || authObject?.sessionStatus || "unauthenticated";
+
+      logMiddlewareDecision(nextReq, "mw_deny_protected_api_unauthenticated", {
+        authReason,
+        debug: debugData,
+      });
+
+      const isDiagnosticEnv =
+        edgeEnv.ddEnv === "staging" ||
+        env.otel?.ddEnv === "staging" ||
+        edgeEnv.isVercelPreview ||
+        env.isVercelPreview ||
+        edgeEnv.isDev ||
+        env.isDev;
+
+      return unauthorizedApiResponse(
+        "Unauthorized",
+        isDiagnosticEnv
+          ? {
+              "x-bm-mw-decision": "mw_deny_protected_api_unauthenticated",
+              "x-bm-auth-reason": String(authReason),
+              "x-bm-clerk-pk":
+                fingerprintPublishableKey(clerkPublishableKey) ?? "",
+            }
+          : undefined,
+      );
     }
 
-    const quickMeta = parseMiddlewareSessionMetadata(authObject.sessionClaims);
+    const quickMeta = parseMiddlewareSessionMetadata(authObject?.sessionClaims);
     if (
       quickMeta?.status &&
       BLOCKED_ACCOUNT_STATUSES.includes(quickMeta.status)
@@ -278,9 +391,12 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
     }
 
     logMiddlewareDecision(nextReq, "mw_allow_protected_api", {
-      userId: authObject.userId,
+      userId,
     });
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+    return applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+      edgeUserId: userId,
+      decision: "mw_allow_protected_api",
+    });
   }
 
   // 1d. Any other /api path must be explicitly classified above as
@@ -335,7 +451,10 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       // query params (e.g. ?expectedRole=professional) are silently
       // dropped on same-origin redirects and the post-login handoff
       // loses context.
-      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search);
+      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search, {
+        nonce,
+        cspValue,
+      });
     }
 
     const metadata = parseMiddlewareSessionMetadata(sessionClaims);
@@ -383,7 +502,12 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       source: status.source,
       reason: status.reason,
     });
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+    return clearAuthBounce(
+      applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+        edgeUserId: userId,
+        decision: "mw_allow_onboarding",
+      }),
+    );
   }
 
   // 3. Protected routes - require authentication AND completed onboarding
@@ -405,7 +529,10 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
         routeClass: "protected",
       });
       // See onboarding-route note above: must include the search string.
-      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search);
+      return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search, {
+        nonce,
+        cspValue,
+      });
     }
 
     const metadata = parseMiddlewareSessionMetadata(sessionClaims);
@@ -454,7 +581,12 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
           status: status.status,
         },
       );
-      return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+      return clearAuthBounce(
+        applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+          edgeUserId: userId,
+          decision: "mw_allow_professional_pending_verification",
+        }),
+      );
     }
 
     if (isPendingVerificationRoute && status.role === "PROFESSIONAL") {
@@ -490,12 +622,19 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
       source: status.source,
       role: status.role,
     });
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+    return clearAuthBounce(
+      applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+        edgeUserId: userId,
+        decision: "mw_allow_protected",
+      }),
+    );
   }
 
   // 4. All other routes - allow access
   logMiddlewareDecision(nextReq, "mw_allow_default");
-  return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+  return applyDocumentCspHeaders(nextReq, nonce, cspValue, {
+    decision: "mw_allow_default",
+  });
 }, clerkMiddlewareOptions);
 
 const middleware = async (
@@ -512,6 +651,30 @@ const middleware = async (
   const nonce = generateCspNonce();
   const cspValue = buildRequestCsp(nonce);
 
+  // Deferred MVP verticals are server-enforced capability boundaries, not
+  // navigation hints. Evaluate them before auth, fast-path, and API route
+  // classification so deep links and direct requests share the same denial.
+  const capabilityDenial = capabilityBoundaryForPath(req.nextUrl.pathname);
+  if (capabilityDenial) {
+    logMiddlewareDecision(req, "mw_deny_disabled_capability");
+    const accept = req.headers.get("accept") || "";
+    if (accept.includes("text/html")) {
+      return new NextResponse(
+        "<!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1><p>The requested capability is not available.</p></body></html>",
+        {
+          status: capabilityDenial.status,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
+    return NextResponse.json(capabilityDenial.body, {
+      status: capabilityDenial.status,
+    });
+  }
+
   // --- DEV AUTH BYPASS ---
   if (env.auth.bypassEnabled && (env.isDev || env.isCI)) {
     logMiddlewareDecision(req, "mw_dev_bypass");
@@ -521,9 +684,9 @@ const middleware = async (
   // --- FAST PATH FOR PUBLIC INFORMATIONAL ROUTES & PUBLIC APIS ---
   // Pure public informational pages (home, properties, idea-books) and public health/metric APIs
   // do not require Clerk authentication or signup guards. Serving them directly avoids blocking
-  // on remote Clerk API roundtrips during boot or offline CI. Sign-up routes delegate to clerkHandler
-  // so registration-blocking and maintenance rules execute.
-  if ((isPublicRoute(req) && !isSignUpRoute(req)) || isPublicApiRoute(req)) {
+  // on remote Clerk API roundtrips during boot or offline CI. Auth routes (/sign-in, /sign-up, etc.)
+  // delegate to clerkHandler so Clerk's AsyncLocalStorage request store initializes and registration/maintenance rules execute.
+  if ((isPublicRoute(req) && !isAuthRoute(req)) || isPublicApiRoute(req)) {
     logMiddlewareDecision(
       req,
       isPublicRoute(req) ? "mw_allow_public" : "mw_allow_public_api",
@@ -531,8 +694,39 @@ const middleware = async (
     return applyDocumentCspHeaders(req, nonce, cspValue);
   }
 
-  // Delegate all authenticated, internal, and protected routes to clerkMiddleware
-  return (clerkHandler as any)(req, event);
+  // --- INTERNAL API FAST PATH (Service-to-service, protected by x-internal-secret) ---
+  // Service-to-service internal API calls (/api/internal/*, /api/metrics/*) do not use Clerk session auth;
+  // they authenticate exclusively via constant-time x-internal-secret comparison. Evaluating them before
+  // clerkMiddleware avoids blocking test runners or health probes on remote Clerk API errors.
+  if (isInternalApiRoute(req)) {
+    const secret = req.headers.get("x-internal-secret");
+    const secretError = ensureValidInternalSecret(secret);
+
+    if (secretError) {
+      logMiddlewareDecision(req, "mw_deny_internal_api_unauthorized", {
+        status: secretError.status,
+      });
+      return secretError;
+    }
+
+    logMiddlewareDecision(req, "mw_allow_internal_api");
+    return applyDocumentCspHeaders(req, nonce, cspValue);
+  }
+
+  // Delegate all authenticated, user-facing, and protected routes to clerkMiddleware
+  try {
+    return await (clerkHandler as any)(req, event);
+  } catch (error: any) {
+    console.error(
+      "[middleware] Unhandled exception in clerkHandler:",
+      error?.message || error,
+    );
+    // On auth and public routes (/sign-in, /sign-up, etc.), never crash with Vercel 500 MIDDLEWARE_INVOCATION_FAILED
+    if (isAuthRoute(req) || isPublicRoute(req)) {
+      return applyDocumentCspHeaders(req, nonce, cspValue);
+    }
+    throw error;
+  }
 };
 
 export default middleware;

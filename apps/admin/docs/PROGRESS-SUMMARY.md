@@ -16,6 +16,14 @@
 
 **Status:** Enforced feature flag lifecycle limits and continuous governance in CI (`ci.yml` validate job); automated `admin:check-governance` and `admin:check-all`; eliminated all static security drift logger spread warnings; added `__tests__/config/feature-flags-lifecycle.test.ts` and `__tests__/security/verify-gdpr-replay.test.ts`.
 
+**Milestone Completed (2026-09-02):** ADR-ADMIN-009 Strangler-Fig v2 Feature Flag Retirement & Canonical Route Promotion
+
+- Completed retirement checklist for 4 v2 feature flags (`admin_v2_user_management`, `admin_v2_verification_queue`, `admin_v2_finance_dashboard`, `admin_v2_audit_log_ui`).
+- Promoted v2 UI enhancements (including capability-aware role indicator badge on verification queue) directly to canonical routes (`/users`, `/verifications`, `/analytics`, `/audit`).
+- Permanently deleted obsolete `/users-v2`, `/verifications-v2`, `/analytics-v2`, and `/audit-v2` route trees.
+- Removed deprecated environment variables from schemas, wrappers, and `.env.*` templates.
+- Aligned `NavigationSidebar` links directly to canonical routes with zero feature-flag indirection.
+
 **Milestone Completed (2026-08-02):** Standalone Verification Operations Workspace App & Admin Shadow Mode (`apps/verification-ops`, `@build/verification-domain`)
 
 - Migrated verification operations out of `apps/admin` into a dedicated Next.js application in the `pnpm` workspace (`apps/verification-ops`).

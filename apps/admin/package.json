@@ -30,6 +30,7 @@
     "@build/db": "workspace:*",
     "@build/enums": "workspace:*",
     "@build/mail-server": "workspace:*",
+    "@build/mpesa": "workspace:*",
     "@build/messaging-server": "workspace:*",
     "@build/nats": "workspace:*",
     "@build/queue-server": "workspace:*",

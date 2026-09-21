@@ -131,8 +131,8 @@ To maintain architectural integrity across teams and automated coding agents, th
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │  TIER 0 — Decision Rationale (Immutable ADRs)              │
-│  apps/client/docs/adr/ADR-001 through ADR-009               │
-│  apps/admin/docs/adr/ADR-ADMIN-001 through ADR-ADMIN-009    │
+│  apps/client/docs/adr/ADR-001 through ADR-010               │
+│  apps/admin/docs/adr/ADR-ADMIN-001 through ADR-ADMIN-016    │
 │  → Defines fundamental architectural decisions & invariants │
 └─────────────────────────────────────────────────────────────┘
                             │ governs
@@ -169,6 +169,13 @@ When documents disagree, resolve top-to-bottom:
 2. **Narrower Scope Wins within Same Tier:** Specific app architecture guides override repo-wide defaults for that application.
 3. **Stricter Rule Wins:** If scopes and tiers match, the stricter architectural boundary or security invariant governs.
 4. **Drift Protocol:** Never encode workarounds or in-code comments that bypass higher-tier rules. Surface drift explicitly.
+
+### Current ADR Index
+
+- **Client:** [`ADR-001` through `ADR-010`](apps/client/docs/adr/), including the [background-job execution and worker-daemon boundary](apps/client/docs/adr/ADR-010-background-job-execution-and-worker-daemon-boundary.md).
+- **Admin:** [`ADR-ADMIN-001` through `ADR-ADMIN-016`](apps/admin/docs/adr/), including the [background-worker isolation and daemon-migration decision](apps/admin/docs/adr/ADR-ADMIN-016-admin-background-worker-isolation-and-daemon-migration.md).
+
+Every ADR declares its lifecycle status, owner, and next review date. Current launch evidence is maintained in [`docs/launch/GO_NO_GO.md`](docs/launch/GO_NO_GO.md), not inferred from an architectural decision alone.
 
 ### Key Architecture Blueprints
 

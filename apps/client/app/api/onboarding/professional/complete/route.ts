@@ -20,13 +20,13 @@
 
 import { NextRequest } from "next/server";
 import {
-  County,
-  LicenseAuthority,
-  Profession,
-  PropertyType,
-  PropertyCategory,
-  PropertyStatus,
-} from "@prisma/client";
+  COUNTIES,
+  LICENSE_AUTHORITIES,
+  PROFESSIONS,
+  PROPERTY_CATEGORIES,
+  PROPERTY_STATUSES,
+  PROPERTY_TYPES,
+} from "@build/enums";
 import { z } from "zod";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
@@ -64,13 +64,13 @@ import {
 const OPERATION_NAME = "complete-professional-onboarding";
 
 const OnboardingCompleteSchema = z.object({
-  profession: z.nativeEnum(Profession),
+  profession: z.enum(PROFESSIONS),
   companyName: z.string().min(1, "Company name is required"),
   yearsExperience: z.number().int().min(0).max(100).optional().nullable(),
   website: z.string().url().optional().nullable().or(z.literal("")),
   bio: z.string().max(5000).optional().nullable(),
   licenseNumber: z.string().optional().nullable(),
-  licenseAuthority: z.nativeEnum(LicenseAuthority).optional().nullable(),
+  licenseAuthority: z.enum(LICENSE_AUTHORITIES).optional().nullable(),
   earbNumber: z.string().optional().nullable(),
   emailMarketingConsent: z.boolean().optional(),
   smsMarketingConsent: z.boolean().optional(),
@@ -82,7 +82,7 @@ const OnboardingCompleteSchema = z.object({
         description: z.string().optional(),
         address: z.string().optional(),
         city: z.string().optional(),
-        county: z.nativeEnum(County).optional(),
+        county: z.enum(COUNTIES).optional(),
         categories: z.array(z.string()).optional(),
         images: z.array(z.string()).optional(),
       }),
@@ -97,10 +97,10 @@ const OnboardingCompleteSchema = z.object({
         currency: z.string().optional(),
         location: z.string().optional(),
         address: z.string().optional(),
-        county: z.nativeEnum(County).optional(),
-        type: z.nativeEnum(PropertyType).optional(),
-        category: z.nativeEnum(PropertyCategory).optional(),
-        status: z.nativeEnum(PropertyStatus).optional(),
+        county: z.enum(COUNTIES).optional(),
+        type: z.enum(PROPERTY_TYPES).optional(),
+        category: z.enum(PROPERTY_CATEGORIES).optional(),
+        status: z.enum(PROPERTY_STATUSES).optional(),
         bedrooms: z.number().int().min(0).optional().nullable(),
         bathrooms: z.number().int().min(0).optional().nullable(),
         areaSqm: z.number().min(0).optional().nullable(),

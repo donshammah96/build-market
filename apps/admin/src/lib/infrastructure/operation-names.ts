@@ -108,6 +108,21 @@ export const AdminOperationName = {
 
   // ---- Dashboard ------------------------------------------------------------
   GET_DASHBOARD_STATS: "get_dashboard_stats",
+
+  // ---- Subscriptions & Tiers (Tier 1) ---------------------------------------
+  GET_SUBSCRIPTION_PLANS: "get_subscription_plans",
+  UPDATE_SUBSCRIPTION_PLAN: "update_subscription_plan",
+  GET_PROFESSIONAL_SUBSCRIPTION: "get_professional_subscription",
+  OVERRIDE_PROFESSIONAL_SUBSCRIPTION: "override_professional_subscription",
+  OVERRIDE_TRUST_TIER: "override_trust_tier",
+  MANAGE_PROFESSIONAL_BADGE: "manage_professional_badge",
+  CREATE_PROFILE_BOOST: "create_profile_boost",
+  GET_LEAD_CREDIT_WALLET: "get_lead_credit_wallet",
+  ADJUST_LEAD_CREDIT_WALLET: "adjust_lead_credit_wallet",
+  CREATE_MPESA_PAYOUT: "create_mpesa_payout",
+  SEARCH_MPESA_TRANSACTIONS: "search_mpesa_transactions",
+  GET_MPESA_TRANSACTION_DETAILS: "get_mpesa_transaction_details",
+  REQUERY_MPESA_TRANSACTION: "requery_mpesa_transaction",
 } as const;
 
 export type AdminOperationName =

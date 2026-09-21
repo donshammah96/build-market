@@ -1,8 +1,8 @@
 "use client";
 
-import { SignIn, useUser } from "@clerk/nextjs";
+import { SignIn, useUser, useClerk } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/routes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 import { AuthPageSkeleton } from "./AuthPageSkeleton";
@@ -16,23 +16,94 @@ export default function ClerkSignInWidget({
 }: ClerkSignInWidgetProps = {}) {
   const [mounted, setMounted] = useState(false);
   const { isLoaded, isSignedIn } = useUser();
+  const clerk = useClerk();
   const searchParams = useSearchParams();
 
   const rawRedirectUrl = initialRedirectUrl ?? searchParams.get("redirect_url");
   const safeTargetUrl = getSafeRedirectUrl(rawRedirectUrl);
+  const ticket =
+    searchParams.get("__clerk_ticket") || searchParams.get("ticket");
+  const [ticketError, setTicketError] = useState<string | null>(null);
+  const lastAttemptedTicketRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (isLoaded && isSignedIn && !ticket) {
       const target = safeTargetUrl || ROUTES.authCallback;
       window.location.href = target;
     }
-  }, [isLoaded, isSignedIn, safeTargetUrl]);
+  }, [isLoaded, isSignedIn, safeTargetUrl, ticket]);
 
-  if (!mounted || (isLoaded && isSignedIn)) {
+  // Handle single-use ticket consumption (e.g. from E2E test-control or invitation links)
+  useEffect(() => {
+    if (
+      !clerk.loaded ||
+      !clerk.client ||
+      !ticket ||
+      ticket === lastAttemptedTicketRef.current
+    ) {
+      return;
+    }
+
+    lastAttemptedTicketRef.current = ticket;
+
+    async function processTicket() {
+      try {
+        // If mounting with an active ticket while signed in to an ambient session,
+        // sign out first to ensure ticket exchange establishes the correct identity (C-1)
+        if (isSignedIn) {
+          await clerk.signOut({ redirectUrl: undefined });
+        }
+
+        const attempt = await clerk.client.signIn.create({
+          strategy: "ticket",
+          ticket: ticket!,
+        });
+
+        if (attempt.status === "complete") {
+          await clerk.setActive({ session: attempt.createdSessionId });
+          const target = safeTargetUrl || ROUTES.authCallback;
+          window.location.href = target;
+        } else {
+          console.warn(
+            "[ClerkSignInWidget] Ticket sign-in not complete:",
+            attempt.status,
+          );
+          setTicketError(
+            `Ticket sign-in failed with status: ${attempt.status}`,
+          );
+        }
+      } catch (err: any) {
+        console.error(
+          "[ClerkSignInWidget] Failed to authenticate ticket:",
+          err,
+        );
+        setTicketError(
+          err?.message || "Failed to authenticate single-use ticket",
+        );
+      }
+    }
+
+    processTicket();
+  }, [
+    clerk.loaded,
+    clerk.client,
+    clerk.setActive,
+    clerk.signOut,
+    ticket,
+    safeTargetUrl,
+    clerk,
+    isSignedIn,
+  ]);
+
+  if (
+    !mounted ||
+    (isLoaded && isSignedIn && !ticket) ||
+    (Boolean(ticket) && !ticketError)
+  ) {
     return <AuthPageSkeleton variant="sign-in" />;
   }
 

@@ -27,6 +27,7 @@
     { "path": "../../packages/resilience" },
     { "path": "../../packages/env-validation" },
     { "path": "../../packages/media" },
-    { "path": "../../packages/telemetry" }
+    { "path": "../../packages/telemetry" },
+    { "path": "../../packages/mpesa" }
   ]
 }

@@ -57,6 +57,20 @@ describe("Datadog APM Tracer (apps/workers/src/tracer.ts)", () => {
     expect(mockInit).not.toHaveBeenCalled();
   });
 
+  it("should prefer canonical DD_SITE over the legacy host alias", async () => {
+    const { initTracer } = await import("../src/tracer");
+
+    initTracer({
+      DD_TRACE_ENABLED: true,
+      DD_SITE: "eu1.datadoghq.com",
+      DD_SITE_HOST: "us5.datadoghq.com",
+    } as Partial<WorkerEnv>);
+
+    expect(mockInit).toHaveBeenCalledWith(
+      expect.objectContaining({ site: "eu1.datadoghq.com" }),
+    );
+  });
+
   it("should not re-initialize on subsequent calls (idempotent singleton)", async () => {
     const { initTracer } = await import("../src/tracer");
 

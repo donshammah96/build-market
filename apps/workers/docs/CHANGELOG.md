@@ -4,6 +4,72 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Fixed & Hardened — BullMQ v5 Backend Guard & Diagnostic Remediation Logging
+
+- **Worker Options Resolution & Actionable Diagnostic Context (`src/worker-options.ts`, `src/index.ts`, `__tests__/worker-options.test.ts`)**:
+  - Extracted worker options configuration into `resolveWorkerOptions` helper module with structured diagnostic error handling and fail-closed validation.
+  - Eliminated unhandled startup crash loops on Render when `QUEUE_BACKEND=postgres` or queue-specific overrides (`QUEUE_BACKEND_MAINTENANCE_JOBS=postgres`) are configured.
+  - Emitted structured diagnostic error metadata (`queueName`, `backend`, `envVarName`, `remediation`) directing operators to set `QUEUE_BACKEND=redis` and remove queue-specific overrides, citing `adr-bullmq-nats-queue-split.md`.
+  - Wrapped `initializeBullMqWorkers()` at the top level of `src/index.ts` with explicit try/catch logging before terminating the process with exit code 1 for clean orchestrator restart.
+  - Added unit test suite in `__tests__/worker-options.test.ts` (2 tests, 100% passing) verifying both valid Redis worker options resolution and structured diagnostic error emission when PostgreSQL backends are requested.
+- **Operational Runbook Quarantine (`docs/runbooks/queue-postgres-migration.md`)**:
+  - Quarantined `queue-postgres-migration.md` with top-level operational caution alerts, clarifying that BullMQ v5 (`^5.76.8`) is exclusively Redis-driven and that PostgreSQL queue migration is deferred until BullMQ v6 is adopted.
+
+### Added — P0 worker operations evidence and recovery contract
+
+- Reconciled the worker README with the implemented maintenance, notification, BullMQ, and NATS consumers.
+- Documented liveness versus readiness semantics, disabled-background-jobs behavior, exact maintenance-job effects/exclusions, queue ownership, and safe recovery verification in [`QUEUE_RECOVERY_RUNBOOK.md`](QUEUE_RECOVERY_RUNBOOK.md).
+- Added the canonical worker readiness evidence page at [`STATUS.md`](STATUS.md).
+
+### Added — Datadog structured log transport and lifecycle hardening
+
+- Added bounded Datadog log batching with transient-failure retries, queue/drop metrics, and fail-open behavior in `@build/resilience`.
+- Added Pino redaction for identity, contact, credential, payment, and token fields, including nested and circular payloads.
+- Validated `DD_LOGS_ENABLED=true` requires `DD_API_KEY`; canonicalized `DD_SITE` with backwards-compatible `DD_SITE_HOST` fallback.
+- Initialized Datadog tracing only after worker environment validation and flushes resilience logs during graceful shutdown.
+
+### Added — BullMQ PostgreSQL Backend Architecture & Operational Hardening
+
+- **Dynamic Backend Resolver & Schema Isolation**:
+  - Integrated `@build/queue-server` dynamic backend resolution (`QUEUE_BACKEND=postgres|redis`) with per-queue canary overrides.
+  - Added `PORT`, `QUEUE_BACKEND`, and `QUEUE_DATABASE_URL` to `workerEnvSchema` in `src/env.ts` with strict validation and unit tests in `__tests__/env.test.ts`.
+  - Added fail-closed boot validation rejecting transaction-mode poolers (port 6543) when running with `QUEUE_BACKEND=postgres` to safeguard `LISTEN/NOTIFY` and advisory locks.
+  - Added fail-closed `migrateBullMqSchema()` execution during daemon boot in `src/index.ts`.
+- **Healthcheck, Networking & Connection Lifecycle Hardening**:
+  - Enforced IPv4 DNS resolution precedence via `ENV NODE_OPTIONS="--dns-result-order=ipv4first"` in `Dockerfile` and early bootstrap in `src/bootstrap.ts` to eliminate `ENETUNREACH` IPv6 errors on Render.
+  - Configured PostgreSQL TLS with `rejectUnauthorized: false` to seamlessly support cloud provider intermediate CA certificates.
+  - Configured health check server in `src/health.ts` to listen on `0.0.0.0` and respond `200 OK` on `/`, `/healthz`, `/health`, and `/ping` for zero-friction Render deploy readiness probes.
+  - Memoized `healthPgClient` and `healthRedisClient` in `src/index.ts` to eliminate connection churn during health polling.
+  - Enhanced `checkPostgres` to verify `bullmq` schema availability via `information_schema.schemata`.
+  - Hardened `gracefulShutdown` to cleanly drain active workers and disconnect only initialized clients.
+- **Operational Runbook**:
+  - Published `docs/runbooks/queue-postgres-migration.md` defining the 3-tier canary rollout, Render in-process boot schema execution, session pooler sizing arithmetic, and emergency rollback strategy.
+
+### Added - M-Pesa reconciliation worker (Phase 3b) & multi-domain settlement (Phase 4b)
+
+- Added dedicated `mpesa-reconciliation` BullMQ worker and processor (`src/processors/mpesa-reconciliation.processor.ts`) using distributed claim leases (`reconciliationClaimId`, `reconciliationClaimedAt`), exponential backoff, and rate-limited `queryStkPush`.
+- Added shared multi-domain STK settlement module (`src/domains/mpesa/settlement.ts`) enforcing immutable terminal states and atomic ledger uniqueness across subscription renewal, lead-credit purchases, and escrow milestone funding.
+- Added worker-only STK initiation/subscription settlement and B2C payout
+  initiation/result processors behind explicit environment kill switches.
+- Added typed provider error handling, redacted callback processing, and
+  terminal-state protection against duplicate callback regressions.
+
+### Added — Automated Badge Recomputation, Active Trust-Tier Demotions & Materials Price Index Processor
+
+- **Badge Recomputation & Trust-Tier Demotion Processor (`src/processors/badge-recompute.processor.ts`)**:
+  - Automatically evaluates badge criteria for `ELITE_PRO`, `FAST_RESPONDER`, `RISING_TALENT`, and `TOP_RATED`.
+  - Recomputes snapshots and revokes badges when professionals drop below eligibility thresholds.
+  - Actively enforces trust-tier demotions (`ELITE` → `LICENSE_VERIFIED` / `SKILLS_VERIFIED`, `LICENSE_VERIFIED` → `SKILLS_VERIFIED`) when `ProfessionalLicense.validUntil` expires, KRA TCC lapses, or annual CPD points fall below NCA thresholds (< 10 pts).
+- **Kenya Building Materials Price Index Processor (`src/processors/price-index.processor.ts`)**:
+  - Aggregates monthly building materials pricing across active stores and products by category and county.
+  - Enforces minimum sample size threshold (≥ 3 stores per cell) and IQR outlier trimming.
+
+### Added — Subscription Lifecycle & Automated Renewal Processor
+
+- **Subscription Renewal Processor (`src/processors/subscription-renewal.processor.ts`)**:
+  - Implemented BullMQ worker processor for subscription lifecycle automation.
+  - Handles upcoming renewal notifications (<= 3 days before expiry), grace period transitions on expired paid plans, and automatic fallback/downgrade to `FREE` tier once grace periods lapse.
+
 ### Added — Cross-Network NATS JetStream HA Clustering & Render Worker Auth
 
 - **AKS Multi-Node Cluster Configuration (`packages/nats/nats-values.yaml`)**:

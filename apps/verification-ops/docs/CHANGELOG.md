@@ -9,6 +9,10 @@ conventions, reverse-chronological.
 
 ## [Unreleased]
 
+### Added — P0 launch documentation authority
+
+- Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped verification-operations readiness page with explicit regulator and public-trust exclusions.
+
 ### Added — Marketplace Leads Review Queue & Transpile Packages Configuration
 
 - **Marketplace Leads Review Queue (`lib/marketplace-leads-queue.ts`)**:

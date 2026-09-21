@@ -3,7 +3,6 @@
 import { useState, memo, useCallback } from "react";
 import {
   Star,
-  Award,
   Briefcase,
   Mail,
   Phone,
@@ -23,6 +22,9 @@ import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { TrustSealBadge } from "@build/ui/trust-seal-badge";
+import { InsuredIndicator } from "@build/ui/insured-indicator";
+import { BadgeRow } from "@build/ui/badge-row";
 import {
   Card,
   CardContent,
@@ -179,25 +181,47 @@ const ProfileHeader = memo(function ProfileHeader({
             <div className="flex-1">
               <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center flex-wrap gap-3 mb-2">
                     <h1 className="text-3xl font-bold text-slate-900">
                       {fullName}
                     </h1>
-                    {professional.verified && (
-                      <div className="bg-emerald-600 text-white px-3 py-1 rounded-full flex items-center gap-1 text-sm font-medium">
-                        <Award className="h-4 w-4" />
-                        Verified
-                      </div>
+                    <TrustSealBadge
+                      tier={
+                        ((professional as any).trustTier as any) ||
+                        (professional.verified
+                          ? "SKILLS_VERIFIED"
+                          : "UNVERIFIED")
+                      }
+                      authority={
+                        (professional as any).licenses?.[0]?.authority ||
+                        (professional.verified ? "NCA" : undefined)
+                      }
+                      licenseNumber={professional.licenseNumber || undefined}
+                      size="sm"
+                    />
+                    {(professional as any).isInsured && (
+                      <InsuredIndicator isInsured={true} size="sm" />
                     )}
                   </div>
                   <p className="text-xl text-slate-600 font-medium mb-2">
                     {professional.companyName}
                   </p>
                   {professional.licenseNumber && (
-                    <p className="text-sm text-slate-500">
-                      License: {professional.licenseNumber}
+                    <p className="text-sm text-slate-500 font-mono">
+                      Regulator License: {professional.licenseNumber}
                     </p>
                   )}
+
+                  {/* Badge Row (Schema BadgeTypes) */}
+                  <div className="mt-3">
+                    <BadgeRow
+                      earnedBadges={((professional as any).badges || []).map(
+                        (b: any) => b.type || b,
+                      )}
+                      showLocked={false}
+                      size="sm"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2">

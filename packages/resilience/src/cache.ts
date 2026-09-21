@@ -89,8 +89,8 @@ export class ResilientCache<T = any> {
     if (this.redisCache) {
       const cached = await this.redisCache.get(key);
       if (cached !== null) {
-        // Backfill L1 cache
-        await this.set(key, cached);
+        // Backfill L1 cache only — do NOT write back to L2 Redis on a read hit
+        this.setMemoryOnly(key, cached);
         this.logger?.debug(`Cache hit (Redis) for key: ${key}`, {
           cacheName: this.name,
           key,
@@ -108,9 +108,9 @@ export class ResilientCache<T = any> {
   }
 
   /**
-   * Set value in cache
+   * Set value in in-memory L1 cache only (used for backfilling without Redis write amplification)
    */
-  async set(key: string, value: T, ttl?: number): Promise<void> {
+  private setMemoryOnly(key: string, value: T, ttl?: number): void {
     const now = Date.now();
     const effectiveTtl = ttl ?? this.config.ttl;
     const staleAt = this.config.staleWhileRevalidate
@@ -123,10 +123,19 @@ export class ResilientCache<T = any> {
       staleAt,
     };
 
-    // L1: Set in-memory cache
     this.memoryCache.set(key, entry, {
       ttl: effectiveTtl + (this.config.staleWhileRevalidate ?? 0),
     });
+  }
+
+  /**
+   * Set value in cache
+   */
+  async set(key: string, value: T, ttl?: number): Promise<void> {
+    const effectiveTtl = ttl ?? this.config.ttl;
+
+    // L1: Set in-memory cache
+    this.setMemoryOnly(key, value, effectiveTtl);
 
     // L2: Set in Redis cache if enabled
     if (this.redisCache) {
@@ -155,8 +164,11 @@ export class ResilientCache<T = any> {
     const now = Date.now();
 
     if (cachedEntry) {
-      const isExpired = now > cachedEntry.timestamp + (ttl ?? this.config.ttl);
-      const isStale = cachedEntry.staleAt && now > cachedEntry.staleAt;
+      const effectiveTtl = ttl ?? this.config.ttl;
+      const swrWindow = this.config.staleWhileRevalidate ?? 0;
+      const isExpired = now > cachedEntry.timestamp + effectiveTtl + swrWindow;
+      const isStale =
+        cachedEntry.staleAt !== undefined && now > cachedEntry.staleAt;
 
       if (isExpired) {
         // Expired - must recompute
@@ -179,8 +191,8 @@ export class ResilientCache<T = any> {
     if (this.redisCache) {
       const cached = await this.redisCache.get(key);
       if (cached !== null) {
-        // Backfill L1 and return
-        await this.set(key, cached, ttl);
+        // Backfill L1 only and return
+        this.setMemoryOnly(key, cached, ttl);
         return { value: cached, fromCache: true, isStale: false };
       }
     }
@@ -222,7 +234,7 @@ export class ResilientCache<T = any> {
           key,
           error: error.message,
         });
-        throw error;
+        return undefined as T;
       })
       .finally(() => {
         this.revalidationPromises.delete(key);

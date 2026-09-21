@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 
 export interface NewsletterEspSyncJobData {
   subscriberId: string;
@@ -27,12 +28,11 @@ export function getNewsletterEspSyncQueue(): Queue<NewsletterEspSyncJobData> {
     espSyncQueueInstance = new Queue<NewsletterEspSyncJobData>(
       NEWSLETTER_QUEUE_NAMES.ESP_SYNC,
       {
-        connection: createRedisConnection(),
+        connection: getQueueConnectionOptions(NEWSLETTER_QUEUE_NAMES.ESP_SYNC),
         defaultJobOptions: {
-          removeOnComplete: true,
-          removeOnFail: false,
           attempts: 5,
           backoff: { type: "exponential", delay: 60_000 },
+          ...QueueRetentionPolicies.STANDARD,
         },
       },
     );
@@ -46,12 +46,13 @@ export function getNewsletterEmailQueue(): Queue<NewsletterConfirmationEmailJobD
       new Queue<NewsletterConfirmationEmailJobData>(
         NEWSLETTER_QUEUE_NAMES.CONFIRMATION_EMAIL,
         {
-          connection: createRedisConnection(),
+          connection: getQueueConnectionOptions(
+            NEWSLETTER_QUEUE_NAMES.CONFIRMATION_EMAIL,
+          ),
           defaultJobOptions: {
-            removeOnComplete: true,
-            removeOnFail: false,
             attempts: 5,
             backoff: { type: "exponential", delay: 60_000 },
+            ...QueueRetentionPolicies.STANDARD,
           },
         },
       );

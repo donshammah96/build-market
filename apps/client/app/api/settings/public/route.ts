@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPublicSettings } from "@/app/lib/domains/settings";
 import {
-  checkRateLimit,
+  checkReadRateLimit,
   getRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
 import { NextRequest } from "next/server";
@@ -18,7 +18,7 @@ import { NextRequest } from "next/server";
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
+  const rateLimitResult = await checkReadRateLimit(
     `settings-public:${identifier}`,
     100, // 100 requests per minute per IP
     60_000,

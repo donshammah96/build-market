@@ -49,7 +49,8 @@ apps/admin/
 │   ├── security/                   # Coarse auth & policy engine tests
 │   └── middleware.test.ts          # Root middleware checks
 ├── docs/                           # Architectural Decision Records (ADRs) & guides
-│   ├── adr/                        # ADR-ADMIN-001 through ADR-ADMIN-009
+│   ├── adr/                        # ADR-ADMIN-001 through ADR-ADMIN-016 (check lifecycle metadata)
+│   ├── STATUS.md                    # canonical current readiness evidence
 │   ├── PROGRESS-SUMMARY.md         # Phase and migration status tracker
 │   ├── RETIREMENT.md               # Feature retirement instructions
 │   └── VERIFICATION.md             # Verification procedures

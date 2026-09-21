@@ -2,6 +2,10 @@
   "name": "workers",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "24.x",
+    "pnpm": ">=11.1.2 <12.0.0"
+  },
   "description": "Standalone BullMQ & NATS background worker daemon for BuildMarket",
   "type": "module",
   "scripts": {
@@ -24,6 +28,7 @@
     "@build/env-validation": "workspace:*",
     "@build/mail-server": "workspace:*",
     "@build/media": "workspace:*",
+    "@build/mpesa": "workspace:*",
     "@build/nats": "workspace:*",
     "@build/queue-server": "workspace:*",
     "@build/redis": "workspace:*",
@@ -42,6 +47,7 @@
     "dd-trace": "catalog:",
     "ioredis": "catalog:",
     "nats": "catalog:",
+    "pg": "catalog:",
     "pino": "catalog:",
     "resend": "catalog:",
     "sharp": "catalog:",
@@ -52,6 +58,7 @@
     "@build/typescript-config": "workspace:*",
     "@types/archiver": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "eslint": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",

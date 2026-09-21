@@ -61,6 +61,7 @@ export type IdempotencyReplayScope =
   | "escrow"
   | "idea-books"
   | "lead"
+  | "marketplace-leads"
   | "messaging"
   | "onboarding"
   | "portfolio"
@@ -110,6 +111,10 @@ export const IDEMPOTENCY_REPLAY_SCOPE_POLICIES: Record<
   },
   lead: {
     description: "Lead DTOs with reviewed minimum-necessary contact fields",
+    allowedDataClasses: CLASS_B_C_AND_D,
+  },
+  "marketplace-leads": {
+    description: "Marketplace leads qualification and routing envelopes",
     allowedDataClasses: CLASS_B_C_AND_D,
   },
   messaging: {

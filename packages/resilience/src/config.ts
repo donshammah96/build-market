@@ -31,7 +31,25 @@ const toBool = (
 
 // z.coerce.number() runs Number(value) then validates it isn't NaN — so
 // "abc" now fails validation instead of silently becoming the fallback.
-const numberString = () => z.coerce.number().finite();
+const numberString = () =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.coerce.number().finite().optional(),
+  );
+
+const positiveIntegerString = () =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.coerce.number().finite().int().positive().optional(),
+  );
+
+const optionalString = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().optional(),
+);
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -44,24 +62,32 @@ const envSchema = z.object({
   LOG_INCLUDE_TIMESTAMP: boolString.optional(),
   LOG_INCLUDE_CONTEXT: boolString.optional(),
 
+  DD_API_KEY: optionalString,
+  DD_SITE: optionalString,
+  DD_SITE_HOST: optionalString,
+  DD_SERVICE: optionalString,
+  DD_ENV: optionalString,
+  DD_VERSION: optionalString,
+  DD_LOGS_ENABLED: boolString.optional(),
+
   TIMEOUT_CRITICAL_MS: numberString().optional(),
   TIMEOUT_NORMAL_MS: numberString().optional(),
   TIMEOUT_BACKGROUND_MS: numberString().optional(),
 
-  RETRY_MAX_ATTEMPTS: numberString().optional(),
+  RETRY_MAX_ATTEMPTS: positiveIntegerString().optional(),
   RETRY_INITIAL_DELAY_MS: numberString().optional(),
   RETRY_MAX_DELAY_MS: numberString().optional(),
   RETRY_BACKOFF_MULTIPLIER: numberString().optional(),
   RETRY_JITTER_FACTOR: numberString().optional(),
   RETRY_RETRYABLE_ERRORS: z.string().optional(),
 
-  CIRCUIT_FAILURE_THRESHOLD: numberString().optional(),
-  CIRCUIT_SUCCESS_THRESHOLD: numberString().optional(),
+  CIRCUIT_FAILURE_THRESHOLD: positiveIntegerString().optional(),
+  CIRCUIT_SUCCESS_THRESHOLD: positiveIntegerString().optional(),
   CIRCUIT_TIMEOUT_MS: numberString().optional(),
   CIRCUIT_MONITORING_PERIOD_MS: numberString().optional(),
 
   CACHE_TTL_MS: numberString().optional(),
-  CACHE_MAX_SIZE: numberString().optional(),
+  CACHE_MAX_SIZE: positiveIntegerString().optional(),
   CACHE_STALE_WHILE_REVALIDATE_MS: numberString().optional(),
   CACHE_ENABLED: boolString.optional(),
   REDIS_ENABLED: boolString.optional(),
@@ -104,6 +130,14 @@ export interface ResilienceEnvConfig {
     enabled: boolean;
     includeTimestamp: boolean;
     includeContext: boolean;
+    datadog: {
+      enabled: boolean;
+      apiKey?: string;
+      site: string;
+      service: string;
+      environment: string;
+      version?: string;
+    };
   };
 
   timeouts: TimeoutConfig;
@@ -127,6 +161,15 @@ export interface ResilienceEnvConfig {
     histogramBuckets: number[];
   };
 }
+
+type ResilienceConfigOverride = Omit<
+  Partial<ResilienceEnvConfig>,
+  "logging"
+> & {
+  logging?: Partial<ResilienceEnvConfig["logging"]> & {
+    datadog?: Partial<ResilienceEnvConfig["logging"]["datadog"]>;
+  };
+};
 
 // ============================================
 // Configuration Builder
@@ -156,10 +199,21 @@ export function getResilienceConfig(): ResilienceEnvConfig {
   // the bucket list and corrupt every histogram metric downstream.
   let histogramBuckets = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
   if (env.METRICS_HISTOGRAM_BUCKETS) {
-    const parsed = env.METRICS_HISTOGRAM_BUCKETS.split(",").map(Number);
-    if (parsed.some((n) => Number.isNaN(n))) {
+    const segments = env.METRICS_HISTOGRAM_BUCKETS.split(",").map((segment) =>
+      segment.trim(),
+    );
+    if (segments.some((segment) => segment === "")) {
       throw new Error(
-        `Invalid METRICS_HISTOGRAM_BUCKETS: "${env.METRICS_HISTOGRAM_BUCKETS}" contains a non-numeric value`,
+        `Invalid METRICS_HISTOGRAM_BUCKETS: "${env.METRICS_HISTOGRAM_BUCKETS}" contains an empty bucket`,
+      );
+    }
+    const parsed = segments.map(Number);
+    if (
+      parsed.some((n) => !Number.isFinite(n) || n <= 0) ||
+      parsed.some((n, index) => index > 0 && n <= parsed[index - 1]!)
+    ) {
+      throw new Error(
+        `Invalid METRICS_HISTOGRAM_BUCKETS: "${env.METRICS_HISTOGRAM_BUCKETS}" must contain finite positive ascending values`,
       );
     }
     histogramBuckets = parsed;
@@ -174,6 +228,13 @@ export function getResilienceConfig(): ResilienceEnvConfig {
     namespace: env.REDIS_NAMESPACE || "resilience",
     ttlSeconds: env.REDIS_TTL_SECONDS ?? 300,
   };
+
+  const datadogEnabled = toBool(env.DD_LOGS_ENABLED, false);
+  if (datadogEnabled && !env.DD_API_KEY) {
+    throw new Error(
+      "Invalid Datadog logging configuration: DD_LOGS_ENABLED=true requires DD_API_KEY",
+    );
+  }
 
   return {
     environment,
@@ -190,6 +251,14 @@ export function getResilienceConfig(): ResilienceEnvConfig {
       enabled: toBool(env.LOG_ENABLED, true),
       includeTimestamp: toBool(env.LOG_INCLUDE_TIMESTAMP, true),
       includeContext: toBool(env.LOG_INCLUDE_CONTEXT, true),
+      datadog: {
+        enabled: datadogEnabled,
+        apiKey: env.DD_API_KEY,
+        site: env.DD_SITE ?? env.DD_SITE_HOST ?? "us5.datadoghq.com",
+        service: env.DD_SERVICE ?? "build-market",
+        environment: env.DD_ENV ?? environment,
+        version: env.DD_VERSION,
+      },
     },
 
     timeouts: {
@@ -256,8 +325,20 @@ export function resetConfig(): void {
   cachedConfig = null;
 }
 
-export function setConfig(config: Partial<ResilienceEnvConfig>): void {
-  cachedConfig = { ...getResilienceConfig(), ...config };
+export function setConfig(config: ResilienceConfigOverride): void {
+  const current = getConfig();
+  const logging = config.logging
+    ? {
+        ...current.logging,
+        ...config.logging,
+        datadog: {
+          ...current.logging.datadog,
+          ...config.logging.datadog,
+        },
+      }
+    : current.logging;
+
+  cachedConfig = { ...current, ...config, logging };
 }
 
 // ============================================

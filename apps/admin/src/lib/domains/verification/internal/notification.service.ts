@@ -24,6 +24,10 @@ import {
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { omitUndefined } from "@/lib/utils";
 import type { LicenseVerificationResult } from "./license-verification.service";
+import {
+  capabilityForVerificationEntity,
+  requireLiveAdminMvpCapability,
+} from "@/lib/capabilities/mvp-capabilities";
 
 const logger = new StructuredLogger("verification-notification-service");
 
@@ -36,6 +40,17 @@ export async function notifyVerificationResult(
   result: VerificationResult,
   recipientUserId: string,
 ): Promise<void> {
+  const capability = capabilityForVerificationEntity(result.entityType);
+  if (capability && !requireLiveAdminMvpCapability(capability).ok) {
+    logger.info("Suppressed notification for dormant MVP capability", {
+      capability,
+      entityType: result.entityType,
+      entityId: result.entityId,
+      suppressionReason: "capability_dormant",
+    });
+    return;
+  }
+
   try {
     // Create in-database notification
     await createDatabaseNotification(result, recipientUserId);

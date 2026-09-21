@@ -49,6 +49,7 @@ const config = [
     ],
     ignores: [
       "app/lib/infrastructure/env.ts",
+      "app/lib/infrastructure/edge-env.ts",
       "**/__tests__/**/*.{ts,tsx}",
       "**/*.test.{ts,tsx}",
       "**/*.spec.{ts,tsx}",
@@ -108,7 +109,7 @@ const config = [
           selector:
             "MemberExpression[object.type='MemberExpression'][object.object.name='process'][object.property.name='env']",
           message:
-            "Use the typed env module instead of direct process.env access. See app/lib/infrastructure/env.ts.",
+            "Use the typed env module instead of direct process.env access. See app/lib/infrastructure/env.ts and app/lib/infrastructure/edge-env.ts.",
         },
         {
           selector: "Literal[value=/^Access-Control-Allow-/]",

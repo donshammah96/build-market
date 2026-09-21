@@ -1,5 +1,9 @@
 # ADR-ADMIN-012: Admin Background Job and Queue Semantics
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

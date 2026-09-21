@@ -15,3 +15,6 @@ export type { AgendaWidgetProps } from "./AgendaWidget";
 
 export { WidgetEmptyState } from "./WidgetEmptyState";
 export type { WidgetEmptyStateProps } from "./WidgetEmptyState";
+
+export { TierSystemWidget } from "./TierSystemWidget";
+export type { TierSystemWidgetProps } from "./TierSystemWidget";

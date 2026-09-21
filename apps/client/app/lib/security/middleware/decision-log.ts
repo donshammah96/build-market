@@ -23,7 +23,8 @@ export type MiddlewareDecisionEvent =
   | "mw_deny_protected_api_blocked"
   | "mw_deny_internal_api_unauthorized"
   | "mw_deny_api_unclassified"
-  | "mw_deny_staging_unauthenticated";
+  | "mw_deny_staging_unauthenticated"
+  | "mw_deny_disabled_capability";
 
 export function logMiddlewareDecision(
   req: NextRequest,

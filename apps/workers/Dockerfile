@@ -57,6 +57,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV HEALTH_PORT=8080
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # Run as non-root user for security isolation
 USER node

@@ -22,6 +22,22 @@ vi.mock("@build/nats", () => ({
   createProducer: vi.fn(() => producerMock),
 }));
 
+const mvpCapabilityMock = vi.hoisted(() => ({
+  requireLiveAdminMvpCapability: vi.fn(),
+}));
+
+vi.mock("@/lib/capabilities/mvp-capabilities", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/lib/capabilities/mvp-capabilities")
+    >();
+  return {
+    ...actual,
+    requireLiveAdminMvpCapability:
+      mvpCapabilityMock.requireLiveAdminMvpCapability,
+  };
+});
+
 vi.mock("@/lib/domains/verification/internal/notification-queue", () => ({
   queueFailedNotification: vi.fn(),
 }));
@@ -55,6 +71,9 @@ global.fetch = vi.fn();
 describe("Notification Service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mvpCapabilityMock.requireLiveAdminMvpCapability.mockReturnValue({
+      ok: true,
+    });
     delete process.env.ENABLE_NOTIFICATION_SERVICE; // bootstrap-only: test environment mock override
   });
 
@@ -211,6 +230,27 @@ describe("Notification Service", () => {
       await expect(
         notifyVerificationResult(result, "user_123"),
       ).resolves.not.toThrow();
+    });
+
+    it("should suppress notification when MVP capability is dormant", async () => {
+      const { prisma } = await import("@build/db");
+      mvpCapabilityMock.requireLiveAdminMvpCapability.mockReturnValue({
+        ok: false,
+        code: "MVP_CAPABILITY_DORMANT",
+      });
+
+      const result: VerificationResult = {
+        success: true,
+        entityType: "store",
+        entityId: "store_123",
+        previousStatus: "PENDING",
+        newStatus: "REJECTED",
+        message: "Store rejected",
+      };
+
+      await notifyVerificationResult(result, "user_123");
+
+      expect(prisma.notification.create).not.toHaveBeenCalled();
     });
   });
 

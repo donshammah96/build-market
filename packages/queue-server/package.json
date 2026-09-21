@@ -19,20 +19,26 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "echo \"No tests configured\" && exit 0"
+    "test": "vitest run --exclude '**/dist/**'",
+    "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
     "@build/db": "workspace:*",
     "@build/redis": "workspace:*",
     "@prisma/client": "catalog:",
     "bullmq": "catalog:",
-    "ioredis": "catalog:"
+    "dotenv": "catalog:",
+    "ioredis": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@build/eslint-config": "workspace:*",
     "@build/typescript-config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "eslint": "catalog:",
-    "typescript": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

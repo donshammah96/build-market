@@ -23,6 +23,13 @@ const workerEnvSchema = z.object({
       /^(postgresql|postgres):\/\//,
       "DATABASE_URL must be a valid PostgreSQL connection string starting with postgresql:// or postgres://",
     ),
+  QUEUE_DATABASE_URL: z
+    .string()
+    .regex(
+      /^(postgresql|postgres):\/\//,
+      "QUEUE_DATABASE_URL must be a valid PostgreSQL connection string starting with postgresql:// or postgres://",
+    )
+    .optional(),
   DIRECT_URL: z.string().optional(),
   REDIS_URL: z
     .string()
@@ -49,6 +56,11 @@ const workerEnvSchema = z.object({
     .optional()
     .transform((val) => (val ? parseInt(val, 10) : 5))
     .pipe(z.number().min(1).max(20)),
+  PORT: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .pipe(z.number().optional()),
   HEALTH_PORT: z
     .string()
     .optional()
@@ -58,6 +70,28 @@ const workerEnvSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
+  QUEUE_BACKEND: z.enum(["redis", "postgres"]).default("redis"),
+
+  // M-Pesa is disabled by default and must be explicitly enabled after
+  // sandbox credentials and callback routes have been verified.
+  MPESA_ENABLED: booleanString,
+  MPESA_BASE_URL: z.string().url().optional(),
+  MPESA_CONSUMER_KEY: z.string().min(1).optional(),
+  MPESA_CONSUMER_SECRET: z.string().min(1).optional(),
+  MPESA_SHORTCODE: z
+    .string()
+    .regex(/^\d{5,7}$/)
+    .optional(),
+  MPESA_PASSKEY: z.string().min(1).optional(),
+  MPESA_CALLBACK_URL: z.string().url().optional(),
+  MPESA_B2C_ENABLED: booleanString,
+  MPESA_B2C_INITIATOR_NAME: z.string().min(1).optional(),
+  MPESA_B2C_INITIATOR_PASSWORD: z.string().min(1).optional(),
+  MPESA_B2C_CERTIFICATE_PEM: z.string().min(1).optional(),
+  MPESA_B2C_RESULT_URL: z.string().url().optional(),
+  MPESA_B2C_TIMEOUT_URL: z.string().url().optional(),
+  FEATURE_MVP_MATERIALS_COMMERCE: booleanString,
+  FEATURE_MVP_WALLETS_ESCROW: booleanString,
 
   // Storage / S3 / R2 Configuration for Export Processor
   S3_DISABLED: booleanString,
@@ -93,20 +127,25 @@ const workerEnvSchema = z.object({
   OTEL_SERVICE_NAME: z.string().min(1).default("build-market-workers"),
   OTEL_RESOURCE_ATTRIBUTES: z.string().optional(),
   DD_API_KEY: z.string().min(1).optional(),
-  DD_SITE: z.string().min(1).default("us5.datadoghq.com"),
-  DD_SITE_HOST: z.string().min(1).default("us5.datadoghq.com"),
+  DD_SITE: z.string().min(1).optional(),
+  DD_SITE_HOST: z.string().min(1).optional(),
   DD_ENV: z.string().min(1).optional(),
   DD_SERVICE: z.string().min(1).optional(),
   DD_VERSION: z.string().min(1).optional(),
   DD_AGENT_HOST: z.string().min(1).optional(),
   DD_TRACE_ENABLED: booleanString,
+  DD_LOGS_ENABLED: booleanString,
 });
 
 // NATS_URL is optional on the raw schema (see comment above) but is always
 // guaranteed to be a defined string by the time validateWorkerEnv() returns —
 // either the caller-provided value, or the dev-only localhost fallback.
-export type WorkerEnv = Omit<z.infer<typeof workerEnvSchema>, "NATS_URL"> & {
+export type WorkerEnv = Omit<
+  z.infer<typeof workerEnvSchema>,
+  "NATS_URL" | "DD_SITE"
+> & {
   NATS_URL: string;
+  DD_SITE: string;
 };
 
 /**
@@ -131,6 +170,88 @@ export function validateWorkerEnv(): WorkerEnv {
 
   const data = result.data;
 
+  if (data.DD_LOGS_ENABLED && !data.DD_API_KEY) {
+    console.error("[FATAL] DD_LOGS_ENABLED requires DD_API_KEY");
+    process.exit(1);
+  }
+
+  if (data.MPESA_ENABLED) {
+    const requiredMpesa = [
+      "MPESA_BASE_URL",
+      "MPESA_CONSUMER_KEY",
+      "MPESA_CONSUMER_SECRET",
+      "MPESA_SHORTCODE",
+      "MPESA_PASSKEY",
+      "MPESA_CALLBACK_URL",
+    ] as const;
+    const missing = requiredMpesa.filter((key) => !data[key]);
+    if (missing.length > 0) {
+      console.error(`[FATAL] MPESA_ENABLED requires: ${missing.join(", ")}`);
+      process.exit(1);
+    }
+  }
+
+  if (data.MPESA_B2C_ENABLED) {
+    const requiredB2c = [
+      "MPESA_ENABLED",
+      "MPESA_B2C_INITIATOR_NAME",
+      "MPESA_B2C_INITIATOR_PASSWORD",
+      "MPESA_B2C_CERTIFICATE_PEM",
+      "MPESA_B2C_RESULT_URL",
+      "MPESA_B2C_TIMEOUT_URL",
+    ] as const;
+    const missing = requiredB2c.filter((key) => !data[key]);
+    if (missing.length > 0) {
+      console.error(
+        `[FATAL] MPESA_B2C_ENABLED requires: ${missing.join(", ")}`,
+      );
+      process.exit(1);
+    }
+  }
+
+  if (
+    data.NODE_ENV === "production" &&
+    (data.REDIS_URL.includes("localhost") ||
+      data.REDIS_URL.includes("127.0.0.1") ||
+      data.REDIS_URL.includes("0.0.0.0"))
+  ) {
+    console.error(
+      `\n========================================================\n` +
+        `[FATAL] Worker environment validation failed on boot:\n` +
+        `  - REDIS_URL: cannot point to localhost/127.0.0.1 in production.\n` +
+        `    On Render, set REDIS_URL to your Upstash TCP endpoint:\n` +
+        `    rediss://:TOKEN@<host>.upstash.io:6379\n` +
+        `========================================================\n`,
+    );
+    process.exit(1);
+  }
+
+  // BullMQ PostgreSQL backend requires session-level LISTEN/NOTIFY and advisory locks.
+  // Transaction poolers (e.g. Supabase port 6543) break these primitives silently.
+  const queueDbUrl =
+    data.QUEUE_DATABASE_URL || data.DIRECT_URL || data.DATABASE_URL;
+  if (data.QUEUE_BACKEND === "postgres" && queueDbUrl) {
+    try {
+      const parsed = new URL(queueDbUrl);
+      if (
+        parsed.port === "6543" ||
+        parsed.searchParams.get("pgbouncer") === "true"
+      ) {
+        console.error(
+          `\n========================================================\n` +
+            `[FATAL] Worker environment validation failed on boot:\n` +
+            `  - QUEUE_DATABASE_URL / DATABASE_URL: target port 6543 (transaction-mode pooler).\n` +
+            `    BullMQ PostgreSQL backend requires session-level LISTEN/NOTIFY and advisory locks.\n` +
+            `    Please configure QUEUE_DATABASE_URL to use a direct connection or Session Pooler (port 5432).\n` +
+            `========================================================\n`,
+        );
+        process.exit(1);
+      }
+    } catch {
+      // url regex handles structural validation
+    }
+  }
+
   let natsUrl = data.NATS_URL;
   if (!natsUrl) {
     if (data.NODE_ENV === "production") {
@@ -150,5 +271,9 @@ export function validateWorkerEnv(): WorkerEnv {
     natsUrl = "nats://localhost:4222";
   }
 
-  return { ...data, NATS_URL: natsUrl };
+  return {
+    ...data,
+    NATS_URL: natsUrl,
+    DD_SITE: data.DD_SITE ?? data.DD_SITE_HOST ?? "us5.datadoghq.com",
+  };
 }

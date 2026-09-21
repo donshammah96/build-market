@@ -32,6 +32,8 @@ export interface SummaryData {
   quantiles: Map<number, number>; // p50, p95, p99, etc.
 }
 
+export const MAX_HISTOGRAM_SAMPLES = 1000;
+
 /**
  * Metrics collector and aggregator
  */
@@ -82,6 +84,9 @@ export class MetricsCollector {
     const key = this.getKey(name, tags);
     const values = this.histograms.get(key) || [];
     values.push(value);
+    if (values.length > MAX_HISTOGRAM_SAMPLES) {
+      values.shift();
+    }
     this.histograms.set(key, values);
   }
 
@@ -199,6 +204,22 @@ export class MetricsCollector {
         name,
         type: "gauge",
         value,
+        tags,
+        timestamp: now,
+      });
+    });
+
+    // Keep a bounded aggregate in the bulk snapshot. Detailed buckets and
+    // quantiles remain available through getHistogramStats/getSummaryStats.
+    this.histograms.forEach((values, key) => {
+      const { name, tags } = this.parseKey(key);
+      const average = values.length
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : 0;
+      metrics.push({
+        name: `${name}.avg`,
+        type: "histogram",
+        value: average,
         tags,
         timestamp: now,
       });

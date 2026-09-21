@@ -8,7 +8,7 @@ Use it when:
 - migrating an action slice from direct Prisma to the domain service boundary
   - auditing an existing action, route, job, queue, or browser-facing admin surface against the hardened action architecture
   - implementing production-readiness work from [ADMIN-PRODUCTION-READINESS-AUDIT.md](file:///c:/Users/User/build-market/apps/admin/docs/ADMIN-PRODUCTION-READINESS-AUDIT.md)
-  - implementing or reviewing ADR-ADMIN-010 through ADR-ADMIN-015
+  - implementing or reviewing ADR-ADMIN-010 through ADR-ADMIN-016
 
 This is not a generic pattern library. It is the repo-specific source of truth for how `apps/admin` is structured after the Phase 0–12 overhaul and the subsequent production-readiness autopsy.
 
@@ -48,18 +48,21 @@ Conflict rules:
 
 ### Production-Readiness ADR Index
 
+**Complete index:** [`ADR-ADMIN-001` through `ADR-ADMIN-016`](../apps/admin/docs/adr/). Check each ADR's lifecycle metadata before treating a proposed decision as an implemented control.
+
 The Phase 0–12 architecture remains valid, but production hardening is now governed by the following additional ADRs:
 
 | ADR                                                                                                                                           | Status   | Governs                                                  | Implementation posture                                                                                                |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [ADR-ADMIN-010](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-010-admin-browser-security-headers-and-csp.md)               | Proposed | Browser security headers and CSP                         | New browser-facing work must be compatible with a central header/CSP policy.                                          |
-| [ADR-ADMIN-011](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-011-admin-observability-slo-and-telemetry-contract.md)       | Proposed | Observability SLOs and telemetry                         | New P0/P1 workflows must define metrics, alerts, dashboards, and runbooks.                                            |
-| [ADR-ADMIN-012](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-012-admin-background-job-and-queue-semantics.md)             | Proposed | Background job and queue semantics                       | New jobs/queues must declare owner, schema, idempotency, retry, DLQ, replay, and rollback behavior.                   |
+| [ADR-ADMIN-010](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-010-admin-browser-security-headers-and-csp.md)               | Accepted | Browser security headers and CSP                         | New browser-facing work must be compatible with a central header/CSP policy.                                          |
+| [ADR-ADMIN-011](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-011-admin-observability-slo-and-telemetry-contract.md)       | Accepted | Observability SLOs and telemetry                         | New P0/P1 workflows must define metrics, alerts, dashboards, and runbooks.                                            |
+| [ADR-ADMIN-012](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-012-admin-background-job-and-queue-semantics.md)             | Accepted | Background job and queue semantics                       | New jobs/queues must declare owner, schema, idempotency, retry, DLQ, replay, and rollback behavior.                   |
 | [ADR-ADMIN-013](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-013-admin-environment-and-secret-governance.md)              | Proposed | Environment and secret governance                        | New config must be capability-scoped and profile-aware; production must fail closed on missing critical dependencies. |
 | [ADR-ADMIN-014](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-014-admin-incident-response-and-break-glass-access.md)       | Proposed | Incident response and break-glass access                 | Emergency access must be explicit, time-boxed, scoped, audited, and alerted.                                          |
-| [ADR-ADMIN-015](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-015-admin-data-retention-export-and-tamper-evident-audit.md) | Proposed | Data retention, export custody, and tamper-evident audit | High-risk operations must be ready for audit coverage, retention, export custody, and tamper-evidence gates.          |
+| [ADR-ADMIN-015](file:///c:/Users/User/build-market/apps/admin/docs/adr/ADR-ADMIN-015-admin-data-retention-export-and-tamper-evident-audit.md) | Accepted | Data retention, export custody, and tamper-evident audit | High-risk operations must be ready for audit coverage, retention, export custody, and tamper-evidence gates.          |
+| [ADR-ADMIN-016](../apps/admin/docs/adr/ADR-ADMIN-016-admin-background-worker-isolation-and-daemon-migration.md) | Accepted | Background worker isolation and daemon migration | Long-running BullMQ/NATS consumers run in `apps/workers`, not in a Next.js deployment. |
 
-Because these ADRs are Proposed, do not claim their runtime behavior is fully implemented. Do design new code so it can satisfy them without rework.
+Proposed ADRs remain forward-looking; accepted ADRs define current architectural authority. Neither status is a substitute for the evidence and exclusions recorded in the application status pages and launch scorecard.
 
 ---
 
@@ -112,7 +115,7 @@ HTTP Request
 
 ```text
 Production hardening change
-  -> Relevant ADR-ADMIN-010..015 contract
+  -> Relevant ADR-ADMIN-010..016 contract
   -> Runtime adapter / config / job / action implementation
   -> Drift or registry check
   -> Targeted tests
@@ -601,7 +604,7 @@ See `apps/admin/docs/VERIFICATION.md` for the gate policy, what-each-command-che
 | Phase 12            | Security Hardening Pass — ASVS L2, mass-assignment, zero drift findings                 | Complete    |
 | Post-Phase-12       | Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)                 | Complete    |
 | Production Autopsy  | Production-readiness audit and P0/P1/P2 hardening roadmap                               | Complete    |
-| ADR-ADMIN-010..015  | Proposed production governance contracts                                                | Proposed    |
+| ADR-ADMIN-010..016  | Production governance and worker-isolation contracts; see each ADR lifecycle status    | Mixed       |
 | Production Gates    | Runtime implementation of CSP, SLOs, queues, env profiles, incidents, audit integrity   | Not started |
 
 ### Slice Status (from `apps/admin/docs/PROGRESS-SUMMARY.md`)

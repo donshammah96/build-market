@@ -1,5 +1,12 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import dns from "node:dns";
+
+// Ensure IPv4 resolution takes precedence in containerized environments (Render/Docker)
+// where outbound IPv6 routes may be unreachable (ENETUNREACH).
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 /**
  * Bootstrap environment variables before any application or third-party modules are evaluated.

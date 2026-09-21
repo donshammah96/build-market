@@ -71,7 +71,7 @@ describe("Feature Flag Lifecycle Governance", () => {
 
   it("detects expired flags when evaluated against mock future dates", () => {
     const mockFarFuture = new Date("2027-01-01T00:00:00Z");
-    const flagKey = AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT;
+    const flagKey = AdminFeatureFlag.ADMIN_V2_STRUCTURED_LOGGING;
     const metadata = FEATURE_FLAG_LIFECYCLE_METADATA[flagKey];
 
     const createdAt = new Date(metadata.createdAt);

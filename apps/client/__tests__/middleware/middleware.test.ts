@@ -194,11 +194,63 @@ beforeEach(() => {
 });
 
 describe("middleware — API route classification order", () => {
+  it("denies dormant capability deep links before auth or route classification", async () => {
+    const res = await middleware(
+      createMockRequest("/api/properties/property_1"),
+    );
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({ error: "Not found" });
+    expect(mockAuth).not.toHaveBeenCalled();
+    expect(eventsLogged()).toContain("mw_deny_disabled_capability");
+  });
+
   it("allows public API routes without calling auth()", async () => {
     const res = await middleware(createMockRequest("/api/health"));
     expect(res.status).toBe(200);
     expect(mockAuth).not.toHaveBeenCalled();
     expect(eventsLogged()).toContain("mw_allow_public_api");
+  });
+
+  it("REPRODUCTION: allows inbound mpesa webhook callbacks to proceed to route-level verification", async () => {
+    const res = await middleware(
+      createMockRequest("/api/webhooks/mpesa/stk-callback"),
+    );
+    expect(res.status).toBe(200);
+    expect(eventsLogged()).toContain("mw_allow_public_api");
+  });
+
+  it("REPRODUCTION: allows public v1 directory/professional API routes without authentication", async () => {
+    const res = await middleware(
+      createMockRequest("/api/v1/professionals/pro_123"),
+    );
+    expect(res.status).toBe(200);
+    expect(eventsLogged()).toContain("mw_allow_public_api");
+  });
+
+  it("REPRODUCTION: allows authenticated requests to domain API routes (leads, reviews, messaging)", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "user_123",
+      sessionClaims: { metadata: {} },
+    });
+    mockParseMiddlewareSessionMetadata.mockReturnValue({});
+
+    for (const path of [
+      "/api/leads/qualification/routing",
+      "/api/reviews",
+      "/api/messaging/messages",
+    ]) {
+      vi.clearAllMocks();
+      mockAuth.mockResolvedValue({
+        userId: "user_123",
+        sessionClaims: { metadata: {} },
+      });
+      mockParseMiddlewareSessionMetadata.mockReturnValue({});
+
+      const res = await middleware(createMockRequest(path));
+      expect(res.status).toBe(200);
+      expect(eventsLogged()).toContain("mw_allow_protected_api");
+    }
   });
 
   it("denies unauthenticated requests to protected API routes with a JSON 401, not a redirect", async () => {

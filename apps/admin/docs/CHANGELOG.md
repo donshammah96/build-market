@@ -2,6 +2,75 @@
 
 ## [Unreleased]
 
+### Security & Fixed — M-Pesa Admin Action Schema Validation & Secret Boundary Alignment
+
+- **M-Pesa Action & Policy Governance (`src/actions/admin/mpesa.ts`, `src/lib/domains/mpesa/contracts.ts`, `src/lib/domains/mpesa/policy.ts`, `src/lib/infrastructure/env-schema.ts`)**:
+  - Tightened `SearchMpesaTransactionsSchema` in `src/actions/admin/mpesa.ts` from loose `z.string().optional()` to `z.nativeEnum(TransactionStatus).optional()`, enforcing typed enum validation before domain dispatch.
+  - Eliminated hardcoded HMAC salt fallback in `src/lib/domains/mpesa/policy.ts`, enforcing strict reads from `adminEnvConfig.MPESA_PHONE_SEARCH_HASH_SECRET` with fail-closed behavior in production and staging environments.
+  - Added `MPESA_PHONE_SEARCH_HASH_SECRET` to `adminBaseEnvSchema` in `src/lib/infrastructure/env-schema.ts` and template `.env.*` files.
+
+### Fixed — Verification Notification Test Isolation Under Dormant MVP Capabilities
+
+- **Verification Notification Tests (`src/lib/domains/verification/__tests__/notification-service.test.ts`)**:
+  - Resolved test failures where deferred MVP capabilities (`materials_commerce` for stores, `property_transactions` for properties) defaulting to dormant status caused notification dispatch to short-circuit before database record insertion.
+  - Isolated capability policy resolution via `vi.hoisted()` and `vi.mock("@/lib/capabilities/mvp-capabilities")`, defaulting to live capabilities for notification formatting unit tests.
+  - Added regression test asserting that dormant capabilities properly suppress notification delivery without triggering database writes or event publishing.
+
+### Added — P0 launch documentation authority
+
+- Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped admin readiness page.
+- Updated architecture references to the complete `ADR-ADMIN-001` through `ADR-ADMIN-016` index and lifecycle-status contract.
+
+### Added — Datadog environment contract alignment
+
+- Added canonical Datadog site, version, and log-enable fields to schema, wrapper, and environment templates; legacy `DD_SITE_HOST` remains a read-only fallback.
+
+### Changed — ADR-ADMIN-009 Strangler-Fig v2 Feature Flag Retirement & Canonical Route Promotion
+
+- **Retired 4 v2 strangler-fig feature flags (`admin_v2_user_management`, `admin_v2_verification_queue`, `admin_v2_finance_dashboard`, `admin_v2_audit_log_ui`)**:
+  - Removed deprecated flags from `AdminFeatureFlag`, `FEATURE_FLAG_LIFECYCLE_METADATA`, and `FLAG_ENV_KEYS` in `src/lib/config/feature-flags.ts`.
+  - Removed deprecated `NEXT_PUBLIC_ADMIN_FF_V2_*` keys from `adminBaseEnvSchema` in `src/lib/infrastructure/env-schema.ts`, `env.features` in `src/lib/infrastructure/env-wrapper.ts`, and `.env.*` configuration templates.
+  - Deleted `/users-v2`, `/verifications-v2`, `/analytics-v2`, and `/audit-v2` shadow route trees and promoted canonical routes (`/users`, `/verifications`, `/analytics`, `/audit`).
+  - Ported v2 UI enhancements (capability-aware role indicator badge in verification queue) directly to canonical `verifications/page.tsx`.
+  - Removed route indirection in `NavigationSidebar`, linking directly to canonical routes.
+  - Migrated UI unit test suites into canonical route directories with 100% test coverage.
+  - Updated `ROLLBACK-CONTRACTS.md`, `PROGRESS-SUMMARY.md`, `RETIREMENT.md`, and `ADR-ADMIN-009`.
+
+### Added - M-Pesa payout & reconciliation operational controls (Phase 5)
+
+- Added capability-gated, recently-authenticated, audited B2C payout enqueueing
+  with strict amount and Kenyan phone validation and database idempotency.
+- Added read-only transaction search and detailed inspection under `AdminCapability.VIEW_FINANCIALS` with phone number masking and privacy-preserving HMAC search index.
+- Added queued transaction requery under `AdminCapability.RECONCILE_PAYMENTS` with `recentAuth: { maxAgeSeconds: 180 }` and append-only audit logging before response.
+- Registered `RECONCILE_PAYMENTS` capability and `search_mpesa_transactions`, `get_mpesa_transaction_details`, `requery_mpesa_transaction` operations in registry and policy map.
+- Provider credentials and direct Daraja calls remain strictly forbidden in admin.
+
+### Fixed — Route Registry Security Governance & Client Bundle Isolation
+
+- **Admin Tier Override Modal Client Bundle Boundary (`src/components/admin/tier-override-modal.tsx`)**:
+  - Converted `@build/db` runtime value imports to type-only imports (`import type { TrustTier, SubscriptionTierKey, SubscriptionStatus, BadgeType }`) and replaced runtime enum object references with typed string literals.
+  - Eliminated server-only database dependencies (`pg`, `pgpass`, `fs`, `net`, `tls`) from the browser bundle, resolving Turbopack client component compilation errors.
+- **Route Registry Cataloging (`src/lib/security/route-registry.ts`)**:
+  - Registered `/settings/subscriptions` in `ADMIN_ROUTE_REGISTRY` with `super_admin` and `finance_admin` allowed roles to ensure 100% filesystem-to-registry parity and maintain security policy governance across admin dashboard routes.
+
+### Added — Professional Tier System UI & Admin Management Overrides
+
+- **Admin Professional Details Tier & Subscription Overrides (`src/components/admin/tier-override-modal.tsx`, `src/app/(dashboard)/professionals/[id]/page.tsx`)**:
+  - Integrated `TierOverrideModal` in the header actions of the professional detail view, supporting Trust Tier overrides, Subscription plan comps/adjustments, and Badge awards/revocations.
+  - Enforced mandatory audit log reasons (≥ 5 chars) attached to `safeAction` mutations and applied `manualOverride: true` tagging to protect manual grants from background BullMQ sweeps.
+  - Integrated `TrustSealBadge` from `@build/ui` on the professional detail header.
+- **Subscription Plans Settings Management (`src/app/(dashboard)/settings/subscriptions/page.tsx`)**:
+  - Built interactive subscription plans configuration dashboard and edit dialog with price update policy guidance for new vs existing subscribers.
+
+### Added — Professional Subscriptions & Wallet Balance Admin Actions
+
+- **Admin Subscription Management (`src/actions/admin/subscriptions.ts`, `src/lib/domains/subscriptions/`)**:
+  - Implemented `safeAction` adapters for overriding subscription plans, toggling Founding Pro status, setting grace periods, and canceling subscriptions.
+  - Enforced `AdminCapability.MANAGE_SUBSCRIPTIONS` / `MANAGE_USERS` capability guards and audit logging adhering to ADR-ADMIN-001, ADR-ADMIN-002, and ADR-ADMIN-008.
+- **Admin Wallet Management (`src/actions/admin/wallets.ts`)**:
+  - Implemented `safeAction` adapters for manual lead credit balance adjustments and promotional credit grants with immutable ledger tracking.
+  - Enforced `AdminCapability.MANAGE_FINANCES` capability check with Tier 1 session freshness requirements (`maxAgeSeconds: 180`).
+
 ### Added — Datadog Direct Ingestion Telemetry & Shared `@build/telemetry` Integration
 
 - **OpenTelemetry & Datadog Telemetry Integration (`src/instrumentation.ts`, `src/lib/infrastructure/otel.ts`, `src/lib/infrastructure/env-schema.ts`)**:

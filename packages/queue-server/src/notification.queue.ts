@@ -1,5 +1,7 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
+import type { StagingTestControlEnvelope } from "./staging-test-control.js";
 
 export interface NotificationRetryJobData {
   recipientUserId: string;
@@ -11,6 +13,7 @@ export interface NotificationRetryJobData {
     reason?: string;
     metadata?: Record<string, unknown>;
   };
+  testControl?: StagingTestControlEnvelope;
 }
 
 let notificationQueueInstance: Queue<NotificationRetryJobData> | null = null;
@@ -23,12 +26,11 @@ export function getNotificationRetryQueue(): Queue<NotificationRetryJobData> {
     notificationQueueInstance = new Queue<NotificationRetryJobData>(
       "notification-retries",
       {
-        connection: createRedisConnection(),
+        connection: getQueueConnectionOptions("notification-retries"),
         defaultJobOptions: {
           attempts: 5,
           backoff: { type: "exponential", delay: 2000 },
-          removeOnComplete: { age: 24 * 3600, count: 1000 },
-          removeOnFail: { age: 7 * 24 * 3600 },
+          ...QueueRetentionPolicies.STANDARD,
         },
       },
     );
@@ -40,9 +42,24 @@ export async function addNotificationRetryJob(
   data: NotificationRetryJobData,
   opts?: JobsOptions,
 ) {
-  const queue = getNotificationRetryQueue();
-  return queue.add("retry-notification", data, {
-    jobId: `retry-${data.result.entityId}-${Date.now()}`,
-    ...opts,
-  });
+  let queue = getNotificationRetryQueue();
+  try {
+    return await queue.add("retry-notification", data, {
+      jobId: `retry-${data.result.entityId}-${Date.now()}`,
+      ...opts,
+    });
+  } catch (err: any) {
+    if (err?.message?.includes("Connection is closed")) {
+      try {
+        await notificationQueueInstance?.close();
+      } catch {}
+      notificationQueueInstance = null;
+      queue = getNotificationRetryQueue();
+      return await queue.add("retry-notification", data, {
+        jobId: `retry-${data.result.entityId}-${Date.now()}`,
+        ...opts,
+      });
+    }
+    throw err;
+  }
 }

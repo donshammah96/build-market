@@ -130,26 +130,31 @@ A v2 route may retire its v1 predecessor only after:
 
 When all four retirement criteria are met for a flag:
 
-- [ ] Verify 30-day production stability window has elapsed (no P0/P1 incidents).
-- [ ] Confirm feature parity sign-off from product owner.
-- [ ] Confirm test coverage meets the gate: action-boundary + domain + UI.
-- [ ] Remove the flag env variable from all environment configurations (Vercel, `.env.*` templates).
-- [ ] Delete the v1 route segment directory (`src/app/(dashboard)/<route>/`).
-- [ ] Remove the flag constant from `AdminFeatureFlag` in `src/lib/config/feature-flags.ts`.
-- [ ] Remove the env key mapping from `FLAG_ENV_KEYS`.
-- [ ] Remove the env variable from `adminEnvSchema` in `src/lib/infrastructure/env.ts`.
-- [ ] Move the flag entry to the **Retired Flags** section in `ROLLBACK-CONTRACTS.md`.
-- [ ] Update `ADR-ADMIN-009` Revision History with the retirement date.
-- [ ] Add a changelog entry.
+- [x] Verify 30-day production stability window has elapsed (no P0/P1 incidents).
+- [x] Confirm feature parity sign-off from product owner.
+- [x] Confirm test coverage meets the gate: action-boundary + domain + UI.
+- [x] Remove the flag env variable from all environment configurations (Vercel, `.env.*` templates).
+- [x] Delete the v2 shadow route segment directories (`src/app/(dashboard)/<route>-v2/`) and promote canonical routes.
+- [x] Remove the flag constant from `AdminFeatureFlag` in `src/lib/config/feature-flags.ts`.
+- [x] Remove the env key mapping from `FLAG_ENV_KEYS`.
+- [x] Remove the env variable from `adminEnvSchema` in `src/lib/infrastructure/env-schema.ts`.
+- [x] Move the flag entry to the **Retired Flags** section in `ROLLBACK-CONTRACTS.md`.
+- [x] Update `ADR-ADMIN-009` Revision History with the retirement date.
+- [x] Add a changelog entry.
 
 ---
 
 ## Retired Flags
 
-_No flags retired as of 2026-06-07._
+| Flag                          | Retired Date | Target Route     | Former Env Variable                          | Notes                                                  |
+| ----------------------------- | ------------ | ---------------- | -------------------------------------------- | ------------------------------------------------------ |
+| `admin_v2_user_management`    | 2026-09-02   | `/users`         | `NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT`    | Promoted to canonical `/users`; shadow route deleted.  |
+| `admin_v2_verification_queue` | 2026-09-02   | `/verifications` | `NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE` | Promoted to canonical `/verifications`; badge enabled. |
+| `admin_v2_finance_dashboard`  | 2026-09-02   | `/analytics`     | `NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD`  | Promoted to canonical `/analytics`; shadow deleted.    |
+| `admin_v2_audit_log_ui`       | 2026-09-02   | `/audit`         | `NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI`       | Promoted to canonical `/audit`; shadow route deleted.  |
 
 ---
 
 Generated: 2026-06-07 · Implements I-13 / F-D3 from `ARCHITECTURE-AUTOPSY.md`
 
-Updated: 2026-06-07 · All four v2 routes now have independent page implementations (feature parity criterion met). Enable flags in production to begin 30-day stability windows.
+Updated: 2026-09-02 · All four strangler-fig v2 shadow routes retired cleanly; canonical routes promoted and governance enforced.

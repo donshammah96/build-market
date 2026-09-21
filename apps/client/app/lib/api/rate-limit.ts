@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { envConfig } from "@/app/lib/infrastructure/env";
+import { edgeEnv } from "@/app/lib/infrastructure/edge-env";
 import { checkRateLimitInMemory } from "./rate-limit.dev";
 import { checkRateLimitWithRedis } from "./rate-limit.redis";
 
@@ -41,12 +42,16 @@ function resolveRateLimitBackend(): ResolvedRateLimitBackend {
   }
 
   if (envConfig.isProd) {
-    return "redis";
+    return hasUpstashCredentials ? "redis" : "memory";
   }
 
   // In development: use Redis only when Upstash credentials are available.
   // Local dev without an Upstash account falls back to the in-process store.
   return hasUpstashCredentials ? "redis" : "memory";
+}
+
+export interface RateLimitOptions {
+  algorithm?: "sliding" | "cachedFixed";
 }
 
 /**
@@ -63,15 +68,30 @@ export async function checkRateLimit(
   identifier: string,
   limit: number = 10,
   window: number = 10000, // 10 seconds
+  options?: RateLimitOptions,
 ): Promise<RateLimitResult> {
   const backend = resolveRateLimitBackend();
 
   if (backend === "redis") {
     try {
-      return await checkRateLimitWithRedis(identifier, limit, window);
+      return await checkRateLimitWithRedis(
+        identifier,
+        limit,
+        window,
+        options?.algorithm,
+      );
     } catch {
-      // Production must fail closed if the configured limiter backend fails.
-      if (envConfig.isProd) {
+      // In strict production (production environment and not staging/preview),
+      // fail closed to protect upstream resources from DDoS when Redis fails.
+      // Staging, preview, and test fall back to in-memory store so CI runs,
+      // deployment gates, and test suites do not suffer cascading 429 blackouts.
+      const isStagingOrPreview =
+        envConfig.otel?.ddEnv === "staging" ||
+        Boolean(envConfig.isVercelPreview) ||
+        edgeEnv.appUrl.includes("staging.buildmarket.app");
+      const isStrictProd = envConfig.isProd && !isStagingOrPreview;
+
+      if (isStrictProd) {
         return {
           success: false,
           limit,
@@ -85,6 +105,20 @@ export async function checkRateLimit(
   }
 
   return checkRateLimitInMemory(identifier, limit, window);
+}
+
+/**
+ * Optimized rate limit check for read-only and high-throughput queries.
+ * Uses cachedFixedWindow algorithm when Redis is enabled to minimize command volume.
+ */
+export async function checkReadRateLimit(
+  identifier: string,
+  limit: number = 100,
+  window: number = 60000,
+): Promise<RateLimitResult> {
+  return checkRateLimit(identifier, limit, window, {
+    algorithm: "cachedFixed",
+  });
 }
 
 /**

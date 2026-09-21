@@ -59,10 +59,10 @@ catalog:
   # --- Next.js / React (client + admin) ---
   # Exact-pinned (no ^) on purpose: mixed Next 16.x minor/patch versions
   # across apps is a common source of build/runtime skew in Vercel monorepos.
-  next: 16.2.11
-  eslint-config-next: 16.2.11
-  "@next/bundle-analyzer": 16.2.11
-  "@next/eslint-plugin-next": 16.2.11
+  next: 16.3.4
+  eslint-config-next: 16.3.4
+  "@next/bundle-analyzer": 16.3.4
+  "@next/eslint-plugin-next": 16.3.4
   react: ^19.1.0
   react-dom: ^19.1.0
   "@types/react": 19.1.0
@@ -95,6 +95,8 @@ catalog:
   # --- Data fetching / queues / cache (client + admin + redis) ---
   "@tanstack/react-query": ^5.90.5
   bullmq: ^5.76.8
+  pg: 8.18.0
+  "@types/pg": 8.18.0
   # Was declared as ^5.4.1 in packages/redis while pnpm.overrides silently
   # forced 5.11.1 everywhere. Catalog value matches the enforced version so
   # the manifest stops lying about what's actually installed.
@@ -164,7 +166,7 @@ catalog:
   react-intersection-observer: ^9.10.4
   react-resizable-panels: ^2.0.18
   react-select: ^5.9.4
-  sharp: ^0.34.3
+  sharp: ^0.35.4
   socket.io-client: ^4.8.3
   sonner: ^2.0.7
   svix: ^1.92.2
@@ -229,7 +231,7 @@ overrides:
   "brace-expansion@^2.0.0": "2.1.4"
   defu: ">=6.1.5"
   effect: ">=3.20.0"
-  fast-uri: ">=4.1.2"
+  fast-uri: ">=4.1.4"
   "socket.io-parser": ">=4.2.7"
   fast-xml-builder: ">=1.1.7"
   fast-xml-parser: ">=5.7.0"
@@ -251,9 +253,13 @@ overrides:
   "postcss>nanoid": ">=5.1.16"
   axios: ">=1.15.0"
   protobufjs: ">=8.6.6"
-  sharp: ">=0.35.0"
+  sharp: ">=0.35.4"
+  js-yaml: ">=4.3.2"
   "@opentelemetry/propagator-jaeger": ">=2.9.0"
   deepmerge-ts: ">=8.0.0"
+  browserslist: ">=4.28.7"
+  mysql2: ">=3.22.0"
+  fflate: ">=0.4.9"
   # NOTE: the previous "admin>next": "16.2.6" entry has been removed. pnpm's
   # `pkgA>pkgB` override selector only matches pkgB when it is a dependency of
   # an installed *npm package* named pkgA — "admin" is a workspace project

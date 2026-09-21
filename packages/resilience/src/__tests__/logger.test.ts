@@ -153,4 +153,28 @@ describe("StructuredLogger", () => {
     expect(parsed.err.message).toContain("Outer failure description");
     expect(parsed.err.stack).toContain("Inner cause description");
   });
+
+  it("redacts sensitive values in circular nested payloads", () => {
+    const logger = createLogger("security-service");
+    const circular: Record<string, unknown> = {
+      nested: {
+        password: "secret-password",
+        email: "person@example.com",
+        phone: "+254700000000",
+        nationalId: "12345678",
+      },
+    };
+    circular.self = circular;
+
+    logger.info("Sensitive payload", circular);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('"password":"[REDACTED]"');
+    expect(logs[0]).toContain('"email":"[REDACTED]"');
+    expect(logs[0]).toContain('"phone":"[REDACTED]"');
+    expect(logs[0]).toContain('"nationalId":"[REDACTED]"');
+    expect(logs[0]).toContain('"self":"[Circular]"');
+    expect(logs[0]).not.toContain("secret-password");
+    expect(logs[0]).not.toContain("person@example.com");
+  });
 });

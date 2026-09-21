@@ -35,6 +35,10 @@ vi.mock("../repository", () => ({
   },
 }));
 
+vi.mock("@/lib/capabilities/mvp-capabilities", () => ({
+  requireLiveAdminMvpCapability: () => ({ ok: true }),
+}));
+
 import * as repo from "../repository";
 import { propertiesService } from "../service";
 

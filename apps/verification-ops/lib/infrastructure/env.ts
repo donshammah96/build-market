@@ -129,13 +129,16 @@ const envGroups: EnvGroup[] = [
       { name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", required: false },
       { name: "OTEL_EXPORTER_OTLP_HEADERS", required: false },
       { name: "DD_API_KEY", required: false },
-      { name: "DD_SITE_HOST", required: false, default: "us5.datadoghq.com" },
+      { name: "DD_SITE", required: false, default: "us5.datadoghq.com" },
+      { name: "DD_SITE_HOST", required: false },
       {
         name: "DD_SERVICE",
         required: false,
         default: "buildmarket-verification-ops",
       },
       { name: "DD_ENV", required: false },
+      { name: "DD_VERSION", required: false },
+      { name: "DD_LOGS_ENABLED", required: false, default: "false" },
     ],
   },
   // NOT included yet, intentionally: NATS_URL / regulator credentials.

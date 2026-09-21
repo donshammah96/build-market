@@ -2,6 +2,8 @@
 
 Monorepo-isolated Next.js compliance surface dedicated to statutory regulator license verification for professional registration boards in Kenya (`EBK`, `BORAQS`, `NCA`, `EARB`, `VRB`, `ISK`, `EPRA`).
 
+Current readiness evidence is in [`docs/STATUS.md`](docs/STATUS.md). This application follows the relevant client [`ADR-001` through `ADR-010`](../client/docs/adr/) and admin [`ADR-ADMIN-001` through `ADR-ADMIN-016`](../admin/docs/adr/) decisions.
+
 ---
 
 ## 🏛️ System Role & Architecture
